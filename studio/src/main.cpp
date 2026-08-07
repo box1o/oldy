@@ -1,6 +1,23 @@
-#include "entry.hpp"
 
-int main(int argc, char* argv[]) {
-    slog::Configure();
-    return studio::RunApplication(studio::CreateApplication(argc, argv));
+#include <woki/core.hpp>
+#include <woki/rhi.hpp>
+
+namespace woki {
+
+
+
+
+int main(int argc, char* argv[]) { 
+
+    auto instance =  rhi::Instance::Create({
+            .enable_validation = true,
+    };
+
+
+
+
+    return 0; 
+
+}
+
 }
