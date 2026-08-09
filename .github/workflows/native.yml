@@ -125,13 +125,7 @@ jobs:
           package="dist/${{ matrix.artifact }}"
           mkdir -p "$package/extensions/kitty"
           if [[ "${{ runner.os }}" == "Windows" ]]; then
-            executable="$(find build -type f \( -iname 'studio.exe' -o -name 'studio' \) -print -quit)"
-            if [[ -z "$executable" ]]; then
-              echo "The studio executable was not found in the build directory" >&2
-              exit 1
-            fi
-            cp "$executable" "$package/studio.exe"
-            cp -R config "$package/config"
+            cmake --install build --prefix "$package"
           else
             cp -R build/bin/. "$package/"
           fi
