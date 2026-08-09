@@ -69,7 +69,7 @@ function(add_module_test name)
         )
     endif()
 
-    add_test(NAME ${name} COMMAND ${name})
+    add_test(NAME ${name} COMMAND ${name} --durations yes)
 
     if(TARGET woki_tests)
         add_dependencies(woki_tests ${name})

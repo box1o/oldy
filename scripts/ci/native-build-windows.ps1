@@ -22,7 +22,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "Build failed with exit code $LASTEXITCODE"
 }
 
-ctest --test-dir build --output-on-failure
+ctest --test-dir build --output-on-failure --timeout 120
 if ($LASTEXITCODE -ne 0) {
     throw "Tests failed with exit code $LASTEXITCODE"
 }
