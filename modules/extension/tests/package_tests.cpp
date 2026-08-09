@@ -246,7 +246,7 @@ void WriteDuplicateEntryZip(const fs::path& archive_path) {
     archive_write_free(writer);
 }
 
-void WriteSingleEntryZip(const fs::path& archive_path, std::string_view path, mode_t type, std::string_view target = {}) {
+void WriteSingleEntryZip(const fs::path& archive_path, std::string_view path, unsigned int type, std::string_view target = {}) {
     struct archive* writer = archive_write_new();
     REQUIRE(writer != nullptr);
     REQUIRE(archive_write_set_format_zip(writer) == ARCHIVE_OK);

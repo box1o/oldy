@@ -9,7 +9,7 @@ bool HasPathTraversal(const std::filesystem::path& path) {
 }
 
 bool IsSafeRelativePath(const std::filesystem::path& path) {
-    return !path.empty() && !path.is_absolute() && !HasPathTraversal(path);
+    return !path.empty() && !path.has_root_path() && !HasPathTraversal(path);
 }
 
 } // namespace woki::ext

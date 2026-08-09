@@ -58,6 +58,10 @@ function(add_module_test name)
     target_compile_features(${name} PRIVATE cxx_std_23)
     apply_compiler_options(${name})
 
+    if(MSVC)
+        target_compile_definitions(${name} PRIVATE _CRT_SECURE_NO_WARNINGS)
+    endif()
+
     if(ARG_LIBRARIES)
         target_link_libraries(${name}
             PRIVATE
@@ -65,20 +69,19 @@ function(add_module_test name)
         )
     endif()
 
-    if(DEFINED ENV{WOKI_WASM_CLANG})
-        target_compile_definitions(${name} PRIVATE
-            WOKI_TEST_WASM_CLANG="$ENV{WOKI_WASM_CLANG}")
+    if(EXISTS "${CDEPS_ROOT}/catch2-src/extras/Catch.cmake")
+        include("${CDEPS_ROOT}/catch2-src/extras/Catch.cmake")
+    else()
+        include(Catch)
     endif()
-    if(DEFINED ENV{WOKI_WASM_LD})
-        target_compile_definitions(${name} PRIVATE
-            WOKI_TEST_WASM_LD="$ENV{WOKI_WASM_LD}")
+    if(WIN32 AND EXISTS "${CDEPS_ROOT}/wasmtime-c-api/lib/wasmtime.dll")
+        catch_discover_tests(${name}
+            EXTRA_ARGS --durations yes
+            DL_PATHS "${CDEPS_ROOT}/wasmtime-c-api/lib"
+        )
+    else()
+        catch_discover_tests(${name} EXTRA_ARGS --durations yes)
     endif()
-    if(DEFINED ENV{WOKI_LLVM_PREFIX})
-        target_compile_definitions(${name} PRIVATE
-            WOKI_TEST_LLVM_PREFIX="$ENV{WOKI_LLVM_PREFIX}")
-    endif()
-
-    add_test(NAME ${name} COMMAND ${name})
 
     if(TARGET woki_tests)
         add_dependencies(woki_tests ${name})
