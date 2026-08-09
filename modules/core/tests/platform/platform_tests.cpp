@@ -10,7 +10,7 @@ TEST_CASE("PlatformId has stable descriptive values") {
 }
 
 TEST_CASE("Platform string helpers are not empty") {
-    REQUIRE(std::string_view(woki::ToString(woki::CurrentCompiler())).size() > 0);
-    REQUIRE(std::string_view(woki::ToString(woki::CurrentArchitecture())).size() > 0);
-    REQUIRE(std::string_view(woki::ToString(woki::CurrentOperatingSystem())).size() > 0);
+    REQUIRE(!std::string_view(woki::ToString(woki::CurrentCompiler())).empty());
+    REQUIRE(!std::string_view(woki::ToString(woki::CurrentArchitecture())).empty());
+    REQUIRE(!std::string_view(woki::ToString(woki::CurrentOperatingSystem())).empty());
 }

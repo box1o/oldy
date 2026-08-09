@@ -1,19 +1,18 @@
 #pragma once
 
-#include <woki/rhi/descriptors.hpp>
-#include <woki/rhi/forward.hpp>
-
 #include <string>
-#include <string_view>
 #include <vector>
+#include <string_view>
 
 #include <woki/core.hpp>
+#include <woki/rhi/forward.hpp>
+#include <woki/rhi/descriptors.hpp>
 
 namespace woki::rhi {
 
 class BindGroupBuilder final {
 public:
-    BindGroupBuilder(Device& device, BindGroupLayout& layout, std::string_view label = "RenderGraphBindGroup");
+    BindGroupBuilder(ref<Device> device, ref<BindGroupLayout> layout, std::string_view label = "RenderGraphBindGroup");
 
     BindGroupBuilder& BindTexture(u32 binding, TextureView& view);
     BindGroupBuilder& BindSampler(u32 binding, Sampler& sampler);
@@ -22,8 +21,8 @@ public:
     [[nodiscard]] Result<scope<BindGroup>> Build();
 
 private:
-    Device* device_{nullptr};
-    BindGroupLayout* layout_{nullptr};
+    ref<Device> device_{};
+    ref<BindGroupLayout> layout_{};
     std::string label_{};
     std::vector<BindGroupEntryDesc> entries_{};
 };

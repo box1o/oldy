@@ -1,17 +1,17 @@
 #pragma once
 
-#include "../detail/arithmetic.hpp"
+#include <array>
+#include <cmath>
+
+#include "../mat/mat4.hpp"
+#include "../vec/vec3.hpp"
 #include "../common/constants.hpp"
 #include "../common/functions.hpp"
-#include "../vec/vec3.hpp"
-#include "../mat/mat4.hpp"
-
-#include <cmath>
-#include <array>
+#include "../detail/arithmetic.hpp"
 
 namespace woki::math {
 
-template<floating_point T>
+template <floating_point T>
 class quat {
 public:
     using value_type = T;
@@ -24,7 +24,10 @@ public:
     constexpr quat() noexcept = default;
 
     constexpr quat(T x_, T y_, T z_, T w_) noexcept
-        : x(x_), y(y_), z(z_), w(w_) {}
+        : x(x_),
+          y(y_),
+          z(z_),
+          w(w_) {}
 
     // Axis-angle constructor
     quat(const vec<3, T>& axis, T angle) noexcept {
@@ -63,13 +66,15 @@ public:
 
     [[nodiscard]] quat normalized() const noexcept {
         T l = length();
-        if (l == T{}) return quat{};
+        if (l == T{})
+            return quat{};
         return *this / l;
     }
 
     constexpr quat& normalize() noexcept {
         T l = length();
-        if (l != T{}) *this /= l;
+        if (l != T{})
+            *this /= l;
         return *this;
     }
 
@@ -79,7 +84,8 @@ public:
 
     [[nodiscard]] quat inverse() const noexcept {
         T len_sq = length_squared();
-        if (len_sq == T{}) return quat{};
+        if (len_sq == T{})
+            return quat{};
         return conjugate() / len_sq;
     }
 
@@ -97,12 +103,7 @@ public:
 
     // Hamilton product
     [[nodiscard]] friend constexpr quat operator*(const quat& a, const quat& b) noexcept {
-        return quat(
-            a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
-            a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
-            a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w,
-            a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z
-        );
+        return quat(a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y, a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x, a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w, a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z);
     }
 
     constexpr quat& operator*=(const quat& rhs) noexcept {
@@ -111,17 +112,26 @@ public:
     }
 
     [[nodiscard]] friend constexpr quat operator+(quat a, const quat& b) noexcept {
-        a.x += b.x; a.y += b.y; a.z += b.z; a.w += b.w;
+        a.x += b.x;
+        a.y += b.y;
+        a.z += b.z;
+        a.w += b.w;
         return a;
     }
 
     [[nodiscard]] friend constexpr quat operator-(quat a, const quat& b) noexcept {
-        a.x -= b.x; a.y -= b.y; a.z -= b.z; a.w -= b.w;
+        a.x -= b.x;
+        a.y -= b.y;
+        a.z -= b.z;
+        a.w -= b.w;
         return a;
     }
 
     [[nodiscard]] friend constexpr quat operator*(quat q, T s) noexcept {
-        q.x *= s; q.y *= s; q.z *= s; q.w *= s;
+        q.x *= s;
+        q.y *= s;
+        q.z *= s;
+        q.w *= s;
         return q;
     }
 
@@ -130,7 +140,10 @@ public:
     }
 
     constexpr quat& operator/=(T s) noexcept {
-        x /= s; y /= s; z /= s; w /= s;
+        x /= s;
+        y /= s;
+        z /= s;
+        w /= s;
         return *this;
     }
 
@@ -144,8 +157,7 @@ public:
     }
 
     [[nodiscard]] friend constexpr bool operator==(const quat& a, const quat& b) noexcept {
-        return approx_equal(a.x, b.x) && approx_equal(a.y, b.y) &&
-               approx_equal(a.z, b.z) && approx_equal(a.w, b.w);
+        return approx_equal(a.x, b.x) && approx_equal(a.y, b.y) && approx_equal(a.z, b.z) && approx_equal(a.w, b.w);
     }
 
     [[nodiscard]] constexpr bool operator!=(const quat& other) const noexcept {
@@ -170,11 +182,8 @@ public:
         const T wy = w * y;
         const T wz = w * z;
 
-        return mat<4, 4, T>(layout::rowm,
-            T{1} - T{2} * (yy + zz), T{2} * (xy - wz),        T{2} * (xz + wy),        T{0},
-            T{2} * (xy + wz),        T{1} - T{2} * (xx + zz), T{2} * (yz - wx),        T{0},
-            T{2} * (xz - wy),        T{2} * (yz + wx),        T{1} - T{2} * (xx + yy), T{0},
-            T{0},                    T{0},                    T{0},                    T{1});
+        return mat<4, 4, T>(layout::rowm, T{1} - T{2} * (yy + zz), T{2} * (xy - wz), T{2} * (xz + wy), T{0}, T{2} * (xy + wz), T{1} - T{2} * (xx + zz), T{2} * (yz - wx), T{0}, T{2} * (xz - wy), T{2} * (yz + wx),
+            T{1} - T{2} * (xx + yy), T{0}, T{0}, T{0}, T{0}, T{1});
     }
 
     static quat fromMat4(const mat<4, 4, T>& m) noexcept {
@@ -209,7 +218,7 @@ public:
     }
 };
 
-template<floating_point T>
+template <floating_point T>
 [[nodiscard]] inline quat<T> slerp(const quat<T>& a, const quat<T>& b, T t) noexcept {
     quat<T> b_ = b;
     T dot = a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;

@@ -1,15 +1,11 @@
 #pragma once
 
-#include "frame.hpp"
-#include "swapchain_desc.hpp"
-
 #include <string_view>
 
 #include <woki/core.hpp>
 
-namespace woki {
-class Window;
-}
+#include "frame.hpp"
+#include "swapchain_desc.hpp"
 
 namespace woki::rhi {
 
@@ -35,16 +31,12 @@ public:
 protected:
     Swapchain() = default;
 
-    [[nodiscard]] static Frame MakeFrame(
-        scope<TextureView> color_view,
-        TextureView* depth_view,
-        u32 width,
-        u32 height);
+    [[nodiscard]] static Frame MakeFrame(ref<TextureView> color_view, ref<TextureView> depth_view, u32 width, u32 height);
 };
 
 class Swapchain::Builder {
 public:
-    Builder(Device& device, Surface& surface);
+    Builder(ref<Device> device, ref<Surface> surface);
 
     Builder& Size(u32 width, u32 height);
     Builder& ColorFormat(TextureFormat format);
@@ -53,15 +45,13 @@ public:
     Builder& AlphaMode(CompositeAlphaMode alpha_mode);
     Builder& EnableDepth(bool enabled);
     Builder& Label(std::string_view label);
-    Builder& SizeSource(Window* window) noexcept;
 
     [[nodiscard]] Result<scope<Swapchain>> Build();
 
 private:
-    Device* device_{nullptr};
-    Surface* surface_{nullptr};
+    ref<Device> device_{};
+    ref<Surface> surface_{};
     SwapchainDesc desc_{};
-    Window* size_source_{nullptr};
 };
 
 } // namespace woki::rhi

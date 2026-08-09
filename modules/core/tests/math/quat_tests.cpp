@@ -1,11 +1,9 @@
-#include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
 
-#include <woki/math/quat/quat.hpp>
-#include <woki/math/vec/vec3.hpp>
-#include <woki/math/vec/vec4.hpp>
 #include <woki/math/mat/mat4.hpp>
-#include <woki/math/common/functions.hpp>
+#include <woki/math/vec/vec3.hpp>
+#include <woki/math/quat/quat.hpp>
 #include <woki/math/common/constants.hpp>
 
 using namespace woki::math;

@@ -1,12 +1,11 @@
+#include <array>
+#include <string>
+#include <fstream>
+#include <filesystem>
+#include <string_view>
 #include <catch2/catch_test_macros.hpp>
 
 #include <woki/ext/ext.hpp>
-
-#include <array>
-#include <filesystem>
-#include <fstream>
-#include <string>
-#include <string_view>
 
 namespace {
 
@@ -37,14 +36,12 @@ public:
         return woki::Ok();
     }
 
-    [[nodiscard]] woki::Result<void> Event(
-        woki::ext::Record&, woki::u32 event_type, std::span<const woki::u8>) override {
+    [[nodiscard]] woki::Result<void> Event(woki::ext::Record&, woki::u32 event_type, std::span<const woki::u8>) override {
         last_event_type = event_type;
         return woki::Ok();
     }
 
-    [[nodiscard]] woki::Result<woki::i32> Command(
-        woki::ext::Record&, std::string_view command_id, std::span<const woki::u8> payload) override {
+    [[nodiscard]] woki::Result<woki::i32> Command(woki::ext::Record&, std::string_view command_id, std::span<const woki::u8> payload) override {
         last_command_id = command_id;
         last_command_payload_size = payload.size();
         if (fail_command) {
@@ -53,7 +50,9 @@ public:
         return woki::Ok(command_result);
     }
 
-    void Unload(woki::ext::Record&) override { unloaded = true; }
+    void Unload(woki::ext::Record&) override {
+        unloaded = true;
+    }
 
     woki::u32 api_version{woki::ext::kApiVersion};
     woki::i32 init_result{0};
@@ -81,8 +80,7 @@ void WriteWasmMagic(const fs::path& path) {
     std::ofstream output(path, std::ios::binary);
     REQUIRE(output.good());
     const std::array<unsigned char, 8> header{0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00};
-    output.write(
-        reinterpret_cast<const char*>(header.data()), static_cast<std::streamsize>(header.size()));
+    output.write(reinterpret_cast<const char*>(header.data()), static_cast<std::streamsize>(header.size()));
 }
 
 [[nodiscard]] woki::ext::Record MakeRecord(const fs::path& root) {

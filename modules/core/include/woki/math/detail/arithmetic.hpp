@@ -1,7 +1,7 @@
 #pragma once
 
-#include <concepts>
 #include <cstdint>
+#include <concepts>
 
 namespace woki::math {
 

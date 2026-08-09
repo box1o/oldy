@@ -1,13 +1,12 @@
-#include "wgpu_surface.hpp"
-
-#include "detail/string.hpp"
-#include "wgpu_adapter.hpp"
-#include "wgpu_enums.hpp"
+#include <GLFW/glfw3.h>
 
 #include <woki/rhi/device.hpp>
 #include <woki/window/window.hpp>
 
-#include <GLFW/glfw3.h>
+#include "wgpu_enums.hpp"
+#include "wgpu_adapter.hpp"
+#include "wgpu_surface.hpp"
+#include "detail/string.hpp"
 
 #ifdef __EMSCRIPTEN__
 #define GLFW_EXPOSE_NATIVE_EMSCRIPTEN
@@ -39,18 +38,19 @@ using convert::ToWgpu;
 } // namespace
 
 WgpuSurfaceImpl::WgpuSurfaceImpl(WGPUInstance instance, WGPUSurface surface)
-    : instance_(instance)
-    , surface_(surface) {
+    : instance_(detail::InstanceHandle::Retain(instance)),
+      surface_(surface) {
     WOKI_ASSERT(instance_.get() != nullptr);
     WOKI_ASSERT(surface_.get() != nullptr);
 }
 
 WgpuSurfaceImpl::~WgpuSurfaceImpl() {
-    ReleaseCurrentTexture();
+    (void)Unconfigure();
+    surface_.reset();
+    configured_device_.reset();
 }
 
-Result<void> WgpuSurfaceImpl::GetCapabilities(
-    const Adapter& adapter, SurfaceCapabilities& capabilities) const {
+Result<void> WgpuSurfaceImpl::GetCapabilities(const Adapter& adapter, SurfaceCapabilities& capabilities) const {
     if (!surface_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Surface is invalid");
     }
@@ -61,8 +61,7 @@ Result<void> WgpuSurfaceImpl::GetCapabilities(
     }
 
     WGPUSurfaceCapabilities native_capabilities = WGPU_SURFACE_CAPABILITIES_INIT;
-    if (wgpuSurfaceGetCapabilities(surface_.get(), wgpu_adapter->GetNativeAdapter(), &native_capabilities)
-        != WGPUStatus_Success) {
+    if (wgpuSurfaceGetCapabilities(surface_.get(), wgpu_adapter->GetNativeAdapter(), &native_capabilities) != WGPUStatus_Success) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Failed to query surface capabilities");
     }
 
@@ -101,8 +100,7 @@ void WgpuSurfaceImpl::GetCurrentTexture(SurfaceTexture& surface_texture) {
     WGPUSurfaceTexture native_texture = WGPU_SURFACE_TEXTURE_INIT;
     wgpuSurfaceGetCurrentTexture(surface_.get(), &native_texture);
     surface_texture.status = FromWgpu(native_texture.status);
-    surface_texture.suboptimal =
-        native_texture.status == WGPUSurfaceGetCurrentTextureStatus_SuccessSuboptimal;
+    surface_texture.suboptimal = native_texture.status == WGPUSurfaceGetCurrentTextureStatus_SuccessSuboptimal;
 
     if (native_texture.texture == nullptr) {
         return;
@@ -159,9 +157,13 @@ Result<void> WgpuSurfaceImpl::Configure(const SurfaceConfiguration& config) {
     native_config.viewFormats = view_formats.empty() ? nullptr : view_formats.data();
     native_config.alphaMode = ToWgpu(config.alpha_mode);
     native_config.presentMode = ToWgpu(config.present_mode);
+
+    auto* native_device = static_cast<WGPUDevice>(handles.device);
+    auto configured_device = detail::DeviceHandle::Retain(native_device);
     wgpuSurfaceConfigure(surface_.get(), &native_config);
 
-    current_config_ = config;
+    configured_device_ = std::move(configured_device);
+    configured_ = true;
     return Ok();
 }
 
@@ -170,8 +172,13 @@ Result<void> WgpuSurfaceImpl::Unconfigure() {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Surface is invalid");
     }
 
+    if (!configured_) {
+        return Ok();
+    }
+
     ReleaseCurrentTexture();
     wgpuSurfaceUnconfigure(surface_.get());
+    configured_ = false;
     return Ok();
 }
 
@@ -221,8 +228,7 @@ WGPUSurface CreateNativeSurface(WGPUInstance instance, Window& window) {
 
 #ifdef __EMSCRIPTEN__
     WGPUSurfaceDescriptor descriptor = WGPU_SURFACE_DESCRIPTOR_INIT;
-    WGPUEmscriptenSurfaceSourceCanvasHTMLSelector canvas =
-        WGPU_EMSCRIPTEN_SURFACE_SOURCE_CANVAS_HTML_SELECTOR_INIT;
+    WGPUEmscriptenSurfaceSourceCanvasHTMLSelector canvas = WGPU_EMSCRIPTEN_SURFACE_SOURCE_CANVAS_HTML_SELECTOR_INIT;
     canvas.selector = detail::ToStringView("canvas");
     descriptor.nextInChain = &canvas.chain;
     return wgpuInstanceCreateSurface(instance, &descriptor);

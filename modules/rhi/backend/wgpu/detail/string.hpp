@@ -1,12 +1,11 @@
 #pragma once
 
-#include <woki/enums.hpp>
-#include <woki/rhi/types.hpp>
-
 #include <string>
 #include <string_view>
-
 #include <webgpu/webgpu.h>
+
+#include <woki/enums.hpp>
+#include <woki/rhi/types.hpp>
 
 namespace woki::rhi::wgpu::detail {
 

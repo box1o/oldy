@@ -14,7 +14,12 @@ $archive = Join-Path $env:RUNNER_TEMP 'dawn-prebuilt.tar.gz'
 $repo = if ($env:DAWN_RELEASE_REPO) { $env:DAWN_RELEASE_REPO } else { 'google/dawn' }
 
 gh release download -R $repo --pattern "*$AssetSuffix" --output $archive
-tar -xzf $archive -C $DawnPrefix --strip-components=1
+
+$tar = Join-Path $env:SystemRoot 'System32\tar.exe'
+& $tar -xzf $archive -C $DawnPrefix --strip-components=1
+if ($LASTEXITCODE -ne 0) {
+    throw "Failed to extract Dawn archive with exit code $LASTEXITCODE"
+}
 
 $dawnConfig = Get-ChildItem -Path $DawnPrefix -Recurse -Filter DawnConfig.cmake | Select-Object -First 1
 if ($null -eq $dawnConfig) {

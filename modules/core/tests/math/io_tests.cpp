@@ -1,11 +1,10 @@
+#include <sstream>
 #include <catch2/catch_test_macros.hpp>
 
-#include <woki/math/common/io.hpp>
-#include <woki/math/vec/vec3.hpp>
 #include <woki/math/mat/mat4.hpp>
+#include <woki/math/vec/vec3.hpp>
+#include <woki/math/common/io.hpp>
 #include <woki/math/quat/quat.hpp>
-
-#include <sstream>
 
 using namespace woki::math;
 

@@ -1,6 +1,6 @@
-#include "render.hpp"
-
 #include <woki/events/events.hpp>
+
+#include "render.hpp"
 
 namespace woki {
 

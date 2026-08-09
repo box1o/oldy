@@ -2,10 +2,10 @@
 
 // IWYU pragma: private, include "woki/core.hpp"
 
-#include "../error/result.hpp"
-
 #include <filesystem>
 #include <string_view>
+
+#include "../error/result.hpp"
 
 namespace woki::paths {
 

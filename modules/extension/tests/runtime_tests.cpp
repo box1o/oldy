@@ -1,9 +1,8 @@
+#include <array>
+#include <string>
 #include <catch2/catch_test_macros.hpp>
 
 #include <woki/ext/ext.hpp>
-
-#include <array>
-#include <string>
 
 namespace {
 
@@ -25,19 +24,19 @@ public:
         ++ticks;
     }
 
-    void DispatchEvent(
-        woki::ext::Record&, woki::u32 event_type, std::span<const woki::u8>) override {
+    void DispatchEvent(woki::ext::Record&, woki::u32 event_type, std::span<const woki::u8>) override {
         last_event_type = event_type;
     }
 
-    [[nodiscard]] woki::Result<void> DispatchCommand(
-        woki::ext::Record&, std::string_view command_id, std::span<const woki::u8> payload) override {
+    [[nodiscard]] woki::Result<void> DispatchCommand(woki::ext::Record&, std::string_view command_id, std::span<const woki::u8> payload) override {
         last_command_id = command_id;
         last_command_payload_size = payload.size();
         return woki::Ok();
     }
 
-    void Unload(woki::ext::Record&) override { unloaded = true; }
+    void Unload(woki::ext::Record&) override {
+        unloaded = true;
+    }
 
     bool loaded{false};
     bool initialized{false};

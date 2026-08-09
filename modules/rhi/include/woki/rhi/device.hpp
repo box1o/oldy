@@ -1,16 +1,15 @@
 #pragma once
 
-#include "adapter.hpp"
-#include "descriptors.hpp"
-#include "forward.hpp"
-#include "queue.hpp"
-#include "swapchain_desc.hpp"
-#include "types.hpp"
-
-#include <span>
 #include <string_view>
 
 #include <woki/core.hpp>
+
+#include "queue.hpp"
+#include "types.hpp"
+#include "adapter.hpp"
+#include "forward.hpp"
+#include "descriptors.hpp"
+#include "swapchain_desc.hpp"
 
 namespace woki::rhi {
 
@@ -19,46 +18,28 @@ public:
     virtual ~Device() = default;
 
     [[nodiscard]] virtual Result<scope<BindGroup>> CreateBindGroup(const BindGroupDesc& desc = {}) = 0;
-    [[nodiscard]] virtual Result<scope<BindGroupLayout>> CreateBindGroupLayout(
-        const BindGroupLayoutDesc& desc = {}) = 0;
+    [[nodiscard]] virtual Result<scope<BindGroupLayout>> CreateBindGroupLayout(const BindGroupLayoutDesc& desc = {}) = 0;
     [[nodiscard]] virtual Result<scope<Buffer>> CreateBuffer(const BufferDesc& desc = {}) = 0;
-    [[nodiscard]] virtual Result<scope<CommandEncoder>> CreateCommandEncoder(
-        const CommandEncoderDesc& desc = {}) = 0;
-    [[nodiscard]] virtual Result<scope<ComputePipeline>> CreateComputePipeline(
-        const ComputePipelineDesc& desc = {}) = 0;
-    [[nodiscard]] virtual Future CreateComputePipelineAsync(
-        const ComputePipelineDesc& desc,
-        CallbackMode callback_mode,
-        CreateComputePipelineCallback callback) = 0;
+    [[nodiscard]] virtual Result<scope<CommandEncoder>> CreateCommandEncoder(const CommandEncoderDesc& desc = {}) = 0;
+    [[nodiscard]] virtual Result<scope<ComputePipeline>> CreateComputePipeline(const ComputePipelineDesc& desc = {}) = 0;
+    [[nodiscard]] virtual Future CreateComputePipelineAsync(const ComputePipelineDesc& desc, CallbackMode callback_mode, CreateComputePipelineCallback callback) = 0;
     [[nodiscard]] virtual Result<scope<Buffer>> CreateErrorBuffer(const BufferDesc& desc = {}) = 0;
     [[nodiscard]] virtual Result<scope<ExternalTexture>> CreateErrorExternalTexture() = 0;
-    [[nodiscard]] virtual Result<scope<ShaderModule>> CreateErrorShaderModule(
-        const ShaderModuleDesc& desc, std::string_view error_message) = 0;
+    [[nodiscard]] virtual Result<scope<ShaderModule>> CreateErrorShaderModule(const ShaderModuleDesc& desc, std::string_view error_message) = 0;
     [[nodiscard]] virtual Result<scope<Texture>> CreateErrorTexture(const TextureDesc& desc = {}) = 0;
-    [[nodiscard]] virtual Result<scope<ExternalTexture>> CreateExternalTexture(
-        const ExternalTextureDesc& desc = {}) = 0;
-    [[nodiscard]] virtual Result<scope<PipelineLayout>> CreatePipelineLayout(
-        const PipelineLayoutDesc& desc = {}) = 0;
+    [[nodiscard]] virtual Result<scope<ExternalTexture>> CreateExternalTexture(const ExternalTextureDesc& desc = {}) = 0;
+    [[nodiscard]] virtual Result<scope<PipelineLayout>> CreatePipelineLayout(const PipelineLayoutDesc& desc = {}) = 0;
     [[nodiscard]] virtual Result<scope<QuerySet>> CreateQuerySet(const QuerySetDesc& desc = {}) = 0;
-    [[nodiscard]] virtual Result<scope<RenderBundleEncoder>> CreateRenderBundleEncoder(
-        const RenderBundleEncoderDesc& desc = {}) = 0;
-    [[nodiscard]] virtual Result<scope<RenderPipeline>> CreateRenderPipeline(
-        const RenderPipelineDesc& desc = {}) = 0;
-    [[nodiscard]] virtual Result<scope<RenderPipeline>> CreateRenderPipeline(
-        const RenderPipelineDescTyped& desc) = 0;
-    [[nodiscard]] virtual Future CreateRenderPipelineAsync(
-        const RenderPipelineDesc& desc,
-        CallbackMode callback_mode,
-        CreateRenderPipelineCallback callback) = 0;
-    [[nodiscard]] virtual Result<scope<ResourceTable>> CreateResourceTable(
-        const ResourceTableDesc& desc = {}) = 0;
+    [[nodiscard]] virtual Result<scope<RenderBundleEncoder>> CreateRenderBundleEncoder(const RenderBundleEncoderDesc& desc = {}) = 0;
+    [[nodiscard]] virtual Result<scope<RenderPipeline>> CreateRenderPipeline(const RenderPipelineDesc& desc = {}) = 0;
+    [[nodiscard]] virtual Result<scope<RenderPipeline>> CreateRenderPipeline(const RenderPipelineDescTyped& desc) = 0;
+    [[nodiscard]] virtual Future CreateRenderPipelineAsync(const RenderPipelineDesc& desc, CallbackMode callback_mode, CreateRenderPipelineCallback callback) = 0;
+    [[nodiscard]] virtual Result<scope<ResourceTable>> CreateResourceTable(const ResourceTableDesc& desc = {}) = 0;
     [[nodiscard]] virtual Result<scope<Sampler>> CreateSampler(const SamplerDesc& desc = {}) = 0;
-    [[nodiscard]] virtual Result<scope<ShaderModule>> CreateShaderModule(
-        const ShaderModuleDesc& desc = {}) = 0;
+    [[nodiscard]] virtual Result<scope<ShaderModule>> CreateShaderModule(const ShaderModuleDesc& desc = {}) = 0;
     [[nodiscard]] virtual Result<scope<Texture>> CreateTexture(const TextureDesc& desc = {}) = 0;
 
-    [[nodiscard]] virtual Result<scope<Swapchain>> CreateSwapchain(
-        Surface& surface, SwapchainDesc desc = {}) = 0;
+    [[nodiscard]] virtual Result<scope<Swapchain>> CreateSwapchain(ref<Surface> surface, SwapchainDesc desc = {}) = 0;
 
     virtual void Destroy() = 0;
     virtual void ForceLoss(DeviceLostReason reason, std::string_view message) = 0;
@@ -68,8 +49,7 @@ public:
     [[nodiscard]] virtual Result<void> GetAdapterInfo(AdapterInfo& info) const = 0;
     [[nodiscard]] AdapterInfo GetAdapterInfo() const;
 
-    [[nodiscard]] virtual Result<void> GetAHardwareBufferProperties(
-        void* handle, void* properties) const = 0;
+    [[nodiscard]] virtual Result<void> GetAHardwareBufferProperties(void* handle, void* properties) const = 0;
 
     virtual void GetFeatures(SupportedFeatures& features) const = 0;
     [[nodiscard]] SupportedFeatures GetFeatures() const;
@@ -81,18 +61,13 @@ public:
     [[nodiscard]] virtual Queue& GetQueue() const noexcept = 0;
     [[nodiscard]] virtual bool HasFeature(FeatureName feature) const noexcept = 0;
 
-    [[nodiscard]] virtual Result<scope<SharedBufferMemory>> ImportSharedBufferMemory(
-        const SharedBufferMemoryDesc& desc = {}) = 0;
-    [[nodiscard]] virtual Result<scope<SharedFence>> ImportSharedFence(
-        const SharedFenceDesc& desc = {}) = 0;
-    [[nodiscard]] virtual Result<scope<SharedTextureMemory>> ImportSharedTextureMemory(
-        const SharedTextureMemoryDesc& desc = {}) = 0;
+    [[nodiscard]] virtual Result<scope<SharedBufferMemory>> ImportSharedBufferMemory(const SharedBufferMemoryDesc& desc = {}) = 0;
+    [[nodiscard]] virtual Result<scope<SharedFence>> ImportSharedFence(const SharedFenceDesc& desc = {}) = 0;
+    [[nodiscard]] virtual Result<scope<SharedTextureMemory>> ImportSharedTextureMemory(const SharedTextureMemoryDesc& desc = {}) = 0;
 
     virtual void InjectError(ErrorType type, std::string_view message) = 0;
 
-    [[nodiscard]] virtual Future PopErrorScope(
-        CallbackMode callback_mode,
-        PopErrorScopeCallback callback) const = 0;
+    [[nodiscard]] virtual Future PopErrorScope(CallbackMode callback_mode, PopErrorScopeCallback callback) const = 0;
 
     virtual void PushErrorScope(ErrorFilter filter) = 0;
     virtual void SetLabel(std::string_view label) = 0;

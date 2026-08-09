@@ -1,9 +1,8 @@
+#include <array>
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 
 #include <woki/core.hpp>
-
-#include <algorithm>
-#include <array>
 
 TEST_CASE("ArgumentParser parses flags and options") {
     woki::ArgumentParser parser("woki-test", "core args test");

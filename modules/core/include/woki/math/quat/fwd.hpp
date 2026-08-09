@@ -4,7 +4,7 @@
 
 namespace woki::math {
 
-template<floating_point T>
+template <floating_point T>
 class quat;
 
 } // namespace woki::math

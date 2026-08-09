@@ -3,13 +3,12 @@
 #include <archive_entry.h>
 #endif
 
+#include <fstream>
+#include <filesystem>
+#include <string_view>
 #include <catch2/catch_test_macros.hpp>
 
 #include <woki/ext/ext.hpp>
-
-#include <filesystem>
-#include <fstream>
-#include <string_view>
 
 namespace {
 
@@ -43,23 +42,20 @@ TEST_CASE("Extension package layout resolves canonical roots") {
     const fs::path root = MakeTempDir("layout");
     const woki::ext::Manifest manifest = MakeManifest();
 
-    auto layout = woki::ext::ResolvePackageLayout(
-        manifest, root / "extensions", root / "ext-data", root / "cache" / "woki" / "ext");
+    auto layout = woki::ext::ResolvePackageLayout(manifest, root / "extensions", root / "ext-data", root / "cache" / "woki" / "ext");
 
     REQUIRE(layout.has_value());
     REQUIRE(layout->install_root.filename() == manifest.id);
     REQUIRE(layout->manifest == layout->install_root / "manifest.yaml");
     REQUIRE(layout->wasm == layout->install_root / "extension.wasm");
     REQUIRE(layout->data_root == fs::weakly_canonical(root / "ext-data" / manifest.id));
-    REQUIRE(
-        layout->cache_root == fs::weakly_canonical(root / "cache" / "woki" / "ext" / manifest.id));
+    REQUIRE(layout->cache_root == fs::weakly_canonical(root / "cache" / "woki" / "ext" / manifest.id));
 }
 
 TEST_CASE("Extension package layout validates existing manifest and wasm") {
     const fs::path root = MakeTempDir("valid_package");
     const woki::ext::Manifest manifest = MakeManifest();
-    auto layout = woki::ext::ResolvePackageLayout(
-        manifest, root / "extensions", root / "ext-data", root / "cache" / "woki" / "ext");
+    auto layout = woki::ext::ResolvePackageLayout(manifest, root / "extensions", root / "ext-data", root / "cache" / "woki" / "ext");
     REQUIRE(layout.has_value());
 
     fs::create_directories(layout->install_root);
@@ -73,8 +69,7 @@ TEST_CASE("Extension package layout validates existing manifest and wasm") {
 TEST_CASE("Extension package layout rejects missing wasm") {
     const fs::path root = MakeTempDir("missing_wasm");
     const woki::ext::Manifest manifest = MakeManifest();
-    auto layout = woki::ext::ResolvePackageLayout(
-        manifest, root / "extensions", root / "ext-data", root / "cache" / "woki" / "ext");
+    auto layout = woki::ext::ResolvePackageLayout(manifest, root / "extensions", root / "ext-data", root / "cache" / "woki" / "ext");
     REQUIRE(layout.has_value());
 
     fs::create_directories(layout->install_root);
@@ -187,8 +182,7 @@ void WriteZipPackage(const fs::path& archive_path, const fs::path& source_root) 
     REQUIRE(archive_write_set_format_zip(writer) == ARCHIVE_OK);
     REQUIRE(archive_write_open_filename(writer, archive_path.string().c_str()) == ARCHIVE_OK);
 
-    for (const fs::directory_entry& entry : fs::recursive_directory_iterator(
-             source_root, fs::directory_options::skip_permission_denied)) {
+    for (const fs::directory_entry& entry : fs::recursive_directory_iterator(source_root, fs::directory_options::skip_permission_denied)) {
         const fs::path relative = fs::relative(entry.path(), source_root);
         if (relative.empty() || relative == ".") {
             continue;
@@ -209,16 +203,14 @@ void WriteZipPackage(const fs::path& archive_path, const fs::path& source_root) 
         } else {
             std::ifstream input(entry.path(), std::ios::binary);
             REQUIRE(input.good());
-            const std::string contents{
-                std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+            const std::string contents{std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
             archive_entry_set_pathname(archive_entry_ptr, relative.generic_string().c_str());
             archive_entry_set_filetype(archive_entry_ptr, AE_IFREG);
             archive_entry_set_perm(archive_entry_ptr, 0644);
             archive_entry_set_size(archive_entry_ptr, static_cast<la_int64_t>(contents.size()));
             REQUIRE(archive_write_header(writer, archive_entry_ptr) == ARCHIVE_OK);
             if (!contents.empty()) {
-                REQUIRE(archive_write_data(writer, contents.data(), contents.size()) ==
-                        static_cast<la_ssize_t>(contents.size()));
+                REQUIRE(archive_write_data(writer, contents.data(), contents.size()) == static_cast<la_ssize_t>(contents.size()));
             }
         }
 
@@ -245,8 +237,7 @@ void WriteDuplicateEntryZip(const fs::path& archive_path) {
         archive_entry_set_perm(archive_entry_ptr, 0644);
         archive_entry_set_size(archive_entry_ptr, static_cast<la_int64_t>(contents.size()));
         REQUIRE(archive_write_header(writer, archive_entry_ptr) == ARCHIVE_OK);
-        REQUIRE(archive_write_data(writer, contents.data(), contents.size()) ==
-                static_cast<la_ssize_t>(contents.size()));
+        REQUIRE(archive_write_data(writer, contents.data(), contents.size()) == static_cast<la_ssize_t>(contents.size()));
         REQUIRE(archive_write_finish_entry(writer) == ARCHIVE_OK);
         archive_entry_free(archive_entry_ptr);
     }
@@ -255,8 +246,7 @@ void WriteDuplicateEntryZip(const fs::path& archive_path) {
     archive_write_free(writer);
 }
 
-void WriteSingleEntryZip(
-    const fs::path& archive_path, std::string_view path, mode_t type, std::string_view target = {}) {
+void WriteSingleEntryZip(const fs::path& archive_path, std::string_view path, mode_t type, std::string_view target = {}) {
     struct archive* writer = archive_write_new();
     REQUIRE(writer != nullptr);
     REQUIRE(archive_write_set_format_zip(writer) == ARCHIVE_OK);
@@ -278,8 +268,7 @@ void WriteSingleEntryZip(
         static constexpr std::string_view kContents = "hello";
         archive_entry_set_size(archive_entry_ptr, static_cast<la_int64_t>(kContents.size()));
         REQUIRE(archive_write_header(writer, archive_entry_ptr) == ARCHIVE_OK);
-        REQUIRE(archive_write_data(writer, kContents.data(), kContents.size()) ==
-                static_cast<la_ssize_t>(kContents.size()));
+        REQUIRE(archive_write_data(writer, kContents.data(), kContents.size()) == static_cast<la_ssize_t>(kContents.size()));
     } else {
         archive_entry_set_size(archive_entry_ptr, 0);
         REQUIRE(archive_write_header(writer, archive_entry_ptr) == ARCHIVE_OK);

@@ -1,10 +1,10 @@
-#include "woki/ext/wasm/guest_module.hpp"
-
 #include <array>
-#include <filesystem>
-#include <fstream>
 #include <string>
 #include <vector>
+#include <fstream>
+#include <filesystem>
+
+#include "woki/ext/wasm/guest_module.hpp"
 
 #if defined(WOKI_EXTENSION_WITH_WASMTIME)
 #include <wasmtime.hh>
@@ -24,8 +24,7 @@ namespace fs = std::filesystem;
         return Err(ErrorCode::FileReadError, "Failed to open wasm module: " + path.string());
     }
 
-    const std::vector<u8> bytes{
-        std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+    const std::vector<u8> bytes{std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
     if (bytes.empty()) {
         return Err(ErrorCode::ParseInvalidFormat, "Wasm module is empty: " + path.string());
     }
@@ -70,8 +69,7 @@ Result<void> ValidateWasmMagic(const fs::path& wasm_path) {
 
     constexpr std::array<unsigned char, 4> kWasmMagic{0x00, 0x61, 0x73, 0x6d};
     if (magic != kWasmMagic) {
-        return Err(ErrorCode::ParseInvalidFormat,
-            "Wasm module has invalid magic header. Expected '\\0asm': " + wasm_path.string());
+        return Err(ErrorCode::ParseInvalidFormat, "Wasm module has invalid magic header. Expected '\\0asm': " + wasm_path.string());
     }
 
     return Ok();
@@ -92,11 +90,9 @@ Result<GuestModuleInfo> InspectGuestModule(const fs::path& wasm_path) {
     }
 
     wasmtime::Engine engine;
-    auto module = wasmtime::Module::compile(
-        engine, wasmtime::Span<uint8_t>{bytes->data(), bytes->size()});
+    auto module = wasmtime::Module::compile(engine, wasmtime::Span<uint8_t>{bytes->data(), bytes->size()});
     if (!module) {
-        return Err(ErrorCode::ParseInvalidFormat,
-            "Failed to compile wasm module: " + module.err_ref().message());
+        return Err(ErrorCode::ParseInvalidFormat, "Failed to compile wasm module: " + module.err_ref().message());
     }
 
     for (const wasmtime::ExportType::Ref& export_type : module.ok_ref().exports()) {
@@ -130,8 +126,7 @@ Result<void> ValidateGuestModule(const fs::path& wasm_path, const Manifest& mani
         return Err(ErrorCode::ValidationInvalidState, "Wasm module is missing export ext_on_unload.");
     }
     if (!manifest.commands.empty() && !info->ext_on_command) {
-        return Err(ErrorCode::ValidationInvalidState,
-            "Manifest contributes commands but wasm does not export ext_on_command.");
+        return Err(ErrorCode::ValidationInvalidState, "Manifest contributes commands but wasm does not export ext_on_command.");
     }
 #else
     (void)manifest;

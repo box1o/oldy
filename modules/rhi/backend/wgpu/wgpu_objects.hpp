@@ -1,10 +1,10 @@
 #pragma once
 
+#include <webgpu/webgpu.h>
+
 #include <woki/rhi/objects.hpp>
 
 #include "detail/handle.hpp"
-
-#include <webgpu/webgpu.h>
 
 namespace woki::rhi::wgpu {
 

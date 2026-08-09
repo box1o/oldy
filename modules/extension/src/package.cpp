@@ -1,12 +1,10 @@
-#include "woki/ext/package.hpp"
-
-#include "woki/ext/path_safety.hpp"
-
-#include <algorithm>
-#include <filesystem>
-#include <fstream>
 #include <set>
 #include <string>
+#include <fstream>
+#include <filesystem>
+
+#include "woki/ext/package.hpp"
+#include "woki/ext/path_safety.hpp"
 
 #ifndef __EMSCRIPTEN__
 #include <archive.h>
@@ -35,8 +33,7 @@ inline constexpr std::uintmax_t kMaxWasmBytes = 32u * 1024u * 1024u;
     return Ok(std::move(normalized));
 }
 
-[[nodiscard]] Result<void> ValidateSourceEntry(const fs::directory_entry& entry,
-    const fs::path& source_root, const Manifest& manifest, std::uintmax_t* total_bytes) {
+[[nodiscard]] Result<void> ValidateSourceEntry(const fs::directory_entry& entry, const fs::path& source_root, const Manifest& manifest, std::uintmax_t* total_bytes) {
     std::error_code error;
     const fs::path relative = fs::relative(entry.path(), source_root, error);
     if (error) {
@@ -44,22 +41,19 @@ inline constexpr std::uintmax_t kMaxWasmBytes = 32u * 1024u * 1024u;
     }
 
     if (!IsAllowedArchiveEntry(relative, manifest.wasm_path)) {
-        return Err(ErrorCode::ValidationInvalidState,
-            "Package contains unsupported entry '" + relative.string() +
-                "'. Allowed entries are manifest.yaml, runtime.wasm, assets/**, "
-                "extension.native/**, and signature.");
+        return Err(ErrorCode::ValidationInvalidState, "Package contains unsupported entry '" + relative.string()
+                                                          + "'. Allowed entries are manifest.yaml, runtime.wasm, assets/**, "
+                                                            "extension.native/**, and signature.");
     }
 
     if (entry.is_symlink(error)) {
-        return Err(ErrorCode::ValidationInvalidState,
-            "Package entry must not be a symlink: " + relative.string());
+        return Err(ErrorCode::ValidationInvalidState, "Package entry must not be a symlink: " + relative.string());
     }
     if (entry.is_directory(error)) {
         return Ok();
     }
     if (!entry.is_regular_file(error)) {
-        return Err(ErrorCode::ValidationInvalidState,
-            "Package entry must be a regular file or directory: " + relative.string());
+        return Err(ErrorCode::ValidationInvalidState, "Package entry must be a regular file or directory: " + relative.string());
     }
 
     const auto size = entry.file_size(error);
@@ -67,8 +61,7 @@ inline constexpr std::uintmax_t kMaxWasmBytes = 32u * 1024u * 1024u;
         return Err(ErrorCode::FileReadError, error.message());
     }
     if (size > kMaxSingleFileBytes) {
-        return Err(ErrorCode::ValidationOutOfRange,
-            "Package file exceeds 64 MiB limit: " + relative.string());
+        return Err(ErrorCode::ValidationOutOfRange, "Package file exceeds 64 MiB limit: " + relative.string());
     }
     *total_bytes += size;
     if (*total_bytes > kMaxTotalPackageBytes) {
@@ -78,13 +71,11 @@ inline constexpr std::uintmax_t kMaxWasmBytes = 32u * 1024u * 1024u;
     return Ok();
 }
 
-[[nodiscard]] Result<void> CopyPackageTree(
-    const fs::path& source_root, const fs::path& destination_root, const Manifest& manifest) {
+[[nodiscard]] Result<void> CopyPackageTree(const fs::path& source_root, const fs::path& destination_root, const Manifest& manifest) {
     std::uintmax_t total_bytes = 0;
     std::error_code error;
 
-    for (const fs::directory_entry& entry :
-        fs::recursive_directory_iterator(source_root, fs::directory_options::none, error)) {
+    for (const fs::directory_entry& entry : fs::recursive_directory_iterator(source_root, fs::directory_options::none, error)) {
         if (error) {
             return Err(ErrorCode::FileReadError, error.message());
         }
@@ -143,29 +134,24 @@ inline constexpr std::uintmax_t kMaxWasmBytes = 32u * 1024u * 1024u;
 
     fs::path relative{entry_path};
     if (relative.is_absolute()) {
-        return Err(ErrorCode::ValidationInvalidState,
-            "Archive entry must be relative: " + std::string(entry_path));
+        return Err(ErrorCode::ValidationInvalidState, "Archive entry must be relative: " + std::string(entry_path));
     }
     if (HasPathTraversal(relative)) {
-        return Err(ErrorCode::ValidationInvalidState,
-            "Archive entry must not contain '..': " + std::string(entry_path));
+        return Err(ErrorCode::ValidationInvalidState, "Archive entry must not contain '..': " + std::string(entry_path));
     }
 
     relative = relative.lexically_normal();
     if (relative.empty() || relative == "." || HasPathTraversal(relative)) {
-        return Err(ErrorCode::ValidationInvalidState,
-            "Archive entry path is invalid: " + std::string(entry_path));
+        return Err(ErrorCode::ValidationInvalidState, "Archive entry path is invalid: " + std::string(entry_path));
     }
 
     return Ok(std::move(relative));
 }
 
-[[nodiscard]] Result<void> ExtractArchive(
-    const fs::path& archive_path, const fs::path& destination_root) {
+[[nodiscard]] Result<void> ExtractArchive(const fs::path& archive_path, const fs::path& destination_root) {
     std::error_code error;
     if (!fs::is_regular_file(archive_path, error)) {
-        return Err(ErrorCode::FileNotFound,
-            "Extension archive is not a regular file: " + archive_path.string());
+        return Err(ErrorCode::FileNotFound, "Extension archive is not a regular file: " + archive_path.string());
     }
 
     struct archive* reader = archive_read_new();
@@ -179,8 +165,7 @@ inline constexpr std::uintmax_t kMaxWasmBytes = 32u * 1024u * 1024u;
     if (archive_read_open_filename(reader, archive_path.string().c_str(), 10240) != ARCHIVE_OK) {
         const std::string message = archive_error_string(reader);
         archive_read_free(reader);
-        return Err(ErrorCode::ParseInvalidFormat,
-            "Failed to open extension archive '" + archive_path.string() + "': " + message);
+        return Err(ErrorCode::ParseInvalidFormat, "Failed to open extension archive '" + archive_path.string() + "': " + message);
     }
 
     fs::create_directories(destination_root, error);
@@ -203,8 +188,7 @@ inline constexpr std::uintmax_t kMaxWasmBytes = 32u * 1024u * 1024u;
             const std::string message = archive_error_string(reader);
             archive_read_close(reader);
             archive_read_free(reader);
-            return Err(ErrorCode::ParseInvalidFormat,
-                "Failed to read extension archive header: " + message);
+            return Err(ErrorCode::ParseInvalidFormat, "Failed to read extension archive header: " + message);
         }
 
         const char* pathname = archive_entry_pathname(entry);
@@ -225,15 +209,13 @@ inline constexpr std::uintmax_t kMaxWasmBytes = 32u * 1024u * 1024u;
         if (!entries.insert(entry_key).second) {
             archive_read_close(reader);
             archive_read_free(reader);
-            return Err(ErrorCode::ValidationInvalidState,
-                "Archive contains duplicate entry: " + entry_key);
+            return Err(ErrorCode::ValidationInvalidState, "Archive contains duplicate entry: " + entry_key);
         }
 
         if (archive_entry_hardlink(entry) != nullptr || archive_entry_symlink(entry) != nullptr) {
             archive_read_close(reader);
             archive_read_free(reader);
-            return Err(ErrorCode::ValidationInvalidState,
-                "Archive entry must not be a link: " + relative->string());
+            return Err(ErrorCode::ValidationInvalidState, "Archive entry must not be a link: " + relative->string());
         }
 
         const auto file_type = archive_entry_filetype(entry);
@@ -252,8 +234,7 @@ inline constexpr std::uintmax_t kMaxWasmBytes = 32u * 1024u * 1024u;
         if (file_type != AE_IFREG) {
             archive_read_close(reader);
             archive_read_free(reader);
-            return Err(ErrorCode::ValidationInvalidState,
-                "Archive entry must be a regular file or directory: " + relative->string());
+            return Err(ErrorCode::ValidationInvalidState, "Archive entry must be a regular file or directory: " + relative->string());
         }
 
         {
@@ -261,24 +242,21 @@ inline constexpr std::uintmax_t kMaxWasmBytes = 32u * 1024u * 1024u;
             if (entry_size < 0) {
                 archive_read_close(reader);
                 archive_read_free(reader);
-                return Err(ErrorCode::ParseInvalidFormat,
-                    "Archive entry has invalid size: " + relative->string());
+                return Err(ErrorCode::ParseInvalidFormat, "Archive entry has invalid size: " + relative->string());
             }
 
             const auto size = static_cast<std::uintmax_t>(entry_size);
             if (size > kMaxSingleFileBytes) {
                 archive_read_close(reader);
                 archive_read_free(reader);
-                return Err(ErrorCode::ValidationOutOfRange,
-                    "Archive file exceeds 64 MiB limit: " + relative->string());
+                return Err(ErrorCode::ValidationOutOfRange, "Archive file exceeds 64 MiB limit: " + relative->string());
             }
 
             total_bytes += size;
             if (total_bytes > kMaxTotalPackageBytes) {
                 archive_read_close(reader);
                 archive_read_free(reader);
-                return Err(ErrorCode::ValidationOutOfRange,
-                    "Archive exceeds 256 MiB unpacked size limit.");
+                return Err(ErrorCode::ValidationOutOfRange, "Archive exceeds 256 MiB unpacked size limit.");
             }
         }
 
@@ -293,16 +271,14 @@ inline constexpr std::uintmax_t kMaxWasmBytes = 32u * 1024u * 1024u;
         if (!output.good()) {
             archive_read_close(reader);
             archive_read_free(reader);
-            return Err(ErrorCode::FileWriteError,
-                "Failed to create extracted archive file: " + destination.string());
+            return Err(ErrorCode::FileWriteError, "Failed to create extracted archive file: " + destination.string());
         }
 
         const void* buffer = nullptr;
         std::size_t buffer_size = 0;
         la_int64_t offset = 0;
         while (true) {
-            const int block_status =
-                archive_read_data_block(reader, &buffer, &buffer_size, &offset);
+            const int block_status = archive_read_data_block(reader, &buffer, &buffer_size, &offset);
             if (block_status == ARCHIVE_EOF) {
                 break;
             }
@@ -310,18 +286,15 @@ inline constexpr std::uintmax_t kMaxWasmBytes = 32u * 1024u * 1024u;
                 const std::string message = archive_error_string(reader);
                 archive_read_close(reader);
                 archive_read_free(reader);
-                return Err(ErrorCode::FileReadError,
-                    "Failed to read archive entry '" + relative->string() + "': " + message);
+                return Err(ErrorCode::FileReadError, "Failed to read archive entry '" + relative->string() + "': " + message);
             }
 
             (void)offset;
-            output.write(
-                static_cast<const char*>(buffer), static_cast<std::streamsize>(buffer_size));
+            output.write(static_cast<const char*>(buffer), static_cast<std::streamsize>(buffer_size));
             if (!output.good()) {
                 archive_read_close(reader);
                 archive_read_free(reader);
-                return Err(ErrorCode::FileWriteError,
-                    "Failed to write extracted archive file: " + destination.string());
+                return Err(ErrorCode::FileWriteError, "Failed to write extracted archive file: " + destination.string());
             }
         }
     }
@@ -335,8 +308,7 @@ inline constexpr std::uintmax_t kMaxWasmBytes = 32u * 1024u * 1024u;
 
 } // namespace
 
-Result<PackageLayout> ResolvePackageLayout(const Manifest& manifest,
-    const fs::path& extensions_root, const fs::path& data_root, const fs::path& cache_root) {
+Result<PackageLayout> ResolvePackageLayout(const Manifest& manifest, const fs::path& extensions_root, const fs::path& data_root, const fs::path& cache_root) {
     auto valid = ValidateManifest(manifest);
     if (!valid) {
         return Err(valid.error());
@@ -371,20 +343,15 @@ Result<PackageLayout> ResolvePackageLayout(const Manifest& manifest,
 Result<void> ValidatePackageLayout(const PackageLayout& layout) {
     std::error_code error;
     if (!fs::is_directory(layout.install_root, error)) {
-        return Err(ErrorCode::FileNotFound,
-            "Extension install directory is missing: " + layout.install_root.string() +
-                ". Install or extract the package before scanning.");
+        return Err(ErrorCode::FileNotFound, "Extension install directory is missing: " + layout.install_root.string() + ". Install or extract the package before scanning.");
     }
     if (!fs::is_regular_file(layout.manifest, error)) {
-        return Err(ErrorCode::FileNotFound,
-            "Extension manifest is missing: " + layout.manifest.string() +
-                ". Add manifest.yaml with id, name, version, apiVersion, runtime.wasm, and "
-                "permissions.");
+        return Err(ErrorCode::FileNotFound, "Extension manifest is missing: " + layout.manifest.string()
+                                                + ". Add manifest.yaml with id, name, version, apiVersion, runtime.wasm, and "
+                                                  "permissions.");
     }
     if (!fs::is_regular_file(layout.wasm, error)) {
-        return Err(ErrorCode::FileNotFound,
-            "Extension wasm module is missing: " + layout.wasm.string() +
-                ". Build the extension wasm or set runtime.wasm to the correct relative path.");
+        return Err(ErrorCode::FileNotFound, "Extension wasm module is missing: " + layout.wasm.string() + ". Build the extension wasm or set runtime.wasm to the correct relative path.");
     }
     return ValidateWasmSize(layout.wasm);
 }
@@ -392,8 +359,7 @@ Result<void> ValidatePackageLayout(const PackageLayout& layout) {
 Result<PackageLayout> InstallUnpackedPackage(const fs::path& source_root, const Roots& roots) {
     std::error_code error;
     if (!fs::is_directory(source_root, error)) {
-        return Err(ErrorCode::FileNotFound,
-            "Unpacked extension package source is not a directory: " + source_root.string());
+        return Err(ErrorCode::FileNotFound, "Unpacked extension package source is not a directory: " + source_root.string());
     }
 
     auto manifest = LoadManifest(source_root / "manifest.yaml");
@@ -407,13 +373,10 @@ Result<PackageLayout> InstallUnpackedPackage(const fs::path& source_root, const 
     }
 
     if (fs::exists(layout->install_root, error)) {
-        return Err(ErrorCode::ValidationInvalidState,
-            "Extension '" + manifest->id +
-                "' is already installed. Refusing to overwrite without an update policy.");
+        return Err(ErrorCode::ValidationInvalidState, "Extension '" + manifest->id + "' is already installed. Refusing to overwrite without an update policy.");
     }
 
-    auto source_layout =
-        ResolvePackageLayout(*manifest, source_root.parent_path(), roots.data, roots.cache);
+    auto source_layout = ResolvePackageLayout(*manifest, source_root.parent_path(), roots.data, roots.cache);
     if (!source_layout) {
         return Err(source_layout.error());
     }
@@ -488,8 +451,7 @@ Result<PackageLayout> InstallArchive(const fs::path& archive_path, const Roots& 
     }
 
     std::uintmax_t total_bytes = 0;
-    for (const fs::directory_entry& entry :
-        fs::recursive_directory_iterator(staging_root, fs::directory_options::none, error)) {
+    for (const fs::directory_entry& entry : fs::recursive_directory_iterator(staging_root, fs::directory_options::none, error)) {
         if (error) {
             fs::remove_all(staging_root, error);
             return Err(ErrorCode::FileReadError, error.message());
@@ -510,9 +472,7 @@ Result<PackageLayout> InstallArchive(const fs::path& archive_path, const Roots& 
 
     if (fs::exists(layout->install_root, error)) {
         fs::remove_all(staging_root, error);
-        return Err(ErrorCode::ValidationInvalidState,
-            "Extension '" + manifest->id +
-                "' is already installed. Refusing to overwrite without an update policy.");
+        return Err(ErrorCode::ValidationInvalidState, "Extension '" + manifest->id + "' is already installed. Refusing to overwrite without an update policy.");
     }
 
     auto valid_installed_layout = ValidatePackageLayout(PackageLayout{

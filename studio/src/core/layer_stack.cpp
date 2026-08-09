@@ -1,6 +1,7 @@
-#include "layer_stack.hpp"
 
-#include <algorithm>
+#include <ranges>
+
+#include "layer_stack.hpp"
 
 namespace woki {
 
@@ -34,9 +35,9 @@ void LayerStack::DetachAll(Context& ctx) noexcept {
         return;
     }
 
-    for (auto it = layers_.rbegin(); it != layers_.rend(); ++it) {
+    for (auto& layer : std::views::reverse(layers_)) {
         try {
-            (*it)->OnDetach(ctx);
+            layer->OnDetach(ctx);
         } catch (const std::exception& error) {
             slog::Error("Layer detach failed: {}", error.what());
         } catch (...) {
@@ -53,8 +54,8 @@ void LayerStack::UpdateAll(Context& ctx, f64 delta_ms) {
 }
 
 void LayerStack::DispatchEvent(Context& ctx, events::Event& event) {
-    for (auto it = layers_.rbegin(); it != layers_.rend(); ++it) {
-        (*it)->OnEvent(ctx, event);
+    for (auto& layer : std::views::reverse(layers_)) {
+        layer->OnEvent(ctx, event);
         if (event.handled) {
             break;
         }
@@ -67,8 +68,12 @@ void LayerStack::DrawUi(Context& ctx) {
     }
 }
 
-bool LayerStack::Empty() const noexcept { return layers_.empty(); }
+bool LayerStack::Empty() const noexcept {
+    return layers_.empty();
+}
 
-bool LayerStack::IsAttached() const noexcept { return attached_; }
+bool LayerStack::IsAttached() const noexcept {
+    return attached_;
+}
 
 } // namespace woki

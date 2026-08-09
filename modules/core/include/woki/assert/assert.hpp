@@ -2,17 +2,13 @@
 
 // IWYU pragma: private, include "woki/core.hpp"
 
-#include "../logger/logger.hpp"
-
 #include <cstdlib>
+
+#include "../logger/logger.hpp"
 
 namespace woki::detail {
 
-[[noreturn]] inline void AssertFailed(
-    const char* expression,
-    const char* file,
-    int line,
-    const char* message = nullptr) {
+[[noreturn]] inline void AssertFailed(const char* expression, const char* file, int line, const char* message = nullptr) {
     if (message != nullptr) {
         slog::Critical("Assertion failed: '{}' at {}:{} ({})", expression, file, line, message);
     } else {
@@ -33,17 +29,17 @@ namespace woki::detail {
 #define WOKI_ASSERT(expr) ((void)0)
 #define WOKI_ASSERT_MSG(expr, msg) ((void)0)
 #else
-#define WOKI_ASSERT(expr)                                                                    \
-    do {                                                                                     \
-        if (!(expr)) {                                                                       \
-            ::woki::detail::AssertFailed(#expr, __FILE__, __LINE__);                         \
-        }                                                                                    \
+#define WOKI_ASSERT(expr)                                                                                                                                                                                                  \
+    do {                                                                                                                                                                                                                   \
+        if (!(expr)) {                                                                                                                                                                                                     \
+            ::woki::detail::AssertFailed(#expr, __FILE__, __LINE__);                                                                                                                                                       \
+        }                                                                                                                                                                                                                  \
     } while (0)
-#define WOKI_ASSERT_MSG(expr, msg)                                                           \
-    do {                                                                                     \
-        if (!(expr)) {                                                                       \
-            ::woki::detail::AssertFailed(#expr, __FILE__, __LINE__, (msg));                  \
-        }                                                                                    \
+#define WOKI_ASSERT_MSG(expr, msg)                                                                                                                                                                                         \
+    do {                                                                                                                                                                                                                   \
+        if (!(expr)) {                                                                                                                                                                                                     \
+            ::woki::detail::AssertFailed(#expr, __FILE__, __LINE__, (msg));                                                                                                                                                \
+        }                                                                                                                                                                                                                  \
     } while (0)
 #endif
 #endif

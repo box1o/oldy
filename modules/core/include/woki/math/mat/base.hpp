@@ -1,24 +1,25 @@
 #pragma once
 
-#include "../detail/arithmetic.hpp"
-#include "../common/functions.hpp"
-#include "../common/constants.hpp"
-
 #include <array>
 #include <cassert>
 #include <cstddef>
 
+#include "fwd.hpp"
+#include "../common/constants.hpp"
+#include "../common/functions.hpp"
+#include "../detail/arithmetic.hpp"
+
 namespace woki::math {
 
 // Forward declarations
-template<std::size_t N, arithmetic T>
+template <std::size_t N, arithmetic T>
 [[nodiscard]] constexpr T det(const mat<N, N, T>& m) noexcept;
 
-template<std::size_t N, floating_point T>
+template <std::size_t N, floating_point T>
 [[nodiscard]] inline mat<N, N, T> inverse(const mat<N, N, T>& m) noexcept;
 
-//NOTE: Column-major storage: data_[col][row]
-template<std::size_t Rows, std::size_t Cols, arithmetic T>
+// NOTE: Column-major storage: data_[col][row]
+template <std::size_t Rows, std::size_t Cols, arithmetic T>
 class mat {
 public:
     static constexpr std::size_t rows = Rows;
@@ -37,8 +38,8 @@ public:
         }
     }
 
-    template<arithmetic... Args>
-    requires (sizeof...(Args) == Rows * Cols)
+    template <arithmetic... Args>
+    requires(sizeof...(Args) == Rows * Cols)
     constexpr mat(layout order, Args... args) noexcept {
         T temp[] = {static_cast<T>(args)...};
         if (order == layout::colm) {
@@ -57,7 +58,7 @@ public:
         }
     }
 
-    template<arithmetic U>
+    template <arithmetic U>
     constexpr explicit mat(const mat<Rows, Cols, U>& other) noexcept {
         for (std::size_t j = 0; j < Cols; ++j) {
             for (std::size_t i = 0; i < Rows; ++i) {
@@ -66,7 +67,9 @@ public:
         }
     }
 
-    static constexpr mat identity() noexcept requires (Rows == Cols) {
+    static constexpr mat identity() noexcept
+    requires(Rows == Cols)
+    {
         mat result{};
         for (std::size_t i = 0; i < Rows; ++i) {
             result(i, i) = T{1};
@@ -205,11 +208,15 @@ public:
         return r;
     }
 
-    [[nodiscard]] constexpr T det() const noexcept requires (Rows == Cols) {
+    [[nodiscard]] constexpr T det() const noexcept
+    requires(Rows == Cols)
+    {
         return woki::math::det(*this);
     }
 
-    [[nodiscard]] constexpr mat inverse() const noexcept requires ((Rows == Cols) && floating_point<T>) {
+    [[nodiscard]] constexpr mat inverse() const noexcept
+    requires((Rows == Cols) && floating_point<T>)
+    {
         return woki::math::inverse(*this);
     }
 
@@ -238,7 +245,7 @@ private:
     std::array<col_type, Cols> data_{};
 };
 
-template<std::size_t R, std::size_t C, std::size_t K, arithmetic T>
+template <std::size_t R, std::size_t C, std::size_t K, arithmetic T>
 [[nodiscard]] constexpr mat<R, K, T> operator*(const mat<R, C, T>& a, const mat<C, K, T>& b) noexcept {
     mat<R, K, T> r{};
     for (std::size_t i = 0; i < R; ++i) {
@@ -253,7 +260,7 @@ template<std::size_t R, std::size_t C, std::size_t K, arithmetic T>
     return r;
 }
 
-template<std::size_t N, arithmetic T>
+template <std::size_t N, arithmetic T>
 [[nodiscard]] constexpr T det(const mat<N, N, T>& m) noexcept {
     mat<N, N, T> a(m);
     T d = T{1};
@@ -296,7 +303,7 @@ template<std::size_t N, arithmetic T>
     return sign == 1 ? d : -d;
 }
 
-template<std::size_t N, floating_point T>
+template <std::size_t N, floating_point T>
 [[nodiscard]] inline mat<N, N, T> inverse(const mat<N, N, T>& m) noexcept {
     mat<N, N, T> a(m);
     mat<N, N, T> inv = mat<N, N, T>::identity();
@@ -335,7 +342,8 @@ template<std::size_t N, floating_point T>
         }
 
         for (std::size_t r = 0; r < N; ++r) {
-            if (r == i) continue;
+            if (r == i)
+                continue;
             const T f = a(r, i);
             for (std::size_t c = 0; c < N; ++c) {
                 a(r, c) -= f * a(i, c);

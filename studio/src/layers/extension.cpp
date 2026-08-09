@@ -1,6 +1,6 @@
-#include "extension.hpp"
-
 #include "woki/events/format.hpp"
+
+#include "extension.hpp"
 
 namespace woki {
 
@@ -148,8 +148,7 @@ void ExtensionLayer::DispatchEventToExtensions(const events::Event& event) {
     }
 
     const std::string payload = events::ToJson(event);
-    extensions_->DispatchEvent(static_cast<u32>(event.GetEventType()),
-        std::span<const u8>(reinterpret_cast<const u8*>(payload.data()), payload.size()));
+    extensions_->DispatchEvent(static_cast<u32>(event.GetEventType()), std::span<const u8>(reinterpret_cast<const u8*>(payload.data()), payload.size()));
 }
 
 } // namespace woki

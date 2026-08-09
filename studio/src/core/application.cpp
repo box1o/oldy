@@ -1,18 +1,21 @@
-#include "application.hpp"
+#include <vector>
 
-#include "layers/extension.hpp"
-#include "layers/render.hpp"
 #include "woki/core.hpp"
 
-#include <vector>
+#include "application.hpp"
+#include "layers/render.hpp"
+#include "layers/extension.hpp"
 
 namespace woki {
 
-Application::Application(ApplicationSettings settings) : settings_(std::move(settings)) {
+Application::Application(ApplicationSettings settings)
+    : settings_(std::move(settings)) {
     Initialize();
 }
 
-Application::~Application() { Shutdown(); }
+Application::~Application() {
+    Shutdown();
+}
 
 void Application::Initialize() {
     WindowOptions options;
@@ -24,17 +27,16 @@ void Application::Initialize() {
     options.resizable = settings_.resizable;
     options.decorated = settings_.decorated;
 
-    window_ = Window::Create(options);
-    if (window_ == nullptr) {
-        slog::Critical("Failed to create application window");
+    auto window = Window::Create(options);
+    if (!window) {
+        slog::Critical("Failed to create application window: {}", window.error().Message());
         return;
     }
+    window_ = std::move(*window);
 
-    slog::Info("Created window '{}' ({}x{})", window_->GetTitle(), window_->GetWidth(),
-        window_->GetHeight());
+    slog::Info("Created window '{}' ({}x{})", window_->GetTitle(), window_->GetWidth(), window_->GetHeight());
 
-    window_event_callback_id_ =
-        window_->AddEventCallback([this](events::Event& event) { EmitEvent(event); });
+    window_event_callback_id_ = window_->AddEventCallback([this](events::Event& event) { EmitEvent(event); });
 
     ConfigureLayers();
     AttachLayers();
@@ -157,7 +159,10 @@ bool Application::Tick() {
     return true;
 }
 
-void Application::Run() { while (Tick()); }
+void Application::Run() {
+    while (Tick())
+        ;
+}
 
 CallbackId Application::AddEventCallback(EventCallback callback) {
     const CallbackId callback_id = next_callback_id_++;
@@ -165,7 +170,9 @@ CallbackId Application::AddEventCallback(EventCallback callback) {
     return callback_id;
 }
 
-void Application::RemoveEventCallback(CallbackId id) { event_callbacks_.erase(id); }
+void Application::RemoveEventCallback(CallbackId id) {
+    event_callbacks_.erase(id);
+}
 
 void Application::EmitEvent(events::Event& event) {
     event.timestamp = Clock::Seconds();

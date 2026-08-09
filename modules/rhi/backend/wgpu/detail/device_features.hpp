@@ -1,12 +1,12 @@
 #pragma once
 
+#include <webgpu/webgpu.h>
+
 #include <woki/rhi/descriptors.hpp>
 
-#include "../wgpu_enums.hpp"
 #include "limits.hpp"
 #include "string.hpp"
-
-#include <webgpu/webgpu.h>
+#include "../wgpu_enums.hpp"
 
 namespace woki::rhi::wgpu::detail {
 

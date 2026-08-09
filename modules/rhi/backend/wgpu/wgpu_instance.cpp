@@ -1,13 +1,11 @@
-#include "wgpu_instance.hpp"
-
-#include "detail/adapter_info.hpp"
-#include "detail/string.hpp"
-#include "wgpu_adapter.hpp"
-#include "wgpu_enums.hpp"
-#include "wgpu_surface.hpp"
-
 #include <woki/rhi/instance.hpp>
 #include <woki/window/window.hpp>
+
+#include "wgpu_enums.hpp"
+#include "wgpu_adapter.hpp"
+#include "wgpu_surface.hpp"
+#include "detail/string.hpp"
+#include "wgpu_instance.hpp"
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
@@ -31,13 +29,8 @@ struct RequestAdapterCallbackState {
     std::function<void(WGPURequestAdapterStatus, WGPUAdapter, std::string_view)> callback;
 };
 
-void RequestAdapterThunk(WGPURequestAdapterStatus status,
-    WGPUAdapter adapter,
-    WGPUStringView message,
-    void* userdata1,
-    void*) {
-    auto state = scope<RequestAdapterCallbackState>(
-        static_cast<RequestAdapterCallbackState*>(userdata1));
+void RequestAdapterThunk(WGPURequestAdapterStatus status, WGPUAdapter adapter, WGPUStringView message, void* userdata1, void*) {
+    auto state = scope<RequestAdapterCallbackState>(static_cast<RequestAdapterCallbackState*>(userdata1));
     if (state == nullptr || !state->callback) {
         return;
     }
@@ -46,8 +39,7 @@ void RequestAdapterThunk(WGPURequestAdapterStatus status,
     state->callback(status, adapter, message_text);
 }
 
-[[nodiscard]] std::vector<WGPUInstanceFeatureName> BuildRequiredInstanceFeatures(
-    const std::vector<InstanceFeatureName>& features) {
+[[nodiscard]] std::vector<WGPUInstanceFeatureName> BuildRequiredInstanceFeatures(const std::vector<InstanceFeatureName>& features) {
     std::vector<WGPUInstanceFeatureName> native_features;
     native_features.reserve(features.size());
     for (const InstanceFeatureName feature : features) {
@@ -87,7 +79,7 @@ const InstanceDesc& WgpuInstanceImpl::GetDesc() const noexcept {
     return desc_;
 }
 
-Result<scope<Surface>> WgpuInstanceImpl::CreateSurface(const SurfaceDescriptor& desc) {
+Result<ref<Surface>> WgpuInstanceImpl::CreateSurface(const SurfaceDescriptor& desc) {
     if (!handle_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Instance is invalid");
     }
@@ -98,27 +90,23 @@ Result<scope<Surface>> WgpuInstanceImpl::CreateSurface(const SurfaceDescriptor& 
 
     WGPUSurface native_surface = wgpuInstanceCreateSurface(handle_.get(), &native_desc);
     if (native_surface == nullptr) {
-        return Err(ErrorCode::GraphicsResourceCreationFailed,
-            "Failed to create surface '" + desc.label + "'");
+        return Err(ErrorCode::GraphicsResourceCreationFailed, "Failed to create surface '" + desc.label + "'");
     }
 
-    detail::retain(handle_.get());
-    return Ok(createScope<WgpuSurfaceImpl>(handle_.get(), native_surface));
+    return Ok(createRef<WgpuSurfaceImpl>(handle_.get(), native_surface));
 }
 
-Result<scope<Surface>> WgpuInstanceImpl::CreateSurface(Window& window, SurfaceDesc desc) {
+Result<ref<Surface>> WgpuInstanceImpl::CreateSurface(Window& window, SurfaceDesc desc) {
     if (!handle_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Instance is invalid");
     }
 
     WGPUSurface native_surface = CreateNativeSurface(handle_.get(), window);
     if (native_surface == nullptr) {
-        return Err(ErrorCode::GraphicsResourceCreationFailed,
-            "Failed to create surface '" + desc.label + "'");
+        return Err(ErrorCode::GraphicsResourceCreationFailed, "Failed to create surface '" + desc.label + "'");
     }
 
-    detail::retain(handle_.get());
-    return Ok(createScope<WgpuSurfaceImpl>(handle_.get(), native_surface));
+    return Ok(createRef<WgpuSurfaceImpl>(handle_.get(), native_surface));
 }
 
 void WgpuInstanceImpl::GetWGSLLanguageFeatures(SupportedWGSLLanguageFeatures& features) const {
@@ -178,8 +166,7 @@ WaitStatus WgpuInstanceImpl::WaitAny(const std::span<FutureWaitInfo> wait_infos,
     return convert::FromWgpu(status);
 }
 
-WGPURequestAdapterOptions WgpuInstanceImpl::BuildRequestAdapterOptions(
-    const RequestAdapterDesc& desc) const {
+WGPURequestAdapterOptions WgpuInstanceImpl::BuildRequestAdapterOptions(const RequestAdapterDesc& desc) const {
     WGPURequestAdapterOptions options = WGPU_REQUEST_ADAPTER_OPTIONS_INIT;
     options.featureLevel = ToWgpu(desc.feature_level);
     options.powerPreference = ToWgpu(desc.power_preference);
@@ -215,11 +202,7 @@ Result<scope<Adapter>> WgpuInstanceImpl::RequestAdapter(RequestAdapterDesc desc)
 #else
     callback_info.mode = WGPUCallbackMode_AllowProcessEvents;
 #endif
-    callback_info.callback = [](const WGPURequestAdapterStatus status,
-                                WGPUAdapter adapter,
-                                const WGPUStringView message,
-                                void*,
-                                void* userdata) {
+    callback_info.callback = [](const WGPURequestAdapterStatus status, WGPUAdapter adapter, const WGPUStringView message, void*, void* userdata) {
         auto* state_ptr = static_cast<State*>(userdata);
         state_ptr->done = true;
         if (status == WGPURequestAdapterStatus_Success) {
@@ -243,18 +226,13 @@ Result<scope<Adapter>> WgpuInstanceImpl::RequestAdapter(RequestAdapterDesc desc)
     }
 
     if (state.adapter == nullptr) {
-        return Err(ErrorCode::GraphicsInitFailed,
-            state.message.empty() ? "Failed to request WebGPU adapter" : state.message);
+        return Err(ErrorCode::GraphicsInitFailed, state.message.empty() ? "Failed to request WebGPU adapter" : state.message);
     }
 
-    detail::retain(handle_.get());
-    return Ok(createScope<WgpuAdapterImpl>(*this, state.adapter));
+    return Ok(createScope<WgpuAdapterImpl>(handle_.get(), state.adapter));
 }
 
-Future WgpuInstanceImpl::RequestAdapter(
-    RequestAdapterDesc desc,
-    CallbackMode callback_mode,
-    RequestAdapterCallback callback) {
+Future WgpuInstanceImpl::RequestAdapter(RequestAdapterDesc desc, CallbackMode callback_mode, RequestAdapterCallback callback) {
     Future future{};
     if (!handle_) {
         future.message = "Instance is invalid";
@@ -267,39 +245,33 @@ Future WgpuInstanceImpl::RequestAdapter(
     }
 
     const auto options = BuildRequestAdapterOptions(desc);
-    detail::retain(handle_.get());
+    auto retained_instance = handle_;
 
-    auto* callback_state = new RequestAdapterCallbackState{
-        .callback = [callback = std::move(callback), instance = this, retained = handle_.get()](
-                        const WGPURequestAdapterStatus status,
-                        WGPUAdapter adapter,
-                        const std::string_view message) mutable {
-            scope<Adapter> adapter_scope{};
-            if (status == WGPURequestAdapterStatus_Success && adapter != nullptr) {
-                adapter_scope = createScope<WgpuAdapterImpl>(*instance, adapter);
-            } else if (adapter != nullptr) {
-                wgpuAdapterRelease(adapter);
-            }
+    auto callback_state = createScope<RequestAdapterCallbackState>(RequestAdapterCallbackState{
+        .callback =
+            [callback = std::move(callback), retained_instance = std::move(retained_instance)](const WGPURequestAdapterStatus status, WGPUAdapter adapter, const std::string_view message) mutable {
+                scope<Adapter> adapter_scope{};
+                if (status == WGPURequestAdapterStatus_Success && adapter != nullptr) {
+                    adapter_scope = createScope<WgpuAdapterImpl>(retained_instance.get(), adapter);
+                } else if (adapter != nullptr) {
+                    wgpuAdapterRelease(adapter);
+                }
 
-            callback(FromWgpu(status), std::move(adapter_scope), message);
-
-            if (retained != nullptr) {
-                wgpuInstanceRelease(retained);
-            }
-        },
-    };
+                callback(FromWgpu(status), std::move(adapter_scope), message);
+            },
+    });
 
     WGPURequestAdapterCallbackInfo callback_info = WGPU_REQUEST_ADAPTER_CALLBACK_INFO_INIT;
     callback_info.mode = ToWgpu(callback_mode);
     callback_info.callback = RequestAdapterThunk;
-    callback_info.userdata1 = callback_state;
+    callback_info.userdata1 = callback_state.get();
 
+    auto* transferred_state = callback_state.release();
     const auto native_future = wgpuInstanceRequestAdapter(handle_.get(), &options, callback_info);
     future.id = native_future.id;
 
     if (future.id == 0) {
-        delete callback_state;
-        wgpuInstanceRelease(handle_.get());
+        callback_state.reset(transferred_state);
         future.message = "WebGPU adapter request failed to start";
     }
 
@@ -321,8 +293,7 @@ bool WgpuInstanceImpl::Initialize() noexcept {
     const auto supported = QueryInstanceFeatures();
     for (const InstanceFeatureName feature : desc_.required_features) {
         if (!supported.Has(feature)) {
-            slog::Error("Failed to create WebGPU instance '{}': unsupported required feature",
-                desc_.label);
+            slog::Error("Failed to create WebGPU instance '{}': unsupported required feature", desc_.label);
             return false;
         }
     }
@@ -330,10 +301,8 @@ bool WgpuInstanceImpl::Initialize() noexcept {
     WGPUInstanceLimits required_native_limits = WGPU_INSTANCE_LIMITS_INIT;
     const WGPUInstanceLimits* limits_ptr = nullptr;
     if (desc_.required_limits.has_value()) {
-        WOKI_ASSERT(desc_.required_limits->timed_wait_any_max_count <=
-            static_cast<u64>(std::numeric_limits<size_t>::max()));
-        required_native_limits.timedWaitAnyMaxCount =
-            static_cast<size_t>(desc_.required_limits->timed_wait_any_max_count);
+        WOKI_ASSERT(desc_.required_limits->timed_wait_any_max_count <= static_cast<u64>(std::numeric_limits<size_t>::max()));
+        required_native_limits.timedWaitAnyMaxCount = static_cast<size_t>(desc_.required_limits->timed_wait_any_max_count);
         limits_ptr = &required_native_limits;
     }
 
@@ -345,9 +314,7 @@ bool WgpuInstanceImpl::Initialize() noexcept {
 #ifndef __EMSCRIPTEN__
     dawn::native::DawnInstanceDescriptor dawn_desc{};
     dawn_desc.nextInChain = reinterpret_cast<const ::wgpu::ChainedStruct*>(desc_.next_in_chain);
-    dawn_desc.backendValidationLevel = desc_.enable_validation
-        ? dawn::native::BackendValidationLevel::Full
-        : dawn::native::BackendValidationLevel::Disabled;
+    dawn_desc.backendValidationLevel = desc_.enable_validation ? dawn::native::BackendValidationLevel::Full : dawn::native::BackendValidationLevel::Disabled;
     native_desc.nextInChain = reinterpret_cast<WGPUChainedStruct*>(&dawn_desc);
 #else
     native_desc.nextInChain = static_cast<WGPUChainedStruct*>(desc_.next_in_chain);
@@ -363,10 +330,7 @@ bool WgpuInstanceImpl::Initialize() noexcept {
     return true;
 }
 
-WGPUWaitStatus WgpuInstanceImpl::WaitAnyNative(
-    const size_t future_count,
-    WGPUFutureWaitInfo* futures,
-    const u64 timeout_ns) const noexcept {
+WGPUWaitStatus WgpuInstanceImpl::WaitAnyNative(const size_t future_count, WGPUFutureWaitInfo* futures, const u64 timeout_ns) const noexcept {
     if (!handle_ || future_count == 0 || futures == nullptr) {
         return WGPUWaitStatus_Error;
     }

@@ -1,8 +1,8 @@
 #pragma once
 
+#include <string>
 #include <cstdlib>
 #include <filesystem>
-#include <string>
 #include <string_view>
 
 // Wasm integration tests compile tiny guest modules at runtime. Use LLVM clang
@@ -90,8 +90,7 @@ inline std::string woki_test_wasm_ld_path() {
 #endif
 }
 
-inline bool woki_test_compile_wasm(
-    const std::string& source_path, const std::string& wasm_path, std::string_view export_flags) {
+inline bool woki_test_compile_wasm(const std::string& source_path, const std::string& wasm_path, std::string_view export_flags) {
     namespace fs = std::filesystem;
 
     const std::string clang = woki_test_wasm_clang();
@@ -117,10 +116,10 @@ inline bool woki_test_compile_wasm(
             view.remove_prefix(end == std::string_view::npos ? view.size() : end + 1);
         }
 
-        const std::string command = clang +
-                                    " --target=wasm32-unknown-unknown -nostdlib -fno-builtin "
-                                    "-Wl,--no-entry -Wl,--export-memory " +
-                                    wl_exports + "-o \"" + wasm_path + "\" \"" + source_path + "\"";
+        const std::string command = clang
+                                    + " --target=wasm32-unknown-unknown -nostdlib -fno-builtin "
+                                      "-Wl,--no-entry -Wl,--export-memory "
+                                    + wl_exports + "-o \"" + wasm_path + "\" \"" + source_path + "\"";
         return std::system(command.c_str()) == 0;
     }
 
@@ -129,10 +128,8 @@ inline bool woki_test_compile_wasm(
     fs::path obj_path{wasm_path};
     obj_path.replace_extension(".o");
 
-    const std::string compile = woki_test_wasm_compile_prefix() + clang +
-                                woki_test_wasm_toolchain_flags() +
-                                " --target=wasm32-unknown-unknown -nostdlib -fno-builtin -c \"" +
-                                source_path + "\" -o \"" + obj_path.string() + "\"";
+    const std::string compile = woki_test_wasm_compile_prefix() + clang + woki_test_wasm_toolchain_flags() + " --target=wasm32-unknown-unknown -nostdlib -fno-builtin -c \"" + source_path + "\" -o \"" + obj_path.string()
+                                + "\"";
     if (std::system(compile.c_str()) != 0) {
         return false;
     }
@@ -142,9 +139,7 @@ inline bool woki_test_compile_wasm(
         linker_exports.erase(pos, 4);
     }
 
-    const std::string link = woki_test_wasm_compile_prefix() + wasm_ld + " -o \"" + wasm_path +
-                             "\" \"" + obj_path.string() +
-                             "\" --no-entry --allow-undefined --export-memory " + linker_exports;
+    const std::string link = woki_test_wasm_compile_prefix() + wasm_ld + " -o \"" + wasm_path + "\" \"" + obj_path.string() + "\" --no-entry --allow-undefined --export-memory " + linker_exports;
 
     const bool ok = std::system(link.c_str()) == 0;
     std::error_code ec;

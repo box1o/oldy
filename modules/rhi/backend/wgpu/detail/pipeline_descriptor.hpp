@@ -1,15 +1,14 @@
 #pragma once
 
-#include <woki/rhi/descriptors.hpp>
-
-#include "../wgpu_enums.hpp"
-#include "native_helpers.hpp"
-#include "string.hpp"
-
 #include <string>
 #include <vector>
-
 #include <webgpu/webgpu.h>
+
+#include <woki/rhi/descriptors.hpp>
+
+#include "string.hpp"
+#include "../wgpu_enums.hpp"
+#include "native_helpers.hpp"
 
 namespace woki::rhi::wgpu::detail {
 

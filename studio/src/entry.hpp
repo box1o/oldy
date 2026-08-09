@@ -1,11 +1,11 @@
 #pragma once
 
+#include <array>
+#include <filesystem>
+
 #include "woki/core.hpp"
 
 #include "core/application.hpp"
-
-#include <array>
-#include <filesystem>
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
@@ -104,9 +104,7 @@ inline void ApplyWindowConfig(const woki::Config& config, woki::ApplicationSetti
     settings.decorated = config.GetOr<bool>("window.decorated", settings.decorated);
 }
 
-inline void ApplyCommandLineOverrides(
-    const woki::ArgumentParser& parser,
-    woki::ApplicationSettings& settings) {
+inline void ApplyCommandLineOverrides(const woki::ArgumentParser& parser, woki::ApplicationSettings& settings) {
     if (auto width = parser.Get<woki::u32>("width"); width) {
         settings.width = *width;
     }
@@ -207,9 +205,8 @@ inline auto RunApplication(woki::scope<woki::Application> app) -> int {
                 delete loop_state;
             }
         },
-        state,
-        0,
-        true);
+        state, 0, true
+    );
 
     return 0;
 #else

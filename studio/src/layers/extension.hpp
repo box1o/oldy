@@ -1,8 +1,8 @@
 #pragma once
 
-#include "core/layer.hpp"
-
 #include <woki/ext/ext.hpp>
+
+#include "core/layer.hpp"
 
 namespace woki {
 

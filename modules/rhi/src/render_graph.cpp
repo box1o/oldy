@@ -1,56 +1,55 @@
-#include <woki/rhi/render_graph.hpp>
+#include <utility>
+#include <algorithm>
 
-#include <woki/rhi/command_encoder.hpp>
+#include <woki/rhi/queue.hpp>
 #include <woki/rhi/device.hpp>
 #include <woki/rhi/objects.hpp>
-#include <woki/rhi/queue.hpp>
+#include <woki/rhi/render_graph.hpp>
+#include <woki/rhi/command_encoder.hpp>
 #include <woki/rhi/render_pass_encoder.hpp>
-
-#include <algorithm>
-#include <utility>
 
 namespace woki::rhi {
 namespace {
 
 using render_graph::detail::ColorOutput;
+using render_graph::detail::CopyOperation;
 using render_graph::detail::DepthOutput;
 using render_graph::detail::FramebufferRecord;
 using render_graph::detail::GraphBlueprint;
+using render_graph::detail::PassKind;
 using render_graph::detail::PassRecord;
+using render_graph::detail::PooledTransientTexture;
 using render_graph::detail::ResourceKind;
 using render_graph::detail::ResourceRecord;
-using render_graph::detail::CopyOperation;
-using render_graph::detail::PooledTransientTexture;
-using render_graph::detail::TransientPoolKey;
-using render_graph::detail::PassKind;
 using render_graph::detail::SampleInput;
+using render_graph::detail::TransientPoolKey;
 
 [[nodiscard]] Extent3D ResolveExtent(const ExtentMode& mode, const u32 width, const u32 height) {
     switch (mode.kind) {
-    case ExtentModeKind::Swapchain:
-        return Extent3D{width, height, 1};
-    case ExtentModeKind::Fixed:
-        return Extent3D{mode.width, mode.height, 1};
-    case ExtentModeKind::Relative:
-        return Extent3D{
-            std::max(1u, static_cast<u32>(static_cast<f32>(width) * mode.relative_width)),
-            std::max(1u, static_cast<u32>(static_cast<f32>(height) * mode.relative_height)),
-            1,
-        };
+        case ExtentModeKind::Swapchain:
+            return Extent3D{width, height, 1};
+        case ExtentModeKind::Fixed:
+            return Extent3D{mode.width, mode.height, 1};
+        case ExtentModeKind::Relative:
+            return Extent3D{
+                std::max(1u, static_cast<u32>(static_cast<f32>(width) * mode.relative_width)),
+                std::max(1u, static_cast<u32>(static_cast<f32>(height) * mode.relative_height)),
+                1,
+            };
     }
     return Extent3D{width, height, 1};
 }
 
 [[nodiscard]] bool IsDepthFormat(const TextureFormat format) noexcept {
     switch (format) {
-    case TextureFormat::Depth16Unorm:
-    case TextureFormat::Depth24Plus:
-    case TextureFormat::Depth24PlusStencil8:
-    case TextureFormat::Depth32Float:
-    case TextureFormat::Depth32FloatStencil8:
-        return true;
-    default:
-        return false;
+        case TextureFormat::Depth16Unorm:
+        case TextureFormat::Depth24Plus:
+        case TextureFormat::Depth24PlusStencil8:
+        case TextureFormat::Depth32Float:
+        case TextureFormat::Depth32FloatStencil8:
+            return true;
+        default:
+            return false;
     }
 }
 
@@ -71,8 +70,7 @@ using render_graph::detail::SampleInput;
     return view_desc;
 }
 
-[[nodiscard]] Result<scope<Texture>> CreateTransientTexture(
-    Device& device, const TransientDesc& desc, const u32 width, const u32 height) {
+[[nodiscard]] Result<scope<Texture>> CreateTransientTexture(Device& device, const TransientDesc& desc, const u32 width, const u32 height) {
     TextureDesc native_desc{};
     native_desc.label = desc.label.empty() ? "RenderGraphTransient" : desc.label;
     native_desc.size = ResolveExtent(desc.extent, width, height);
@@ -84,8 +82,7 @@ using render_graph::detail::SampleInput;
     return device.CreateTexture(native_desc);
 }
 
-[[nodiscard]] TransientPoolKey MakePoolKey(
-    const TransientDesc& desc, const u32 width, const u32 height) {
+[[nodiscard]] TransientPoolKey MakePoolKey(const TransientDesc& desc, const u32 width, const u32 height) {
     const Extent3D size = ResolveExtent(desc.extent, width, height);
     return TransientPoolKey{
         .format = desc.format,
@@ -118,6 +115,10 @@ Device& RenderPassContext::device() noexcept {
     return *device_;
 }
 
+const ref<Device>& RenderPassContext::device_ref() const noexcept {
+    return device_;
+}
+
 TextureView& RenderPassContext::color(const u32 slot) {
     WOKI_ASSERT(slot < colors_.size() && colors_[slot] != nullptr);
     return *colors_[slot];
@@ -141,8 +142,7 @@ u32 RenderPassContext::sample_count() const noexcept {
     return static_cast<u32>(samples_.size());
 }
 
-BindGroup* RenderPassContext::GetOrCreateBindGroup(
-    const std::string_view key, std::function<scope<BindGroup>()> factory) {
+BindGroup* RenderPassContext::GetOrCreateBindGroup(const std::string_view key, std::function<scope<BindGroup>()> factory) {
     const std::string cache_key(key);
     if (auto it = bind_group_cache_.find(cache_key); it != bind_group_cache_.end()) {
         return it->second.get();
@@ -160,9 +160,10 @@ BindGroup* RenderPassContext::GetOrCreateBindGroup(
 
 // --- BindGroupBuilder ---
 
-BindGroupBuilder::BindGroupBuilder(
-    Device& device, BindGroupLayout& layout, const std::string_view label)
-    : device_(&device), layout_(&layout), label_(label) {}
+BindGroupBuilder::BindGroupBuilder(ref<Device> device, ref<BindGroupLayout> layout, const std::string_view label)
+    : device_(std::move(device)),
+      layout_(std::move(layout)),
+      label_(label) {}
 
 BindGroupBuilder& BindGroupBuilder::BindTexture(const u32 binding, TextureView& view) {
     entries_.push_back(BindGroupEntryDesc{
@@ -180,8 +181,7 @@ BindGroupBuilder& BindGroupBuilder::BindSampler(const u32 binding, Sampler& samp
     return *this;
 }
 
-BindGroupBuilder& BindGroupBuilder::BindBuffer(
-    const u32 binding, Buffer& buffer, const u64 offset, const u64 size) {
+BindGroupBuilder& BindGroupBuilder::BindBuffer(const u32 binding, Buffer& buffer, const u64 offset, const u64 size) {
     entries_.push_back(BindGroupEntryDesc{
         .binding = binding,
         .buffer = &buffer,
@@ -198,7 +198,7 @@ Result<scope<BindGroup>> BindGroupBuilder::Build() {
 
     BindGroupDesc desc{};
     desc.label = label_;
-    desc.layout = layout_;
+    desc.layout = layout_.get();
     desc.entries = entries_;
     return device_->CreateBindGroup(desc);
 }
@@ -213,6 +213,10 @@ CommandEncoder& CopyPassContext::encoder() {
 Device& CopyPassContext::device() noexcept {
     WOKI_ASSERT(device_ != nullptr);
     return *device_;
+}
+
+const ref<Device>& CopyPassContext::device_ref() const noexcept {
+    return device_;
 }
 
 Texture& CopyPassContext::src(const u32 index) {
@@ -245,9 +249,7 @@ Result<void> CopyPassContext::CopyAll() {
             std::max(1u, height_),
             1,
         };
-        if (auto result = encoder_->CopyTextureToTexture(
-                MakeCopyInfo(*source), MakeCopyInfo(*destination), copy_size);
-            !result) {
+        if (auto result = encoder_->CopyTextureToTexture(MakeCopyInfo(*source), MakeCopyInfo(*destination), copy_size); !result) {
             return result;
         }
     }
@@ -257,27 +259,27 @@ Result<void> CopyPassContext::CopyAll() {
 
 // --- PassBuilder ---
 
-PassBuilder::PassBuilder(RenderGraphBuilder& owner, const u32 pass_index)
-    : owner_(&owner), pass_index_(pass_index) {}
+PassBuilder::PassBuilder(ref<GraphBlueprint> blueprint, const u32 pass_index)
+    : blueprint_(std::move(blueprint)),
+      pass_index_(pass_index) {}
 
 PassBuilder& PassBuilder::Target(const Framebuffer framebuffer, FramebufferTargetConfig config) {
-    WOKI_ASSERT(owner_ != nullptr);
+    WOKI_ASSERT(blueprint_ != nullptr);
     WOKI_ASSERT(framebuffer);
-    WOKI_ASSERT(pass_index_ < owner_->blueprint_.passes.size());
+    WOKI_ASSERT(pass_index_ < blueprint_->passes.size());
 
-    PassRecord& pass = owner_->blueprint_.passes[pass_index_];
+    PassRecord& pass = blueprint_->passes[pass_index_];
     pass.framebuffer_id = framebuffer.id_;
     pass.framebuffer_config = std::move(config);
     return *this;
 }
 
-PassBuilder& PassBuilder::Color(
-    const u32 slot, const Resource resource, ColorAttachmentConfig config) {
-    WOKI_ASSERT(owner_ != nullptr);
+PassBuilder& PassBuilder::Color(const u32 slot, const Resource resource, ColorAttachmentConfig config) {
+    WOKI_ASSERT(blueprint_ != nullptr);
     WOKI_ASSERT(resource);
-    WOKI_ASSERT(pass_index_ < owner_->blueprint_.passes.size());
+    WOKI_ASSERT(pass_index_ < blueprint_->passes.size());
 
-    owner_->blueprint_.passes[pass_index_].colors.push_back(ColorOutput{
+    blueprint_->passes[pass_index_].colors.push_back(ColorOutput{
         .slot = slot,
         .resource_id = resource.id_,
         .config = config,
@@ -285,13 +287,12 @@ PassBuilder& PassBuilder::Color(
     return *this;
 }
 
-PassBuilder& PassBuilder::Color(
-    const u32 slot, const PerFrameSlot resource, ColorAttachmentConfig config) {
-    WOKI_ASSERT(owner_ != nullptr);
+PassBuilder& PassBuilder::Color(const u32 slot, const PerFrameSlot resource, ColorAttachmentConfig config) {
+    WOKI_ASSERT(blueprint_ != nullptr);
     WOKI_ASSERT(resource);
-    WOKI_ASSERT(pass_index_ < owner_->blueprint_.passes.size());
+    WOKI_ASSERT(pass_index_ < blueprint_->passes.size());
 
-    owner_->blueprint_.passes[pass_index_].colors.push_back(ColorOutput{
+    blueprint_->passes[pass_index_].colors.push_back(ColorOutput{
         .slot = slot,
         .resource_id = resource.id_,
         .config = config,
@@ -300,11 +301,11 @@ PassBuilder& PassBuilder::Color(
 }
 
 PassBuilder& PassBuilder::Depth(const Resource resource, DepthAttachmentConfig config) {
-    WOKI_ASSERT(owner_ != nullptr);
+    WOKI_ASSERT(blueprint_ != nullptr);
     WOKI_ASSERT(resource);
-    WOKI_ASSERT(pass_index_ < owner_->blueprint_.passes.size());
+    WOKI_ASSERT(pass_index_ < blueprint_->passes.size());
 
-    owner_->blueprint_.passes[pass_index_].depth = DepthOutput{
+    blueprint_->passes[pass_index_].depth = DepthOutput{
         .resource_id = resource.id_,
         .config = config,
     };
@@ -312,11 +313,11 @@ PassBuilder& PassBuilder::Depth(const Resource resource, DepthAttachmentConfig c
 }
 
 PassBuilder& PassBuilder::Depth(const PerFrameSlot resource, DepthAttachmentConfig config) {
-    WOKI_ASSERT(owner_ != nullptr);
+    WOKI_ASSERT(blueprint_ != nullptr);
     WOKI_ASSERT(resource);
-    WOKI_ASSERT(pass_index_ < owner_->blueprint_.passes.size());
+    WOKI_ASSERT(pass_index_ < blueprint_->passes.size());
 
-    owner_->blueprint_.passes[pass_index_].depth = DepthOutput{
+    blueprint_->passes[pass_index_].depth = DepthOutput{
         .resource_id = resource.id_,
         .config = config,
     };
@@ -324,11 +325,11 @@ PassBuilder& PassBuilder::Depth(const PerFrameSlot resource, DepthAttachmentConf
 }
 
 PassBuilder& PassBuilder::Sample(const Resource resource, const SampleMode mode) {
-    WOKI_ASSERT(owner_ != nullptr);
+    WOKI_ASSERT(blueprint_ != nullptr);
     WOKI_ASSERT(resource);
-    WOKI_ASSERT(pass_index_ < owner_->blueprint_.passes.size());
+    WOKI_ASSERT(pass_index_ < blueprint_->passes.size());
 
-    owner_->blueprint_.passes[pass_index_].samples.push_back(SampleInput{
+    blueprint_->passes[pass_index_].samples.push_back(SampleInput{
         .resource_id = resource.id_,
         .mode = mode,
     });
@@ -336,12 +337,12 @@ PassBuilder& PassBuilder::Sample(const Resource resource, const SampleMode mode)
 }
 
 PassBuilder& PassBuilder::Copy(const Resource src, const Resource dst) {
-    WOKI_ASSERT(owner_ != nullptr);
+    WOKI_ASSERT(blueprint_ != nullptr);
     WOKI_ASSERT(src);
     WOKI_ASSERT(dst);
-    WOKI_ASSERT(pass_index_ < owner_->blueprint_.passes.size());
+    WOKI_ASSERT(pass_index_ < blueprint_->passes.size());
 
-    PassRecord& pass = owner_->blueprint_.passes[pass_index_];
+    PassRecord& pass = blueprint_->passes[pass_index_];
     pass.kind = PassKind::Copy;
     pass.copies.push_back(CopyOperation{
         .src_resource_id = src.id_,
@@ -352,24 +353,25 @@ PassBuilder& PassBuilder::Copy(const Resource src, const Resource dst) {
 
 // --- FramebufferBuilder ---
 
-FramebufferBuilder::FramebufferBuilder(RenderGraphBuilder& owner, const u32 framebuffer_index)
-    : owner_(&owner), framebuffer_index_(framebuffer_index) {}
+FramebufferBuilder::FramebufferBuilder(ref<GraphBlueprint> blueprint, const u32 framebuffer_index)
+    : blueprint_(std::move(blueprint)),
+      framebuffer_index_(framebuffer_index) {}
 
 FramebufferBuilder& FramebufferBuilder::Color(const u32 slot, const Resource resource) {
-    WOKI_ASSERT(owner_ != nullptr);
+    WOKI_ASSERT(blueprint_ != nullptr);
     WOKI_ASSERT(resource);
-    WOKI_ASSERT(framebuffer_index_ < owner_->blueprint_.framebuffers.size());
+    WOKI_ASSERT(framebuffer_index_ < blueprint_->framebuffers.size());
 
-    owner_->blueprint_.framebuffers[framebuffer_index_].colors.emplace_back(slot, resource.id_);
+    blueprint_->framebuffers[framebuffer_index_].colors.emplace_back(slot, resource.id_);
     return *this;
 }
 
 FramebufferBuilder& FramebufferBuilder::Depth(const Resource resource) {
-    WOKI_ASSERT(owner_ != nullptr);
+    WOKI_ASSERT(blueprint_ != nullptr);
     WOKI_ASSERT(resource);
-    WOKI_ASSERT(framebuffer_index_ < owner_->blueprint_.framebuffers.size());
+    WOKI_ASSERT(framebuffer_index_ < blueprint_->framebuffers.size());
 
-    owner_->blueprint_.framebuffers[framebuffer_index_].depth_resource_id = resource.id_;
+    blueprint_->framebuffers[framebuffer_index_].depth_resource_id = resource.id_;
     return *this;
 }
 
@@ -381,8 +383,8 @@ Framebuffer FramebufferBuilder::Build() {
 
 // --- RenderGraphBuilder ---
 
-RenderGraphBuilder::RenderGraphBuilder(Device& device)
-    : device_(&device) {}
+RenderGraphBuilder::RenderGraphBuilder(ref<Device> device)
+    : device_(std::move(device)) {}
 
 PerFrameSlot RenderGraphBuilder::PerFrame() {
     PerFrameSlot slot{};
@@ -399,34 +401,26 @@ Resource RenderGraphBuilder::Transient(TransientDesc desc) {
     return resource;
 }
 
-Resource RenderGraphBuilder::Use(Texture& texture) {
+Resource RenderGraphBuilder::Use(ref<Texture> texture) {
     Resource resource{};
     resource.id_ = AllocateResource(ResourceRecord{
         .kind = ResourceKind::Owned,
-        .owned_texture = &texture,
+        .owned_texture = std::move(texture),
     });
     return resource;
 }
 
 FramebufferBuilder RenderGraphBuilder::Framebuffer() {
     const u32 id = AllocateFramebuffer();
-    return FramebufferBuilder(*this, id);
+    return FramebufferBuilder(blueprint_, id);
 }
 
 PassBuilder RenderGraphBuilder::AddPass(const std::string_view debug_name) {
     const u32 id = AllocatePass(debug_name);
-    return PassBuilder(*this, id);
+    return PassBuilder(blueprint_, id);
 }
 
-void RenderGraphBuilder::SetPassData(const std::string_view pass_name, void* user_data) {
-    const auto it = blueprint_.pass_name_to_index.find(std::string(pass_name));
-    if (it == blueprint_.pass_name_to_index.end()) {
-        return;
-    }
-    blueprint_.passes[it->second].user_data = user_data;
-}
-
-Result<scope<RenderGraph>> RenderGraphBuilder::Compile(const u32 width, const u32 height) {
+Result<ref<RenderGraph>> RenderGraphBuilder::Compile(const u32 width, const u32 height) {
     if (device_ == nullptr) {
         return Err(ErrorCode::GraphicsInitFailed, "RenderGraphBuilder has no device");
     }
@@ -434,66 +428,52 @@ Result<scope<RenderGraph>> RenderGraphBuilder::Compile(const u32 width, const u3
         return Err(ErrorCode::ValidationOutOfRange, "RenderGraph compile requires non-zero size");
     }
 
-    for (const PassRecord& pass : blueprint_.passes) {
+    for (const PassRecord& pass : blueprint_->passes) {
         if (pass.kind == PassKind::Copy || !pass.copies.empty()) {
             if (pass.copies.empty()) {
-                return Err(
-                    ErrorCode::ValidationInvalidState,
-                    "RenderGraph copy pass '" + pass.debug_name + "' has no Copy operations");
+                return Err(ErrorCode::ValidationInvalidState, "RenderGraph copy pass '" + pass.debug_name + "' has no Copy operations");
             }
             if (!pass.copy_execute) {
-                return Err(
-                    ErrorCode::ValidationInvalidState,
-                    "RenderGraph copy pass '" + pass.debug_name + "' has no Execute callback");
+                return Err(ErrorCode::ValidationInvalidState, "RenderGraph copy pass '" + pass.debug_name + "' has no Execute callback");
             }
             continue;
         }
 
         if (!pass.render_execute) {
-            return Err(
-                ErrorCode::ValidationInvalidState,
-                "RenderGraph pass '" + pass.debug_name + "' has no Execute callback");
+            return Err(ErrorCode::ValidationInvalidState, "RenderGraph pass '" + pass.debug_name + "' has no Execute callback");
         }
     }
 
-    return RenderGraph::Create(*device_, std::move(blueprint_), width, height);
+    return RenderGraph::Create(device_, std::move(*blueprint_), width, height);
 }
 
 u32 RenderGraphBuilder::AllocateResource(ResourceRecord record) {
-    const u32 id = static_cast<u32>(blueprint_.resources.size());
-    blueprint_.resources.push_back(std::move(record));
+    const u32 id = static_cast<u32>(blueprint_->resources.size());
+    blueprint_->resources.push_back(std::move(record));
     return id;
 }
 
 u32 RenderGraphBuilder::AllocateFramebuffer() {
-    const u32 id = static_cast<u32>(blueprint_.framebuffers.size());
-    blueprint_.framebuffers.emplace_back();
+    const u32 id = static_cast<u32>(blueprint_->framebuffers.size());
+    blueprint_->framebuffers.emplace_back();
     return id;
 }
 
 u32 RenderGraphBuilder::AllocatePass(const std::string_view debug_name) {
-    const u32 id = static_cast<u32>(blueprint_.passes.size());
-    blueprint_.passes.push_back(PassRecord{.debug_name = std::string(debug_name)});
-    blueprint_.pass_name_to_index.emplace(blueprint_.passes.back().debug_name, id);
+    const u32 id = static_cast<u32>(blueprint_->passes.size());
+    blueprint_->passes.push_back(PassRecord{.debug_name = std::string(debug_name)});
+    blueprint_->pass_name_to_index.emplace(blueprint_->passes.back().debug_name, id);
     return id;
 }
 
 // --- RenderGraph ---
 
-Result<scope<RenderGraph>> RenderGraph::Create(
-    Device& device,
-    GraphBlueprint blueprint,
-    const u32 width,
-    const u32 height) {
-    return Ok(scope<RenderGraph>(new RenderGraph(device, std::move(blueprint), width, height)));
+Result<ref<RenderGraph>> RenderGraph::Create(ref<Device> device, GraphBlueprint blueprint, const u32 width, const u32 height) {
+    return Ok(createRef<RenderGraph>(ConstructionKey{}, std::move(device), std::move(blueprint), width, height));
 }
 
-RenderGraph::RenderGraph(
-    Device& device,
-    GraphBlueprint blueprint,
-    const u32 width,
-    const u32 height)
-    : device_(&device),
+RenderGraph::RenderGraph(ConstructionKey, ref<Device> device, GraphBlueprint blueprint, const u32 width, const u32 height)
+    : device_(std::move(device)),
       blueprint_(std::move(blueprint)),
       width_(width),
       height_(height) {
@@ -544,8 +524,7 @@ void RenderGraph::ReleaseTransientPool() {
     }
 }
 
-Result<void> RenderGraph::AcquireTransientResource(
-    RuntimeResource& runtime, const u32 width, const u32 height) {
+Result<void> RenderGraph::AcquireTransientResource(RuntimeResource& runtime, const u32 width, const u32 height) {
     const ResourceRecord& record = runtime.blueprint;
     const TransientPoolKey key = MakePoolKey(record.transient, width, height);
 
@@ -599,15 +578,15 @@ Texture* RenderGraph::ResolveTexture(const u32 resource_id) {
 
     RuntimeResource& runtime = runtime_resources_[resource_id];
     switch (runtime.blueprint.kind) {
-    case ResourceKind::Transient:
-        if (runtime.pool_index < transient_pool_.size()) {
-            return transient_pool_[runtime.pool_index].texture.get();
-        }
-        return runtime.texture.get();
-    case ResourceKind::Owned:
-        return runtime.blueprint.owned_texture;
-    case ResourceKind::PerFrame:
-        return nullptr;
+        case ResourceKind::Transient:
+            if (runtime.pool_index < transient_pool_.size()) {
+                return transient_pool_[runtime.pool_index].texture.get();
+            }
+            return runtime.texture.get();
+        case ResourceKind::Owned:
+            return runtime.blueprint.owned_texture.get();
+        case ResourceKind::PerFrame:
+            return nullptr;
     }
     return nullptr;
 }
@@ -619,15 +598,15 @@ TextureView* RenderGraph::ResolveView(const u32 resource_id) {
 
     RuntimeResource& runtime = runtime_resources_[resource_id];
     switch (runtime.blueprint.kind) {
-    case ResourceKind::Transient:
-        if (runtime.pool_index < transient_pool_.size()) {
-            return transient_pool_[runtime.pool_index].view.get();
-        }
-        return runtime.view.get();
-    case ResourceKind::PerFrame:
-        return runtime.per_frame_view;
-    case ResourceKind::Owned:
-        return runtime.view.get() != nullptr ? runtime.view.get() : runtime.per_frame_view;
+        case ResourceKind::Transient:
+            if (runtime.pool_index < transient_pool_.size()) {
+                return transient_pool_[runtime.pool_index].view.get();
+            }
+            return runtime.view.get();
+        case ResourceKind::PerFrame:
+            return nullptr;
+        case ResourceKind::Owned:
+            return runtime.view.get();
     }
     return nullptr;
 }
@@ -645,12 +624,7 @@ TextureView* RenderGraph::ResolveSampleView(const u32 resource_id, const SampleM
     return ResolveView(resource_id);
 }
 
-Result<void> RenderGraph::ExecuteRenderPass(
-    const u32 pass_index,
-    CommandEncoder& encoder,
-    const u32 width,
-    const u32 height,
-    const std::unordered_map<u32, TextureView*>& per_frame_views) {
+Result<void> RenderGraph::ExecuteRenderPass(const u32 pass_index, CommandEncoder& encoder, const u32 width, const u32 height, const std::unordered_map<u32, ref<TextureView>>& per_frame_views) {
     const PassRecord& pass = blueprint_.passes[pass_index];
 
     std::vector<RenderPassColorAttachmentDesc> color_attachments{};
@@ -661,9 +635,9 @@ Result<void> RenderGraph::ExecuteRenderPass(
             RuntimeResource& runtime = runtime_resources_[resource_id];
             if (runtime.blueprint.kind == ResourceKind::PerFrame) {
                 if (const auto it = per_frame_views.find(resource_id); it != per_frame_views.end()) {
-                    return it->second;
+                    return it->second.get();
                 }
-                return runtime.per_frame_view;
+                return nullptr;
             }
         }
         return ResolveView(resource_id);
@@ -684,10 +658,7 @@ Result<void> RenderGraph::ExecuteRenderPass(
         for (const auto& [slot, resource_id] : framebuffer.colors) {
             TextureView* view = resolve(resource_id);
             if (view == nullptr) {
-                return Err(
-                    ErrorCode::GraphicsResourceCreationFailed,
-                    "RenderGraph pass '" + pass.debug_name + "' missing color view for slot "
-                        + std::to_string(slot));
+                return Err(ErrorCode::GraphicsResourceCreationFailed, "RenderGraph pass '" + pass.debug_name + "' missing color view for slot " + std::to_string(slot));
             }
 
             Color clear_value{0.f, 0.f, 0.f, 1.f};
@@ -706,9 +677,7 @@ Result<void> RenderGraph::ExecuteRenderPass(
         if (framebuffer.depth_resource_id != kInvalidGraphResource) {
             TextureView* depth_view = resolve(framebuffer.depth_resource_id);
             if (depth_view == nullptr) {
-                return Err(
-                    ErrorCode::GraphicsResourceCreationFailed,
-                    "RenderGraph pass '" + pass.debug_name + "' missing depth view");
+                return Err(ErrorCode::GraphicsResourceCreationFailed, "RenderGraph pass '" + pass.debug_name + "' missing depth view");
             }
 
             depth_attachment = RenderPassDepthStencilAttachmentDesc{
@@ -733,9 +702,7 @@ Result<void> RenderGraph::ExecuteRenderPass(
     for (const ColorOutput& color : pass.colors) {
         TextureView* view = resolve(color.resource_id);
         if (view == nullptr) {
-            return Err(
-                ErrorCode::GraphicsResourceCreationFailed,
-                "RenderGraph pass '" + pass.debug_name + "' missing color attachment view");
+            return Err(ErrorCode::GraphicsResourceCreationFailed, "RenderGraph pass '" + pass.debug_name + "' missing color attachment view");
         }
 
         color_attachments[color.slot] = RenderPassColorAttachmentDesc{
@@ -749,9 +716,7 @@ Result<void> RenderGraph::ExecuteRenderPass(
     if (pass.depth.has_value()) {
         TextureView* depth_view = resolve(pass.depth->resource_id);
         if (depth_view == nullptr) {
-            return Err(
-                ErrorCode::GraphicsResourceCreationFailed,
-                "RenderGraph pass '" + pass.debug_name + "' missing depth attachment view");
+            return Err(ErrorCode::GraphicsResourceCreationFailed, "RenderGraph pass '" + pass.debug_name + "' missing depth attachment view");
         }
 
         depth_attachment = RenderPassDepthStencilAttachmentDesc{
@@ -764,16 +729,13 @@ Result<void> RenderGraph::ExecuteRenderPass(
     }
 
     if (color_attachments.empty() && !depth_attachment.has_value()) {
-        return Err(
-            ErrorCode::ValidationInvalidState,
-            "RenderGraph pass '" + pass.debug_name + "' has no render targets");
+        return Err(ErrorCode::ValidationInvalidState, "RenderGraph pass '" + pass.debug_name + "' has no render targets");
     }
 
     RenderPassDescTyped pass_desc{};
     pass_desc.label = pass.debug_name;
     pass_desc.color_attachments = color_attachments;
-    pass_desc.depth_stencil_attachment =
-        depth_attachment.has_value() ? &*depth_attachment : nullptr;
+    pass_desc.depth_stencil_attachment = depth_attachment.has_value() ? &*depth_attachment : nullptr;
 
     auto pass_encoder = encoder.BeginRenderPass(pass_desc);
     if (!pass_encoder) {
@@ -797,9 +759,7 @@ Result<void> RenderGraph::ExecuteRenderPass(
     for (const SampleInput& sample : pass.samples) {
         TextureView* view = ResolveSampleView(sample.resource_id, sample.mode);
         if (view == nullptr) {
-            return Err(
-                ErrorCode::GraphicsResourceCreationFailed,
-                "RenderGraph pass '" + pass.debug_name + "' missing sample view");
+            return Err(ErrorCode::GraphicsResourceCreationFailed, "RenderGraph pass '" + pass.debug_name + "' missing sample view");
         }
         context.samples_.push_back(view);
     }
@@ -809,11 +769,7 @@ Result<void> RenderGraph::ExecuteRenderPass(
     return Ok();
 }
 
-Result<void> RenderGraph::ExecuteCopyPass(
-    const u32 pass_index,
-    CommandEncoder& encoder,
-    const u32 width,
-    const u32 height) {
+Result<void> RenderGraph::ExecuteCopyPass(const u32 pass_index, CommandEncoder& encoder, const u32 width, const u32 height) {
     const PassRecord& pass = blueprint_.passes[pass_index];
 
     CopyPassContext context{};
@@ -829,9 +785,7 @@ Result<void> RenderGraph::ExecuteCopyPass(
         Texture* source = ResolveTexture(copy.src_resource_id);
         Texture* destination = ResolveTexture(copy.dst_resource_id);
         if (source == nullptr || destination == nullptr) {
-            return Err(
-                ErrorCode::GraphicsResourceCreationFailed,
-                "RenderGraph copy pass '" + pass.debug_name + "' missing texture");
+            return Err(ErrorCode::GraphicsResourceCreationFailed, "RenderGraph copy pass '" + pass.debug_name + "' missing texture");
         }
         context.sources_.push_back(source);
         context.destinations_.push_back(destination);
@@ -841,13 +795,13 @@ Result<void> RenderGraph::ExecuteCopyPass(
     return Ok();
 }
 
-RenderGraphFrame RenderGraph::BeginFrame(Device& device, const u32 width, const u32 height) {
+RenderGraphFrame RenderGraph::BeginFrame(const u32 width, const u32 height) {
     if (width != width_ || height != height_) {
         (void)RebuildForResize(width, height);
     }
 
-    RenderGraphFrame frame(*this, device, width, height);
-    auto encoder = device.CreateCommandEncoder({ .label = "RenderGraphFrame" });
+    RenderGraphFrame frame(shared_from_this(), width, height);
+    auto encoder = device_->CreateCommandEncoder({.label = "RenderGraphFrame"});
     if (encoder) {
         frame.encoder_ = std::move(*encoder);
     }
@@ -856,25 +810,23 @@ RenderGraphFrame RenderGraph::BeginFrame(Device& device, const u32 width, const 
 
 // --- RenderGraphFrame ---
 
-RenderGraphFrame::RenderGraphFrame(
-    RenderGraph& graph, Device& device, const u32 width, const u32 height)
-    : graph_(&graph), device_(&device), width_(width), height_(height) {}
+RenderGraphFrame::RenderGraphFrame(ref<RenderGraph> graph, const u32 width, const u32 height)
+    : graph_(std::move(graph)),
+      width_(width),
+      height_(height) {}
 
 RenderGraphFrame::~RenderGraphFrame() = default;
 
-void RenderGraphFrame::Bind(const PerFrameSlot slot, TextureView* view) {
+void RenderGraphFrame::Bind(const PerFrameSlot slot, ref<TextureView> view) {
     if (!slot || graph_ == nullptr) {
         return;
     }
 
-    per_frame_views_[slot.id_] = view;
-    if (slot.id_ < graph_->runtime_resources_.size()) {
-        graph_->runtime_resources_[slot.id_].per_frame_view = view;
-    }
+    per_frame_views_[slot.id_] = std::move(view);
 }
 
 Result<void> RenderGraphFrame::Execute() {
-    if (graph_ == nullptr || device_ == nullptr || !encoder_) {
+    if (graph_ == nullptr || graph_->device_ == nullptr || !encoder_) {
         return Err(ErrorCode::InvalidState, "RenderGraphFrame is invalid");
     }
 
@@ -882,28 +834,22 @@ Result<void> RenderGraphFrame::Execute() {
         const PassRecord& pass = graph_->blueprint_.passes[pass_index];
         Result<void> result = Ok();
         if (pass.kind == PassKind::Copy || !pass.copies.empty()) {
-            result = graph_->ExecuteCopyPass(
-                static_cast<u32>(pass_index), *encoder_, width_, height_);
+            result = graph_->ExecuteCopyPass(static_cast<u32>(pass_index), *encoder_, width_, height_);
         } else {
-            result = graph_->ExecuteRenderPass(
-                static_cast<u32>(pass_index),
-                *encoder_,
-                width_,
-                height_,
-                per_frame_views_);
+            result = graph_->ExecuteRenderPass(static_cast<u32>(pass_index), *encoder_, width_, height_, per_frame_views_);
         }
         if (!result) {
             return result;
         }
     }
 
-    auto command_buffer = encoder_->Finish({ .label = "RenderGraphSubmit" });
+    auto command_buffer = encoder_->Finish({.label = "RenderGraphSubmit"});
     if (!command_buffer) {
         return Err(command_buffer.error());
     }
 
     CommandBuffer* buffers[] = {command_buffer->get()};
-    return device_->GetQueue().Submit(buffers);
+    return graph_->device_->GetQueue().Submit(buffers);
 }
 
 } // namespace woki::rhi

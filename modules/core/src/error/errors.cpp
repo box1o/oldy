@@ -1,5 +1,4 @@
 #include "woki/error/errors.hpp"
-
 #include "woki/logger/logger.hpp"
 
 namespace woki {
@@ -104,10 +103,7 @@ const char* ToString(ErrorCode code) noexcept {
     return "UnknownError";
 }
 
-Error::Error(
-    ErrorCode code,
-    std::string_view message,
-    std::source_location location)
+Error::Error(ErrorCode code, std::string_view message, std::source_location location)
     : code_(code),
       message_(message),
       location_(location) {}
@@ -148,13 +144,7 @@ const std::source_location& Error::Location() const noexcept {
 
 void Error::Log() const {
     const std::string_view message = message_.empty() ? DefaultMessage(code_) : message_;
-    slog::Error(
-        "{}:{} [{}:{}] {}",
-        location_.file_name(),
-        location_.line(),
-        ToString(Type()),
-        ToString(code_),
-        message);
+    slog::Error("{}:{} [{}:{}] {}", location_.file_name(), location_.line(), ToString(Type()), ToString(code_), message);
 }
 
 } // namespace woki

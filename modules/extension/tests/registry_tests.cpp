@@ -1,10 +1,9 @@
+#include <fstream>
+#include <filesystem>
+#include <string_view>
 #include <catch2/catch_test_macros.hpp>
 
 #include <woki/ext/ext.hpp>
-
-#include <filesystem>
-#include <fstream>
-#include <string_view>
 
 namespace {
 

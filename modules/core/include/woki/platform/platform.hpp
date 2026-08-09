@@ -2,9 +2,9 @@
 
 // IWYU pragma: private, include "woki/core.hpp"
 
-#include "../config/config.hpp"
-
 #include <string>
+
+#include "../config/config.hpp"
 
 namespace woki {
 
@@ -145,10 +145,7 @@ struct PlatformId {
     BuildMode build_mode = BuildConfig::Mode();
 
     [[nodiscard]] std::string ToString() const {
-        return std::string(::woki::ToString(os)) + "-" +
-               ::woki::ToString(architecture) + "-" +
-               ::woki::ToString(compiler) + "-" +
-               ::woki::ToString(build_mode);
+        return std::string(::woki::ToString(os)) + "-" + ::woki::ToString(architecture) + "-" + ::woki::ToString(compiler) + "-" + ::woki::ToString(build_mode);
     }
 };
 
@@ -165,14 +162,11 @@ struct PlatformId {
 }
 
 [[nodiscard]] constexpr bool IsApplePlatform() noexcept {
-    return CurrentOperatingSystem() == OperatingSystem::MacOs ||
-           CurrentOperatingSystem() == OperatingSystem::Ios;
+    return CurrentOperatingSystem() == OperatingSystem::MacOs || CurrentOperatingSystem() == OperatingSystem::Ios;
 }
 
 [[nodiscard]] constexpr bool IsDesktopPlatform() noexcept {
-    return CurrentOperatingSystem() == OperatingSystem::Windows ||
-           CurrentOperatingSystem() == OperatingSystem::MacOs ||
-           CurrentOperatingSystem() == OperatingSystem::Linux;
+    return CurrentOperatingSystem() == OperatingSystem::Windows || CurrentOperatingSystem() == OperatingSystem::MacOs || CurrentOperatingSystem() == OperatingSystem::Linux;
 }
 
 } // namespace woki

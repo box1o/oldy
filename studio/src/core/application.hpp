@@ -4,7 +4,7 @@
 #include <unordered_map>
 
 #include <woki/core.hpp>
-#include <woki/gfx.hpp>
+#include <woki/platform.hpp>
 
 #include "context.hpp"
 #include "layer_stack.hpp"
@@ -51,13 +51,14 @@ private:
     void Stop() noexcept;
     void EmitEvent(events::Event& event);
 
-    template <typename T, typename... Args> void EmitEvent(Args&&... args) {
+    template <typename T, typename... Args>
+    void EmitEvent(Args&&... args) {
         T event(std::forward<Args>(args)...);
         EmitEvent(event);
     }
 
     ApplicationSettings settings_{};
-    scope<Window> window_;
+    ref<Window> window_;
     scope<LayerStack> layers_;
     std::unordered_map<CallbackId, EventCallback> event_callbacks_;
     CallbackId next_callback_id_{1};

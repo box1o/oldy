@@ -1,12 +1,11 @@
+#include <array>
+#include <string>
+#include <fstream>
+#include <filesystem>
+#include <string_view>
 #include <catch2/catch_test_macros.hpp>
 
 #include <woki/ext/ext.hpp>
-
-#include <array>
-#include <filesystem>
-#include <fstream>
-#include <string>
-#include <string_view>
 
 namespace {
 
@@ -25,22 +24,24 @@ public:
         return woki::Ok();
     }
 
-    void Tick(woki::ext::Record&, woki::f64) override { ++ticks; }
+    void Tick(woki::ext::Record&, woki::f64) override {
+        ++ticks;
+    }
 
-    void DispatchEvent(
-        woki::ext::Record&, woki::u32 event_type, std::span<const woki::u8>) override {
+    void DispatchEvent(woki::ext::Record&, woki::u32 event_type, std::span<const woki::u8>) override {
         last_event = event_type;
     }
 
-    [[nodiscard]] woki::Result<void> DispatchCommand(
-        woki::ext::Record&, std::string_view command_id, std::span<const woki::u8> payload) override {
+    [[nodiscard]] woki::Result<void> DispatchCommand(woki::ext::Record&, std::string_view command_id, std::span<const woki::u8> payload) override {
         last_command = command_id;
         last_command_payload_size = payload.size();
         ++commands;
         return woki::Ok();
     }
 
-    void Unload(woki::ext::Record&) override { ++unloads; }
+    void Unload(woki::ext::Record&) override {
+        ++unloads;
+    }
 
     int loads{0};
     int initializes{0};

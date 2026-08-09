@@ -1,15 +1,13 @@
 #pragma once
 
-#include <woki/rhi/descriptors.hpp>
+#include <vector>
+#include <webgpu/webgpu.h>
+
 #include <woki/rhi/types.hpp>
+#include <woki/rhi/descriptors.hpp>
 
 #include "limits.hpp"
 #include "string.hpp"
-
-#include <memory>
-#include <vector>
-
-#include <webgpu/webgpu.h>
 
 namespace woki::rhi::wgpu::detail {
 
@@ -20,16 +18,11 @@ struct DeviceDescriptorStorage final {
     WGPULimits required_limits = WGPU_LIMITS_INIT;
     WGPUQueueDescriptor default_queue = WGPU_QUEUE_DESCRIPTOR_INIT;
     WGPUDeviceDescriptor native_desc = WGPU_DEVICE_DESCRIPTOR_INIT;
-    std::shared_ptr<DeviceLostCallback> device_lost_callback{};
-    std::shared_ptr<UncapturedErrorCallback> uncaptured_error_callback{};
+    ref<DeviceLostCallback> device_lost_callback{};
+    ref<UncapturedErrorCallback> uncaptured_error_callback{};
 };
 
-inline void DeviceLostThunk(
-    WGPUDevice const*,
-    WGPUDeviceLostReason reason,
-    WGPUStringView message,
-    void*,
-    void* userdata) {
+inline void DeviceLostThunk(WGPUDevice const*, WGPUDeviceLostReason reason, WGPUStringView message, void*, void* userdata) {
     const auto* callback = static_cast<DeviceLostCallback*>(userdata);
     if (callback == nullptr || !*callback) {
         return;
@@ -38,12 +31,7 @@ inline void DeviceLostThunk(
     (*callback)(FromWgpu(reason), StringFromView(message));
 }
 
-inline void UncapturedErrorThunk(
-    WGPUDevice const*,
-    WGPUErrorType type,
-    WGPUStringView message,
-    void*,
-    void* userdata) {
+inline void UncapturedErrorThunk(WGPUDevice const*, WGPUErrorType type, WGPUStringView message, void*, void* userdata) {
     const auto* callback = static_cast<UncapturedErrorCallback*>(userdata);
     if (callback == nullptr || !*callback) {
         return;
@@ -62,8 +50,7 @@ inline void UncapturedErrorThunk(
     storage.native_desc = WGPU_DEVICE_DESCRIPTOR_INIT;
     storage.native_desc.label = ToStringView(desc.label);
     storage.native_desc.requiredFeatureCount = storage.required_features.size();
-    storage.native_desc.requiredFeatures =
-        storage.required_features.empty() ? nullptr : storage.required_features.data();
+    storage.native_desc.requiredFeatures = storage.required_features.empty() ? nullptr : storage.required_features.data();
 
     if (desc.required_limits.has_value()) {
         storage.required_limits = ToWgpuLimits(*desc.required_limits);
@@ -75,7 +62,7 @@ inline void UncapturedErrorThunk(
     storage.native_desc.defaultQueue = storage.default_queue;
 
     if (desc.device_lost_callback) {
-        storage.device_lost_callback = std::make_shared<DeviceLostCallback>(desc.device_lost_callback);
+        storage.device_lost_callback = createRef<DeviceLostCallback>(desc.device_lost_callback);
         storage.native_desc.deviceLostCallbackInfo = WGPU_DEVICE_LOST_CALLBACK_INFO_INIT;
         storage.native_desc.deviceLostCallbackInfo.mode = WGPUCallbackMode_AllowSpontaneous;
         storage.native_desc.deviceLostCallbackInfo.callback = DeviceLostThunk;
@@ -83,12 +70,10 @@ inline void UncapturedErrorThunk(
     }
 
     if (desc.uncaptured_error_callback) {
-        storage.uncaptured_error_callback =
-            std::make_shared<UncapturedErrorCallback>(desc.uncaptured_error_callback);
+        storage.uncaptured_error_callback = createRef<UncapturedErrorCallback>(desc.uncaptured_error_callback);
         storage.native_desc.uncapturedErrorCallbackInfo = WGPU_UNCAPTURED_ERROR_CALLBACK_INFO_INIT;
         storage.native_desc.uncapturedErrorCallbackInfo.callback = UncapturedErrorThunk;
-        storage.native_desc.uncapturedErrorCallbackInfo.userdata2 =
-            storage.uncaptured_error_callback.get();
+        storage.native_desc.uncapturedErrorCallbackInfo.userdata2 = storage.uncaptured_error_callback.get();
     }
 
     return storage;

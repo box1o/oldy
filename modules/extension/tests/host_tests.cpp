@@ -1,9 +1,8 @@
+#include <filesystem>
+#include <string_view>
 #include <catch2/catch_test_macros.hpp>
 
 #include <woki/ext/ext.hpp>
-
-#include <filesystem>
-#include <string_view>
 
 namespace {
 
@@ -90,6 +89,5 @@ TEST_CASE("Extension host api appends storage files") {
     auto read = host.ReadFile("events.log");
     REQUIRE(read.has_value());
     REQUIRE(read->size() == 6);
-    REQUIRE(
-        std::string_view(reinterpret_cast<const char*>(read->data()), read->size()) == "onetwo");
+    REQUIRE(std::string_view(reinterpret_cast<const char*>(read->data()), read->size()) == "onetwo");
 }

@@ -1,10 +1,10 @@
+#include <webgpu/webgpu.h>
+
 #include <woki/rhi/instance.hpp>
 
 #include "wgpu/wgpu_enums.hpp"
 #include "wgpu/detail/string.hpp"
 #include "wgpu/wgpu_instance.hpp"
-
-#include <webgpu/webgpu.h>
 
 namespace woki::rhi {
 namespace {

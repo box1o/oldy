@@ -1,18 +1,16 @@
-#include "woki/ext/wasm/wasmtime_engine.hpp"
+#include <tuple>
+#include <vector>
+#include <cstring>
+#include <fstream>
+#include <variant>
+#include <optional>
+#include <algorithm>
+#include <filesystem>
+#include <wasmtime.hh>
+#include <unordered_map>
 
 #include "woki/ext/host/cabi.hpp"
-
-#include <wasmtime.hh>
-
-#include <algorithm>
-#include <cstring>
-#include <filesystem>
-#include <fstream>
-#include <optional>
-#include <tuple>
-#include <unordered_map>
-#include <variant>
-#include <vector>
+#include "woki/ext/wasm/wasmtime_engine.hpp"
 
 namespace woki::ext::wasm {
 
@@ -48,8 +46,7 @@ template <typename T>
         return Err(ErrorCode::FileReadError, "Failed to open wasm module: " + path.string());
     }
 
-    const std::vector<uint8_t> bytes{
-        std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+    const std::vector<uint8_t> bytes{std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
     if (bytes.empty()) {
         return Err(ErrorCode::ParseInvalidFormat, "Wasm module is empty: " + path.string());
     }
@@ -65,8 +62,7 @@ template <typename T>
     return std::nullopt;
 }
 
-[[nodiscard]] Result<std::string_view> GuestBytes(
-    wasmtime::Caller& caller, int32_t offset, int32_t len) {
+[[nodiscard]] Result<std::string_view> GuestBytes(wasmtime::Caller& caller, int32_t offset, int32_t len) {
     if (offset < 0 || len < 0) {
         return Err(ErrorCode::InvalidArgument, "Negative guest pointer or length.");
     }
@@ -107,8 +103,7 @@ template <typename T>
         ++len;
     }
     if (len > kMaxGuestCStringBytes || start + len >= data.size()) {
-        return Err(
-            ErrorCode::ValidationOutOfRange, "Guest string is not null-terminated in bounds.");
+        return Err(ErrorCode::ValidationOutOfRange, "Guest string is not null-terminated in bounds.");
     }
 
     return Ok(std::string_view(reinterpret_cast<const char*>(data.data() + start), len));
@@ -133,8 +128,7 @@ template <typename T>
     return Ok(reinterpret_cast<char*>(data.data() + start));
 }
 
-[[nodiscard]] Result<std::span<u8>> GuestBytesOut(
-    wasmtime::Caller& caller, int32_t offset, u32 len) {
+[[nodiscard]] Result<std::span<u8>> GuestBytesOut(wasmtime::Caller& caller, int32_t offset, u32 len) {
     if (offset < 0) {
         return Err(ErrorCode::InvalidArgument, "Negative guest output pointer.");
     }
@@ -181,16 +175,14 @@ struct InstanceState {
     std::optional<wasmtime::TypedFunc<std::monostate, uint32_t>> ext_api_version;
     std::optional<wasmtime::TypedFunc<std::monostate, int32_t>> ext_init;
     std::optional<wasmtime::TypedFunc<double, std::monostate>> ext_on_tick;
-    std::optional<wasmtime::TypedFunc<std::tuple<uint32_t, uint32_t, uint32_t>, std::monostate>>
-        ext_on_event;
-    std::optional<
-        wasmtime::TypedFunc<std::tuple<uint32_t, uint32_t, uint32_t, uint32_t>, int32_t>>
-        ext_on_command;
+    std::optional<wasmtime::TypedFunc<std::tuple<uint32_t, uint32_t, uint32_t>, std::monostate>> ext_on_event;
+    std::optional<wasmtime::TypedFunc<std::tuple<uint32_t, uint32_t, uint32_t, uint32_t>, int32_t>> ext_on_command;
     std::optional<wasmtime::TypedFunc<std::monostate, std::monostate>> ext_on_unload;
     std::optional<wasmtime::TypedFunc<uint32_t, uint32_t>> ext_alloc;
     std::optional<wasmtime::TypedFunc<std::tuple<uint32_t, uint32_t>, std::monostate>> ext_free;
 
-    explicit InstanceState(wasmtime::Engine& engine) : store(engine) {}
+    explicit InstanceState(wasmtime::Engine& engine)
+        : store(engine) {}
 };
 
 [[nodiscard]] Result<void> RefillFuel(InstanceState& state) {
@@ -218,8 +210,7 @@ struct InstanceState {
     return Ok(*memory);
 }
 
-[[nodiscard]] Result<std::span<u8>> InstanceBytesOut(
-    InstanceState& state, uint32_t offset, uint32_t len) {
+[[nodiscard]] Result<std::span<u8>> InstanceBytesOut(InstanceState& state, uint32_t offset, uint32_t len) {
     auto memory = InstanceMemory(state);
     if (!memory) {
         return Err(memory.error());
@@ -239,12 +230,10 @@ struct InstanceState {
         return Ok(0u);
     }
     if (!state.ext_alloc) {
-        return Err(ErrorCode::InvalidState,
-            "Extension cannot receive host payloads because it does not export ext_alloc.");
+        return Err(ErrorCode::InvalidState, "Extension cannot receive host payloads because it does not export ext_alloc.");
     }
 
-    auto allocated = FromTrapResult(
-        state.ext_alloc->call(state.store, static_cast<uint32_t>(bytes.size())), "ext_alloc trap");
+    auto allocated = FromTrapResult(state.ext_alloc->call(state.store, static_cast<uint32_t>(bytes.size())), "ext_alloc trap");
     if (!allocated) {
         return Err(allocated.error());
     }
@@ -256,8 +245,7 @@ struct InstanceState {
     auto guest = InstanceBytesOut(state, guest_ptr, static_cast<uint32_t>(bytes.size()));
     if (!guest) {
         if (state.ext_free) {
-            (void)state.ext_free->call(
-                state.store, std::make_tuple(guest_ptr, static_cast<uint32_t>(bytes.size())));
+            (void)state.ext_free->call(state.store, std::make_tuple(guest_ptr, static_cast<uint32_t>(bytes.size())));
         }
         return Err(guest.error());
     }
@@ -273,29 +261,24 @@ void FreeGuestBytes(InstanceState& state, uint32_t ptr, uint32_t len) {
 }
 
 template <typename Params, typename Results>
-[[nodiscard]] Result<wasmtime::TypedFunc<Params, Results>> TypedExport(
-    InstanceState& state, std::string_view name) {
+[[nodiscard]] Result<wasmtime::TypedFunc<Params, Results>> TypedExport(InstanceState& state, std::string_view name) {
     if (!state.instance) {
         return Err(ErrorCode::InvalidState, "Wasm instance is not initialized.");
     }
 
     auto exported = state.instance->get(state.store, name);
     if (!exported) {
-        return Err(ErrorCode::FileNotFound,
-            "Extension wasm module is missing export '" + std::string(name) + "'.");
+        return Err(ErrorCode::FileNotFound, "Extension wasm module is missing export '" + std::string(name) + "'.");
     }
 
     const auto* func = std::get_if<wasmtime::Func>(&*exported);
     if (func == nullptr) {
-        return Err(ErrorCode::ValidationInvalidState,
-            "Extension export '" + std::string(name) + "' is not a function.");
+        return Err(ErrorCode::ValidationInvalidState, "Extension export '" + std::string(name) + "' is not a function.");
     }
 
     auto typed = func->typed<Params, Results>(state.store);
     if (!typed) {
-        return Err(ErrorCode::ValidationInvalidState, "Extension export signature mismatch for '" +
-                                                          std::string(name) +
-                                                          "': " + typed.err().message());
+        return Err(ErrorCode::ValidationInvalidState, "Extension export signature mismatch for '" + std::string(name) + "': " + typed.err().message());
     }
     return Ok(typed.ok());
 }
@@ -305,18 +288,15 @@ template <typename Params, typename Results>
 
     if (HasPermission(record.manifest, Permission::Log)) {
         if (auto defined = linker.func_wrap(kImportModule, "host_log",
-                [record_ptr](
-                    wasmtime::Caller caller, int32_t level, int32_t ptr, int32_t len) -> int32_t {
+                [record_ptr](wasmtime::Caller caller, int32_t level, int32_t ptr, int32_t len) -> int32_t {
                     auto bytes = GuestBytes(caller, ptr, len);
                     if (!bytes) {
                         return host::cabi::kInvalid;
                     }
-                    return host::cabi::Log(*record_ptr, static_cast<u32>(level), bytes->data(),
-                        static_cast<u32>(bytes->size()));
+                    return host::cabi::Log(*record_ptr, static_cast<u32>(level), bytes->data(), static_cast<u32>(bytes->size()));
                 });
             !defined) {
-            return Err(ErrorCode::InvalidState,
-                "Failed to define host import woki_host::host_log: " + defined.err().message());
+            return Err(ErrorCode::InvalidState, "Failed to define host import woki_host::host_log: " + defined.err().message());
         }
     }
 
@@ -330,9 +310,7 @@ template <typename Params, typename Results>
                     return host::cabi::PathData(*record_ptr, *out, static_cast<u32>(out_cap));
                 });
             !defined) {
-            return Err(ErrorCode::InvalidState,
-                "Failed to define host import woki_host::host_path_data: " +
-                    defined.err().message());
+            return Err(ErrorCode::InvalidState, "Failed to define host import woki_host::host_path_data: " + defined.err().message());
         }
 
         if (auto defined = linker.func_wrap(kImportModule, "host_path_cache",
@@ -344,16 +322,13 @@ template <typename Params, typename Results>
                     return host::cabi::PathCache(*record_ptr, *out, static_cast<u32>(out_cap));
                 });
             !defined) {
-            return Err(ErrorCode::InvalidState,
-                "Failed to define host import woki_host::host_path_cache: " +
-                    defined.err().message());
+            return Err(ErrorCode::InvalidState, "Failed to define host import woki_host::host_path_cache: " + defined.err().message());
         }
     }
 
     if (HasPermission(record.manifest, Permission::Storage)) {
         if (auto defined = linker.func_wrap(kImportModule, "host_file_read",
-                [record_ptr](wasmtime::Caller caller, int32_t path_ptr, int32_t out_ptr,
-                    int32_t inout_len_ptr) -> int32_t {
+                [record_ptr](wasmtime::Caller caller, int32_t path_ptr, int32_t out_ptr, int32_t inout_len_ptr) -> int32_t {
                     auto path = GuestCString(caller, path_ptr);
                     if (!path) {
                         return host::cabi::kInvalid;
@@ -368,8 +343,7 @@ template <typename Params, typename Results>
                     }
 
                     u32 inout_len = *capacity;
-                    const i32 status = host::cabi::FileRead(*record_ptr, path->data(),
-                        static_cast<u32>(path->size()), out->data(), &inout_len);
+                    const i32 status = host::cabi::FileRead(*record_ptr, path->data(), static_cast<u32>(path->size()), out->data(), &inout_len);
                     auto wrote_len = WriteGuestU32(caller, inout_len_ptr, inout_len);
                     if (!wrote_len) {
                         return host::cabi::kInvalid;
@@ -377,14 +351,11 @@ template <typename Params, typename Results>
                     return status;
                 });
             !defined) {
-            return Err(ErrorCode::InvalidState,
-                "Failed to define host import woki_host::host_file_read: " +
-                    defined.err().message());
+            return Err(ErrorCode::InvalidState, "Failed to define host import woki_host::host_file_read: " + defined.err().message());
         }
 
         if (auto defined = linker.func_wrap(kImportModule, "host_file_read_n",
-                [record_ptr](wasmtime::Caller caller, int32_t path_ptr, int32_t path_len,
-                    int32_t out_ptr, int32_t inout_len_ptr) -> int32_t {
+                [record_ptr](wasmtime::Caller caller, int32_t path_ptr, int32_t path_len, int32_t out_ptr, int32_t inout_len_ptr) -> int32_t {
                     auto path = GuestBytes(caller, path_ptr, path_len);
                     if (!path) {
                         return host::cabi::kInvalid;
@@ -399,8 +370,7 @@ template <typename Params, typename Results>
                     }
 
                     u32 inout_len = *capacity;
-                    const i32 status = host::cabi::FileRead(*record_ptr, path->data(),
-                        static_cast<u32>(path->size()), out->data(), &inout_len);
+                    const i32 status = host::cabi::FileRead(*record_ptr, path->data(), static_cast<u32>(path->size()), out->data(), &inout_len);
                     auto wrote_len = WriteGuestU32(caller, inout_len_ptr, inout_len);
                     if (!wrote_len) {
                         return host::cabi::kInvalid;
@@ -408,14 +378,11 @@ template <typename Params, typename Results>
                     return status;
                 });
             !defined) {
-            return Err(ErrorCode::InvalidState,
-                "Failed to define host import woki_host::host_file_read_n: " +
-                    defined.err().message());
+            return Err(ErrorCode::InvalidState, "Failed to define host import woki_host::host_file_read_n: " + defined.err().message());
         }
 
         if (auto defined = linker.func_wrap(kImportModule, "host_file_write_n",
-                [record_ptr](wasmtime::Caller caller, int32_t path_ptr, int32_t path_len,
-                    int32_t data_ptr, int32_t data_len) -> int32_t {
+                [record_ptr](wasmtime::Caller caller, int32_t path_ptr, int32_t path_len, int32_t data_ptr, int32_t data_len) -> int32_t {
                     auto path = GuestBytes(caller, path_ptr, path_len);
                     if (!path) {
                         return host::cabi::kInvalid;
@@ -424,19 +391,14 @@ template <typename Params, typename Results>
                     if (!bytes) {
                         return host::cabi::kInvalid;
                     }
-                    return host::cabi::FileWrite(*record_ptr, path->data(),
-                        static_cast<u32>(path->size()), reinterpret_cast<const u8*>(bytes->data()),
-                        static_cast<u32>(bytes->size()));
+                    return host::cabi::FileWrite(*record_ptr, path->data(), static_cast<u32>(path->size()), reinterpret_cast<const u8*>(bytes->data()), static_cast<u32>(bytes->size()));
                 });
             !defined) {
-            return Err(ErrorCode::InvalidState,
-                "Failed to define host import woki_host::host_file_write_n: " +
-                    defined.err().message());
+            return Err(ErrorCode::InvalidState, "Failed to define host import woki_host::host_file_write_n: " + defined.err().message());
         }
 
         if (auto defined = linker.func_wrap(kImportModule, "host_file_append_n",
-                [record_ptr](wasmtime::Caller caller, int32_t path_ptr, int32_t path_len,
-                    int32_t data_ptr, int32_t data_len) -> int32_t {
+                [record_ptr](wasmtime::Caller caller, int32_t path_ptr, int32_t path_len, int32_t data_ptr, int32_t data_len) -> int32_t {
                     auto path = GuestBytes(caller, path_ptr, path_len);
                     if (!path) {
                         return host::cabi::kInvalid;
@@ -445,19 +407,14 @@ template <typename Params, typename Results>
                     if (!bytes) {
                         return host::cabi::kInvalid;
                     }
-                    return host::cabi::FileAppend(*record_ptr, path->data(),
-                        static_cast<u32>(path->size()), reinterpret_cast<const u8*>(bytes->data()),
-                        static_cast<u32>(bytes->size()));
+                    return host::cabi::FileAppend(*record_ptr, path->data(), static_cast<u32>(path->size()), reinterpret_cast<const u8*>(bytes->data()), static_cast<u32>(bytes->size()));
                 });
             !defined) {
-            return Err(ErrorCode::InvalidState,
-                "Failed to define host import woki_host::host_file_append_n: " +
-                    defined.err().message());
+            return Err(ErrorCode::InvalidState, "Failed to define host import woki_host::host_file_append_n: " + defined.err().message());
         }
 
         if (auto defined = linker.func_wrap(kImportModule, "host_file_write",
-                [record_ptr](wasmtime::Caller caller, int32_t path_ptr, int32_t data_ptr,
-                    int32_t data_len) -> int32_t {
+                [record_ptr](wasmtime::Caller caller, int32_t path_ptr, int32_t data_ptr, int32_t data_len) -> int32_t {
                     auto path = GuestCString(caller, path_ptr);
                     if (!path) {
                         return host::cabi::kInvalid;
@@ -466,19 +423,14 @@ template <typename Params, typename Results>
                     if (!bytes) {
                         return host::cabi::kInvalid;
                     }
-                    return host::cabi::FileWrite(*record_ptr, path->data(),
-                        static_cast<u32>(path->size()), reinterpret_cast<const u8*>(bytes->data()),
-                        static_cast<u32>(bytes->size()));
+                    return host::cabi::FileWrite(*record_ptr, path->data(), static_cast<u32>(path->size()), reinterpret_cast<const u8*>(bytes->data()), static_cast<u32>(bytes->size()));
                 });
             !defined) {
-            return Err(ErrorCode::InvalidState,
-                "Failed to define host import woki_host::host_file_write: " +
-                    defined.err().message());
+            return Err(ErrorCode::InvalidState, "Failed to define host import woki_host::host_file_write: " + defined.err().message());
         }
 
         if (auto defined = linker.func_wrap(kImportModule, "host_file_append",
-                [record_ptr](wasmtime::Caller caller, int32_t path_ptr, int32_t data_ptr,
-                    int32_t data_len) -> int32_t {
+                [record_ptr](wasmtime::Caller caller, int32_t path_ptr, int32_t data_ptr, int32_t data_len) -> int32_t {
                     auto path = GuestCString(caller, path_ptr);
                     if (!path) {
                         return host::cabi::kInvalid;
@@ -487,21 +439,16 @@ template <typename Params, typename Results>
                     if (!bytes) {
                         return host::cabi::kInvalid;
                     }
-                    return host::cabi::FileAppend(*record_ptr, path->data(),
-                        static_cast<u32>(path->size()), reinterpret_cast<const u8*>(bytes->data()),
-                        static_cast<u32>(bytes->size()));
+                    return host::cabi::FileAppend(*record_ptr, path->data(), static_cast<u32>(path->size()), reinterpret_cast<const u8*>(bytes->data()), static_cast<u32>(bytes->size()));
                 });
             !defined) {
-            return Err(ErrorCode::InvalidState,
-                "Failed to define host import woki_host::host_file_append: " +
-                    defined.err().message());
+            return Err(ErrorCode::InvalidState, "Failed to define host import woki_host::host_file_append: " + defined.err().message());
         }
     }
 
     if (HasPermission(record.manifest, Permission::Config)) {
         if (auto defined = linker.func_wrap(kImportModule, "host_config_get",
-                [record_ptr](wasmtime::Caller caller, int32_t key_ptr, int32_t out_ptr,
-                    int32_t out_cap) -> int32_t {
+                [record_ptr](wasmtime::Caller caller, int32_t key_ptr, int32_t out_ptr, int32_t out_cap) -> int32_t {
                     auto key = GuestCString(caller, key_ptr);
                     if (!key) {
                         return host::cabi::kInvalid;
@@ -511,18 +458,14 @@ template <typename Params, typename Results>
                         return host::cabi::kInvalid;
                     }
                     std::string key_text(*key);
-                    return host::cabi::ConfigGet(
-                        *record_ptr, key_text.c_str(), *out, static_cast<u32>(out_cap));
+                    return host::cabi::ConfigGet(*record_ptr, key_text.c_str(), *out, static_cast<u32>(out_cap));
                 });
             !defined) {
-            return Err(ErrorCode::InvalidState,
-                "Failed to define host import woki_host::host_config_get: " +
-                    defined.err().message());
+            return Err(ErrorCode::InvalidState, "Failed to define host import woki_host::host_config_get: " + defined.err().message());
         }
 
         if (auto defined = linker.func_wrap(kImportModule, "host_config_set",
-                [record_ptr](wasmtime::Caller caller, int32_t key_ptr, int32_t value_ptr,
-                    int32_t value_len) -> int32_t {
+                [record_ptr](wasmtime::Caller caller, int32_t key_ptr, int32_t value_ptr, int32_t value_len) -> int32_t {
                     auto key = GuestCString(caller, key_ptr);
                     if (!key) {
                         return host::cabi::kInvalid;
@@ -532,42 +475,30 @@ template <typename Params, typename Results>
                         return host::cabi::kInvalid;
                     }
                     std::string key_text(*key);
-                    return host::cabi::ConfigSet(*record_ptr, key_text.c_str(), value->data(),
-                        static_cast<u32>(value->size()));
+                    return host::cabi::ConfigSet(*record_ptr, key_text.c_str(), value->data(), static_cast<u32>(value->size()));
                 });
             !defined) {
-            return Err(ErrorCode::InvalidState,
-                "Failed to define host import woki_host::host_config_set: " +
-                    defined.err().message());
+            return Err(ErrorCode::InvalidState, "Failed to define host import woki_host::host_config_set: " + defined.err().message());
         }
     }
 
     if (HasPermission(record.manifest, Permission::Events)) {
-        if (auto defined = linker.func_wrap(kImportModule, "host_event_subscribe",
-                [](int32_t /*event_type*/) -> int32_t { return host::cabi::kOk; });
-            !defined) {
-            return Err(ErrorCode::InvalidState,
-                "Failed to define host import woki_host::host_event_subscribe: " +
-                    defined.err().message());
+        if (auto defined = linker.func_wrap(kImportModule, "host_event_subscribe", [](int32_t /*event_type*/) -> int32_t { return host::cabi::kOk; }); !defined) {
+            return Err(ErrorCode::InvalidState, "Failed to define host import woki_host::host_event_subscribe: " + defined.err().message());
         }
 
         if (auto defined = linker.func_wrap(kImportModule, "host_event_emit",
-                [record_ptr](wasmtime::Caller caller, int32_t event_type, int32_t payload_ptr,
-                    int32_t payload_len) -> int32_t {
+                [record_ptr](wasmtime::Caller caller, int32_t event_type, int32_t payload_ptr, int32_t payload_len) -> int32_t {
                     auto payload = GuestBytes(caller, payload_ptr, payload_len);
                     if (!payload) {
                         return host::cabi::kInvalid;
                     }
                     host::HostApi host(*record_ptr);
-                    host.Log(host::LogLevel::Debug,
-                        "extension emitted event type " + std::to_string(event_type) +
-                            " payload bytes " + std::to_string(payload->size()));
+                    host.Log(host::LogLevel::Debug, "extension emitted event type " + std::to_string(event_type) + " payload bytes " + std::to_string(payload->size()));
                     return host::cabi::kOk;
                 });
             !defined) {
-            return Err(ErrorCode::InvalidState,
-                "Failed to define host import woki_host::host_event_emit: " +
-                    defined.err().message());
+            return Err(ErrorCode::InvalidState, "Failed to define host import woki_host::host_event_emit: " + defined.err().message());
         }
     }
 
@@ -590,14 +521,14 @@ struct WasmtimeEngine::Impl {
           }()) {}
 };
 
-WasmtimeEngine::WasmtimeEngine() : impl_(std::make_unique<Impl>()) {}
+WasmtimeEngine::WasmtimeEngine()
+    : impl_(std::make_unique<Impl>()) {}
 
 WasmtimeEngine::~WasmtimeEngine() = default;
 
 Result<void> WasmtimeEngine::Load(Record& record, host::HostApi& /*host*/) {
     if (impl_->instances.contains(record.id)) {
-        return Err(ErrorCode::ValidationInvalidState,
-            "Extension '" + record.id + "' is already loaded in the Wasmtime engine.");
+        return Err(ErrorCode::ValidationInvalidState, "Extension '" + record.id + "' is already loaded in the Wasmtime engine.");
     }
 
     auto bytes = ReadWasmBytes(record.package.wasm);
@@ -605,9 +536,7 @@ Result<void> WasmtimeEngine::Load(Record& record, host::HostApi& /*host*/) {
         return Err(bytes.error());
     }
 
-    auto module = FromWasmtimeResult(wasmtime::Module::compile(impl_->engine,
-                                         wasmtime::Span<uint8_t>{bytes->data(), bytes->size()}),
-        "Failed to compile extension wasm module");
+    auto module = FromWasmtimeResult(wasmtime::Module::compile(impl_->engine, wasmtime::Span<uint8_t>{bytes->data(), bytes->size()}), "Failed to compile extension wasm module");
     if (!module) {
         return Err(module.error());
     }
@@ -623,13 +552,12 @@ Result<void> WasmtimeEngine::Load(Record& record, host::HostApi& /*host*/) {
         return Err(imports.error());
     }
 
-    auto instance = FromTrapResult(
-        linker.instantiate(state->store, *module), "Failed to instantiate extension module");
+    auto instance = FromTrapResult(linker.instantiate(state->store, *module), "Failed to instantiate extension module");
     if (!instance) {
         return Err(instance.error());
     }
 
-    state->instance = std::move(*instance);
+    state->instance = *instance;
 
     auto api_version = TypedExport<std::monostate, uint32_t>(*state, "ext_api_version");
     if (!api_version) {
@@ -643,8 +571,7 @@ Result<void> WasmtimeEngine::Load(Record& record, host::HostApi& /*host*/) {
     if (!tick) {
         return Err(tick.error());
     }
-    auto event = TypedExport<std::tuple<uint32_t, uint32_t, uint32_t>, std::monostate>(
-        *state, "ext_on_event");
+    auto event = TypedExport<std::tuple<uint32_t, uint32_t, uint32_t>, std::monostate>(*state, "ext_on_event");
     if (!event) {
         return Err(event.error());
     }
@@ -658,29 +585,28 @@ Result<void> WasmtimeEngine::Load(Record& record, host::HostApi& /*host*/) {
         if (!alloc) {
             return Err(alloc.error());
         }
-        state->ext_alloc = std::move(*alloc);
+        state->ext_alloc = *alloc;
     }
     if (state->instance->get(state->store, "ext_free")) {
         auto free = TypedExport<std::tuple<uint32_t, uint32_t>, std::monostate>(*state, "ext_free");
         if (!free) {
             return Err(free.error());
         }
-        state->ext_free = std::move(*free);
+        state->ext_free = *free;
     }
     if (state->instance->get(state->store, "ext_on_command")) {
-        auto command = TypedExport<std::tuple<uint32_t, uint32_t, uint32_t, uint32_t>, int32_t>(
-            *state, "ext_on_command");
+        auto command = TypedExport<std::tuple<uint32_t, uint32_t, uint32_t, uint32_t>, int32_t>(*state, "ext_on_command");
         if (!command) {
             return Err(command.error());
         }
-        state->ext_on_command = std::move(*command);
+        state->ext_on_command = *command;
     }
 
-    state->ext_api_version = std::move(*api_version);
-    state->ext_init = std::move(*init);
-    state->ext_on_tick = std::move(*tick);
-    state->ext_on_event = std::move(*event);
-    state->ext_on_unload = std::move(*unload);
+    state->ext_api_version = *api_version;
+    state->ext_init = *init;
+    state->ext_on_tick = *tick;
+    state->ext_on_event = *event;
+    state->ext_on_unload = *unload;
 
     impl_->instances.emplace(record.id, std::move(state));
     return Ok();
@@ -691,8 +617,7 @@ Result<u32> WasmtimeEngine::ApiVersion(Record& record) {
     if (auto fueled = RefillFuel(*state); !fueled) {
         return Err(fueled.error());
     }
-    auto version = FromTrapResult(
-        state->ext_api_version->call(state->store, std::monostate{}), "ext_api_version trap");
+    auto version = FromTrapResult(state->ext_api_version->call(state->store, std::monostate{}), "ext_api_version trap");
     if (!version) {
         return Err(version.error());
     }
@@ -712,8 +637,7 @@ Result<void> WasmtimeEngine::Tick(Record& record, f64 delta_ms) {
     if (auto fueled = RefillFuel(*state); !fueled) {
         return Err(fueled.error());
     }
-    auto ticked =
-        FromTrapResult(state->ext_on_tick->call(state->store, delta_ms), "ext_on_tick trap");
+    auto ticked = FromTrapResult(state->ext_on_tick->call(state->store, delta_ms), "ext_on_tick trap");
     if (!ticked) {
         return Err(ticked.error());
     }
@@ -733,9 +657,7 @@ Result<void> WasmtimeEngine::Event(Record& record, u32 event_type, std::span<con
     }
     const uint32_t payload_ptr = *allocated_payload;
 
-    auto dispatched = FromTrapResult(state->ext_on_event->call(state->store,
-                                         std::make_tuple(event_type, payload_ptr, payload_len)),
-        "ext_on_event trap");
+    auto dispatched = FromTrapResult(state->ext_on_event->call(state->store, std::make_tuple(event_type, payload_ptr, payload_len)), "ext_on_event trap");
 
     FreeGuestBytes(*state, payload_ptr, payload_len);
     if (!dispatched) {
@@ -744,21 +666,16 @@ Result<void> WasmtimeEngine::Event(Record& record, u32 event_type, std::span<con
     return Ok();
 }
 
-Result<i32> WasmtimeEngine::Command(
-    Record& record, std::string_view command_id, std::span<const u8> payload) {
+Result<i32> WasmtimeEngine::Command(Record& record, std::string_view command_id, std::span<const u8> payload) {
     auto* state = impl_->instances.at(record.id).get();
     if (!state->ext_on_command) {
-        return Err(ErrorCode::InvalidState,
-            "Extension '" + record.id +
-                "' declares commands but does not export ext_on_command.");
+        return Err(ErrorCode::InvalidState, "Extension '" + record.id + "' declares commands but does not export ext_on_command.");
     }
     if (auto fueled = RefillFuel(*state); !fueled) {
         return Err(fueled.error());
     }
 
-    auto command_ptr = AllocateGuestBytes(
-        *state, std::span<const u8>(reinterpret_cast<const u8*>(command_id.data()),
-                    command_id.size()));
+    auto command_ptr = AllocateGuestBytes(*state, std::span<const u8>(reinterpret_cast<const u8*>(command_id.data()), command_id.size()));
     if (!command_ptr) {
         return Err(command_ptr.error());
     }
@@ -771,10 +688,7 @@ Result<i32> WasmtimeEngine::Command(
         return Err(payload_ptr.error());
     }
 
-    auto dispatched = FromTrapResult(state->ext_on_command->call(state->store,
-                                         std::make_tuple(
-                                             *command_ptr, command_len, *payload_ptr, payload_len)),
-        "ext_on_command trap");
+    auto dispatched = FromTrapResult(state->ext_on_command->call(state->store, std::make_tuple(*command_ptr, command_len, *payload_ptr, payload_len)), "ext_on_command trap");
 
     FreeGuestBytes(*state, *payload_ptr, payload_len);
     FreeGuestBytes(*state, *command_ptr, command_len);
@@ -784,7 +698,9 @@ Result<i32> WasmtimeEngine::Command(
     return Ok(*dispatched);
 }
 
-void WasmtimeEngine::Discard(Record& record) { impl_->instances.erase(record.id); }
+void WasmtimeEngine::Discard(Record& record) {
+    impl_->instances.erase(record.id);
+}
 
 void WasmtimeEngine::Unload(Record& record) {
     const auto it = impl_->instances.find(record.id);
@@ -794,8 +710,7 @@ void WasmtimeEngine::Unload(Record& record) {
 
     auto* state = it->second.get();
     (void)RefillFuel(*state);
-    (void)FromTrapResult(
-        state->ext_on_unload->call(state->store, std::monostate{}), "ext_on_unload trap");
+    (void)FromTrapResult(state->ext_on_unload->call(state->store, std::monostate{}), "ext_on_unload trap");
     impl_->instances.erase(it);
 }
 

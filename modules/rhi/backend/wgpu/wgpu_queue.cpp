@@ -1,12 +1,10 @@
-#include "wgpu_queue.hpp"
-
-#include "detail/copy_convert.hpp"
-#include "detail/string.hpp"
-#include "wgpu_device.hpp"
-#include "wgpu_enums.hpp"
-
-#include <woki/rhi/command_buffer.hpp>
 #include <woki/rhi/objects.hpp>
+#include <woki/rhi/command_buffer.hpp>
+
+#include "wgpu_enums.hpp"
+#include "wgpu_queue.hpp"
+#include "detail/string.hpp"
+#include "detail/copy_convert.hpp"
 
 namespace woki::rhi::wgpu {
 namespace {
@@ -18,12 +16,8 @@ struct QueueWorkDoneCallbackState {
     QueueWorkDoneCallback callback;
 };
 
-void QueueWorkDoneThunk(WGPUQueueWorkDoneStatus status,
-    WGPUStringView message,
-    void* userdata1,
-    void*) {
-    auto state = scope<QueueWorkDoneCallbackState>(
-        static_cast<QueueWorkDoneCallbackState*>(userdata1));
+void QueueWorkDoneThunk(WGPUQueueWorkDoneStatus status, WGPUStringView message, void* userdata1, void*) {
+    auto state = scope<QueueWorkDoneCallbackState>(static_cast<QueueWorkDoneCallbackState*>(userdata1));
     if (state == nullptr || !state->callback) {
         return;
     }
@@ -36,11 +30,7 @@ void QueueWorkDoneThunk(WGPUQueueWorkDoneStatus status,
 WgpuQueueImpl::WgpuQueueImpl(WGPUQueue queue) noexcept
     : queue_(queue) {}
 
-Result<void> WgpuQueueImpl::CopyExternalTextureForBrowser(
-    const ImageCopyExternalTexture& source,
-    const TexelCopyTextureInfo& destination,
-    const Extent3D& copy_size,
-    const CopyTextureForBrowserOptions& options) const {
+Result<void> WgpuQueueImpl::CopyExternalTextureForBrowser(const ImageCopyExternalTexture& source, const TexelCopyTextureInfo& destination, const Extent3D& copy_size, const CopyTextureForBrowserOptions& options) const {
     if (!queue_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Queue is invalid");
     }
@@ -50,16 +40,11 @@ Result<void> WgpuQueueImpl::CopyExternalTextureForBrowser(
     const auto native_size = detail::copy::ToWgpu(copy_size);
     const auto native_options = detail::copy::ToWgpu(options);
 
-    wgpuQueueCopyExternalTextureForBrowser(
-        queue_.get(), &native_source, &native_destination, &native_size, &native_options);
+    wgpuQueueCopyExternalTextureForBrowser(queue_.get(), &native_source, &native_destination, &native_size, &native_options);
     return Ok();
 }
 
-Result<void> WgpuQueueImpl::CopyTextureForBrowser(
-    const TexelCopyTextureInfo& source,
-    const TexelCopyTextureInfo& destination,
-    const Extent3D& copy_size,
-    const CopyTextureForBrowserOptions& options) const {
+Result<void> WgpuQueueImpl::CopyTextureForBrowser(const TexelCopyTextureInfo& source, const TexelCopyTextureInfo& destination, const Extent3D& copy_size, const CopyTextureForBrowserOptions& options) const {
     if (!queue_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Queue is invalid");
     }
@@ -69,14 +54,11 @@ Result<void> WgpuQueueImpl::CopyTextureForBrowser(
     const auto native_size = detail::copy::ToWgpu(copy_size);
     const auto native_options = detail::copy::ToWgpu(options);
 
-    wgpuQueueCopyTextureForBrowser(
-        queue_.get(), &native_source, &native_destination, &native_size, &native_options);
+    wgpuQueueCopyTextureForBrowser(queue_.get(), &native_source, &native_destination, &native_size, &native_options);
     return Ok();
 }
 
-Future WgpuQueueImpl::OnSubmittedWorkDone(
-    CallbackMode callback_mode,
-    QueueWorkDoneCallback callback) const {
+Future WgpuQueueImpl::OnSubmittedWorkDone(CallbackMode callback_mode, QueueWorkDoneCallback callback) const {
     Future future{};
     if (!queue_) {
         future.message = "Queue is invalid";
@@ -88,15 +70,20 @@ Future WgpuQueueImpl::OnSubmittedWorkDone(
         return future;
     }
 
-    auto* callback_state = new QueueWorkDoneCallbackState{.callback = std::move(callback)};
+    auto callback_state = createScope<QueueWorkDoneCallbackState>(QueueWorkDoneCallbackState{.callback = std::move(callback)});
 
     WGPUQueueWorkDoneCallbackInfo callback_info = WGPU_QUEUE_WORK_DONE_CALLBACK_INFO_INIT;
     callback_info.mode = ToWgpu(callback_mode);
     callback_info.callback = QueueWorkDoneThunk;
-    callback_info.userdata1 = callback_state;
+    callback_info.userdata1 = callback_state.get();
 
+    auto* transferred_state = callback_state.release();
     const WGPUFuture native_future = wgpuQueueOnSubmittedWorkDone(queue_.get(), callback_info);
     future.id = native_future.id;
+    if (future.id == 0) {
+        callback_state.reset(transferred_state);
+        future.message = "Queue completion request failed to start";
+    }
     return future;
 }
 
@@ -131,11 +118,7 @@ Result<void> WgpuQueueImpl::Submit(std::span<CommandBuffer* const> commands) con
     return Ok();
 }
 
-Result<void> WgpuQueueImpl::WriteBuffer(
-    const Buffer& buffer,
-    const u64 buffer_offset,
-    const void* data,
-    const u64 size) const {
+Result<void> WgpuQueueImpl::WriteBuffer(const Buffer& buffer, const u64 buffer_offset, const void* data, const u64 size) const {
     if (!queue_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Queue is invalid");
     }
@@ -154,12 +137,7 @@ Result<void> WgpuQueueImpl::WriteBuffer(
     return Ok();
 }
 
-Result<void> WgpuQueueImpl::WriteTexture(
-    const TexelCopyTextureInfo& destination,
-    const void* data,
-    const u64 data_size,
-    const TexelCopyBufferLayout& data_layout,
-    const Extent3D& write_size) const {
+Result<void> WgpuQueueImpl::WriteTexture(const TexelCopyTextureInfo& destination, const void* data, const u64 data_size, const TexelCopyBufferLayout& data_layout, const Extent3D& write_size) const {
     if (!queue_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Queue is invalid");
     }
@@ -172,8 +150,7 @@ Result<void> WgpuQueueImpl::WriteTexture(
     const auto native_layout = detail::copy::ToWgpu(data_layout);
     const auto native_size = detail::copy::ToWgpu(write_size);
 
-    wgpuQueueWriteTexture(
-        queue_.get(), &native_destination, data, data_size, &native_layout, &native_size);
+    wgpuQueueWriteTexture(queue_.get(), &native_destination, data, data_size, &native_layout, &native_size);
     return Ok();
 }
 

@@ -2,10 +2,10 @@
 
 // IWYU pragma: private, include "woki/ext/ext.hpp"
 
-#include "../manifest.hpp"
-
-#include <filesystem>
 #include <string>
+#include <filesystem>
+
+#include "../manifest.hpp"
 
 namespace woki::ext::wasm {
 
@@ -23,7 +23,6 @@ struct GuestModuleInfo {
 
 [[nodiscard]] Result<void> ValidateWasmMagic(const std::filesystem::path& wasm_path);
 [[nodiscard]] Result<GuestModuleInfo> InspectGuestModule(const std::filesystem::path& wasm_path);
-[[nodiscard]] Result<void> ValidateGuestModule(
-    const std::filesystem::path& wasm_path, const Manifest& manifest);
+[[nodiscard]] Result<void> ValidateGuestModule(const std::filesystem::path& wasm_path, const Manifest& manifest);
 
 } // namespace woki::ext::wasm

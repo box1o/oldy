@@ -1,19 +1,18 @@
 #pragma once
 
-#include <woki/rhi/descriptors.hpp>
-#include <woki/rhi/objects.hpp>
-
-#include "bind_group_descriptor.hpp"
-#include "external_texture_descriptor.hpp"
-#include "copy_convert.hpp"
-#include "native_helpers.hpp"
-#include "string.hpp"
-
 #include <span>
 #include <string>
 #include <vector>
-
 #include <webgpu/webgpu.h>
+
+#include <woki/rhi/objects.hpp>
+#include <woki/rhi/descriptors.hpp>
+
+#include "string.hpp"
+#include "copy_convert.hpp"
+#include "native_helpers.hpp"
+#include "bind_group_descriptor.hpp"
+#include "external_texture_descriptor.hpp"
 
 namespace woki::rhi::wgpu::detail {
 
@@ -134,8 +133,7 @@ struct PipelineLayoutDescriptorStorage final {
         native.nextInChain = static_cast<WGPUChainedStruct*>(desc.next_in_chain);
         native.label = ToStringView(desc.label);
         native.bindGroupLayoutCount = bind_group_layouts.size();
-        native.bindGroupLayouts =
-            bind_group_layouts.empty() ? nullptr : bind_group_layouts.data();
+        native.bindGroupLayouts = bind_group_layouts.empty() ? nullptr : bind_group_layouts.data();
         native.immediateSize = desc.immediate_size;
     }
 };

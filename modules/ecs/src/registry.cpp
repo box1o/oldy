@@ -1,1 +1,1 @@
-#include <woki/ecs.hpp>
+#include <woki/ecs/registry.hpp>

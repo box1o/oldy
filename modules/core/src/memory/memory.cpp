@@ -1,10 +1,11 @@
-#include "../../include/woki/memory/memory.hpp"
-
-#include <algorithm>
+#include <new>
+#include <limits>
+#include <ranges>
 #include <cassert>
 #include <cstdint>
-#include <limits>
-#include <new>
+#include <algorithm>
+
+#include "../../include/woki/memory/memory.hpp"
 
 namespace woki::detail {
 
@@ -34,12 +35,7 @@ bool BumpResource::is_power_of_two(std::size_t value) noexcept {
     return value != 0 && (value & (value - 1)) == 0;
 }
 
-bool BumpResource::next_allocation(
-    std::size_t bytes,
-    std::size_t alignment,
-    std::size_t& aligned_offset,
-    std::size_t& next_offset
-) const noexcept {
+bool BumpResource::next_allocation(std::size_t bytes, std::size_t alignment, std::size_t& aligned_offset, std::size_t& next_offset) const noexcept {
     if (begin_ == nullptr || offset_ > size_ || !is_power_of_two(alignment)) {
         return false;
     }
@@ -98,17 +94,11 @@ Arena::~Arena() {
 }
 
 void* Arena::allocate_bytes(u64 bytes, u64 alignment) {
-    if (
-        bytes > std::numeric_limits<std::size_t>::max()
-        || alignment > std::numeric_limits<std::size_t>::max()
-    ) {
+    if (bytes > std::numeric_limits<std::size_t>::max() || alignment > std::numeric_limits<std::size_t>::max()) {
         throw std::bad_alloc{};
     }
 
-    return resource_.allocate(
-        static_cast<std::size_t>(bytes),
-        static_cast<std::size_t>(alignment)
-    );
+    return resource_.allocate(static_cast<std::size_t>(bytes), static_cast<std::size_t>(alignment));
 }
 
 std::pmr::memory_resource* Arena::resource() {
@@ -176,22 +166,16 @@ const void* Arena::current() const {
 }
 
 bool Arena::can_fit(u64 bytes, u64 alignment) const {
-    if (
-        bytes > std::numeric_limits<std::size_t>::max()
-        || alignment > std::numeric_limits<std::size_t>::max()
-    ) {
+    if (bytes > std::numeric_limits<std::size_t>::max() || alignment > std::numeric_limits<std::size_t>::max()) {
         return false;
     }
 
-    return resource_.can_fit(
-        static_cast<std::size_t>(bytes),
-        static_cast<std::size_t>(alignment)
-    );
+    return resource_.can_fit(static_cast<std::size_t>(bytes), static_cast<std::size_t>(alignment));
 }
 
 void Arena::clear() {
-    for (auto it = destructors_.rbegin(); it != destructors_.rend(); ++it) {
-        it->destroy(it->ptr);
+    for (auto& destructor : std::views::reverse(destructors_)) {
+        destructor.destroy(destructor.ptr);
     }
 
     destructors_.clear();

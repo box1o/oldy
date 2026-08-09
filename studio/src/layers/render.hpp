@@ -1,9 +1,9 @@
 #pragma once
 
+#include <woki/platform.hpp>
+
 #include "core/layer.hpp"
 #include "renderer/rhi_renderer.hpp"
-
-#include <woki/gfx.hpp>
 
 namespace woki {
 

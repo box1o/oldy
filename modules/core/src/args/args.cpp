@@ -6,10 +6,7 @@ ArgumentParser::ArgumentParser(std::string program, std::string description)
     : options_(std::move(program), std::move(description)) {}
 
 void ArgumentParser::AddFlag(std::string option, std::string description) {
-    options_.add_options()(
-        std::move(option),
-        std::move(description),
-        cxxopts::value<bool>()->default_value("false")->implicit_value("true"));
+    options_.add_options()(option, description, cxxopts::value<bool>()->default_value("false")->implicit_value("true"));
 }
 
 void ArgumentParser::AddPositional(std::string option) {

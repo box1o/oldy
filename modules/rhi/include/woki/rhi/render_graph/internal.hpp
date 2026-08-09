@@ -1,15 +1,16 @@
 #pragma once
 
-#include "context.hpp"
-#include "resources.hpp"
+#include <string>
+#include <vector>
+#include <utility>
+#include <optional>
+#include <unordered_map>
 
 #include <woki/core.hpp>
 #include <woki/rhi/forward.hpp>
-#include <optional>
-#include <string>
-#include <unordered_map>
-#include <utility>
-#include <vector>
+
+#include "context.hpp"
+#include "resources.hpp"
 
 namespace woki::rhi::render_graph::detail {
 
@@ -22,7 +23,7 @@ enum class ResourceKind : u8 {
 struct ResourceRecord final {
     ResourceKind kind{ResourceKind::Transient};
     TransientDesc transient{};
-    Texture* owned_texture{nullptr};
+    ref<Texture> owned_texture{};
 };
 
 struct FramebufferRecord final {
@@ -67,7 +68,7 @@ struct PassRecord final {
     std::vector<CopyOperation> copies{};
     std::function<void(RenderPassContext&)> render_execute{};
     std::function<void(CopyPassContext&)> copy_execute{};
-    void* user_data{nullptr};
+    ref<void> user_data{};
 };
 
 struct TransientPoolKey final {

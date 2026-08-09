@@ -1,11 +1,12 @@
 #pragma once
 
-#include "../detail/arithmetic.hpp"
 #include <cstddef>
 
+#include "../detail/arithmetic.hpp"
+
 namespace woki::math {
-template<std::size_t N, arithmetic T>
-requires (N >= 2)
+template <std::size_t N, arithmetic T>
+requires(N >= 2)
 class vec;
 
 } // namespace woki::math

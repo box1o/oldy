@@ -2,10 +2,10 @@
 
 // IWYU pragma: private, include "woki/core.hpp"
 
+#include <string_view>
+
 #include "../hash/hash.hpp"
 #include "../types/types.hpp"
-
-#include <string_view>
 
 namespace woki {
 

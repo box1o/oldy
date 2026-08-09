@@ -1,14 +1,13 @@
 #pragma once
 
+#include <vector>
+#include <webgpu/webgpu.h>
+
 #include <woki/rhi/descriptors.hpp>
 
+#include "string.hpp"
 #include "../wgpu_enums.hpp"
 #include "native_helpers.hpp"
-#include "string.hpp"
-
-#include <vector>
-
-#include <webgpu/webgpu.h>
 
 namespace woki::rhi::wgpu::detail {
 
@@ -39,8 +38,7 @@ using convert::ToWgpu;
     return native;
 }
 
-[[nodiscard]] inline WGPUStorageTextureBindingLayout ToWgpu(
-    const StorageTextureBindingLayoutDesc& desc) noexcept {
+[[nodiscard]] inline WGPUStorageTextureBindingLayout ToWgpu(const StorageTextureBindingLayoutDesc& desc) noexcept {
     WGPUStorageTextureBindingLayout native = WGPU_STORAGE_TEXTURE_BINDING_LAYOUT_INIT;
     native.nextInChain = static_cast<WGPUChainedStruct*>(desc.next_in_chain);
     native.access = ToWgpu(desc.access);

@@ -1,8 +1,7 @@
+#include <thread>
 #include <catch2/catch_test_macros.hpp>
 
 #include <woki/core.hpp>
-
-#include <thread>
 
 TEST_CASE("Clock time conversions are monotonic enough") {
     const auto start = woki::Clock::Now();
