@@ -17,7 +17,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "CMake configuration failed with exit code $LASTEXITCODE"
 }
 
-cmake --build build --target woki_tests woki_extensions studio -j 4
+cmake --build build --target woki_tests woki_extensions wokiext studio -j 4
 if ($LASTEXITCODE -ne 0) {
     throw "Build failed with exit code $LASTEXITCODE"
 }
