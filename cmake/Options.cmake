@@ -15,6 +15,7 @@ endif()
 
 function(apply_compiler_options target)
     if(MSVC)
+        target_compile_definitions(${target} PRIVATE NOMINMAX)
         target_compile_options(${target} PRIVATE
             /W4
             /permissive-
