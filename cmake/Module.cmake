@@ -58,24 +58,15 @@ function(add_module_test name)
     target_compile_features(${name} PRIVATE cxx_std_23)
     apply_compiler_options(${name})
 
+    if(MSVC)
+        target_compile_definitions(${name} PRIVATE _CRT_SECURE_NO_WARNINGS)
+    endif()
+
     if(ARG_LIBRARIES)
         target_link_libraries(${name}
             PRIVATE
                 ${ARG_LIBRARIES}
         )
-    endif()
-
-    if(DEFINED ENV{WOKI_WASM_CLANG})
-        target_compile_definitions(${name} PRIVATE
-            WOKI_TEST_WASM_CLANG="$ENV{WOKI_WASM_CLANG}")
-    endif()
-    if(DEFINED ENV{WOKI_WASM_LD})
-        target_compile_definitions(${name} PRIVATE
-            WOKI_TEST_WASM_LD="$ENV{WOKI_WASM_LD}")
-    endif()
-    if(DEFINED ENV{WOKI_LLVM_PREFIX})
-        target_compile_definitions(${name} PRIVATE
-            WOKI_TEST_LLVM_PREFIX="$ENV{WOKI_LLVM_PREFIX}")
     endif()
 
     add_test(NAME ${name} COMMAND ${name})
