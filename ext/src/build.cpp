@@ -5,8 +5,10 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <optional>
 #include <filesystem>
 #include <string_view>
+#include <system_error>
 
 #include "wokiext/cli.hpp"
 
@@ -23,6 +25,25 @@ namespace wokiext {
 
 namespace {
 
+[[nodiscard]] std::optional<std::string> Environment(const char* name) {
+#ifdef _WIN32
+    char* value = nullptr;
+    std::size_t size = 0;
+    if (_dupenv_s(&value, &size, name) != 0 || value == nullptr) {
+        return std::nullopt;
+    }
+    std::string result(value);
+    std::free(value);
+    return result;
+#else
+    const char* value = std::getenv(name);
+    if (value == nullptr) {
+        return std::nullopt;
+    }
+    return std::string(value);
+#endif
+}
+
 [[nodiscard]] bool RunProcess(std::vector<std::string> arguments) {
     std::vector<char*> argv;
     argv.reserve(arguments.size() + 1);
@@ -34,7 +55,7 @@ namespace {
 #ifdef _WIN32
     const intptr_t status = _spawnvp(_P_WAIT, argv.front(), argv.data());
     if (status == -1) {
-        std::cerr << "Failed to start " << arguments.front() << ": " << std::strerror(errno) << '\n';
+        std::cerr << "Failed to start " << arguments.front() << ": " << std::error_code(errno, std::generic_category()).message() << '\n';
         return false;
     }
     if (status != 0) {
@@ -83,8 +104,8 @@ namespace {
         return std::filesystem::absolute(executable).lexically_normal();
     }
 
-    const char* path_environment = std::getenv("PATH");
-    if (path_environment == nullptr) {
+    const auto path_environment = Environment("PATH");
+    if (!path_environment) {
         return {};
     }
 #ifdef _WIN32
@@ -92,7 +113,7 @@ namespace {
 #else
     constexpr char kPathSeparator = ':';
 #endif
-    std::string_view paths{path_environment};
+    std::string_view paths{*path_environment};
     while (!paths.empty()) {
         const std::size_t separator = paths.find(kPathSeparator);
         const std::filesystem::path candidate = std::filesystem::path(paths.substr(0, separator)) / executable;
@@ -108,8 +129,8 @@ namespace {
 }
 
 [[nodiscard]] std::filesystem::path CMakeModuleDir(const std::filesystem::path& executable) {
-    if (const char* configured = std::getenv("WOKI_CMAKE_DIR"); configured != nullptr) {
-        const std::filesystem::path candidate{configured};
+    if (const auto configured = Environment("WOKI_CMAKE_DIR")) {
+        const std::filesystem::path candidate{*configured};
         if (std::filesystem::is_regular_file(candidate / "ExtensionProject.cmake") && std::filesystem::is_regular_file(candidate / "ExtensionWasm.cmake")) {
             return std::filesystem::absolute(candidate).lexically_normal();
         }
@@ -131,8 +152,8 @@ namespace {
 }
 
 [[nodiscard]] std::filesystem::path SdkDir(const std::filesystem::path& executable) {
-    if (const char* configured = std::getenv("WOKI_SDK_DIR"); configured != nullptr) {
-        const std::filesystem::path candidate{configured};
+    if (const auto configured = Environment("WOKI_SDK_DIR")) {
+        const std::filesystem::path candidate{*configured};
         if (std::filesystem::is_regular_file(candidate / "ext.h")) {
             return std::filesystem::absolute(candidate).lexically_normal();
         }

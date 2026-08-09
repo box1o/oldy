@@ -72,8 +72,8 @@ concept ArenaCreatable = requires(woki::Arena& arena) { arena.create<T>(); };
 static_assert(!ArenaCreatable<ThrowingDestructor>);
 
 struct ReentrantDestructor {
-    explicit ReentrantDestructor(woki::Arena& arena)
-        : arena(&arena) {}
+    explicit ReentrantDestructor(woki::Arena& owner)
+        : arena(&owner) {}
 
     ~ReentrantDestructor() {
         arena->clear();
