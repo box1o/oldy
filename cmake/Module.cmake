@@ -69,7 +69,7 @@ function(add_module_test name)
         )
     endif()
 
-    include(Catch)
+    include("${catch2_SOURCE_DIR}/extras/Catch.cmake")
     catch_discover_tests(${name} EXTRA_ARGS --durations yes)
 
     if(TARGET woki_tests)
