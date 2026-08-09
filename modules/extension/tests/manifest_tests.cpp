@@ -225,12 +225,12 @@ permissions:
     REQUIRE(manifest.error().Message().contains("duplicate permission"));
 }
 
-TEST_CASE("Extension manifest rejects non-portable runtime paths") {
+TEST_CASE("Extension manifest rejects runtime paths with dot components") {
     auto manifest = woki::ext::Manifest{
         .id = "woki.hello",
         .name = "Hello",
         .version = "0.1.0",
-        .wasm_path = "nested\\extension.wasm",
+        .wasm_path = "nested/./extension.wasm",
         .permissions = {},
         .commands = {},
     };

@@ -68,4 +68,9 @@ if(BUILD_TESTING)
             -D TEST_ROOT=${CMAKE_CURRENT_BINARY_DIR}/cli-test
             -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli_tests.cmake
     )
+    if(WIN32 AND EXISTS "${CDEPS_ROOT}/wasmtime-c-api/lib/wasmtime.dll")
+        set_tests_properties(wokiext_cli PROPERTIES
+            ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${CDEPS_ROOT}/wasmtime-c-api/lib"
+        )
+    endif()
 endif()

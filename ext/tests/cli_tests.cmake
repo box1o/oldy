@@ -12,9 +12,11 @@ foreach(language IN ITEMS c cpp)
         COMMAND "${WOKIEXT}" create "${project_name}" --lang "${language}" --out "../projects"
         WORKING_DIRECTORY "${TEST_ROOT}/working"
         RESULT_VARIABLE create_result
+        OUTPUT_VARIABLE create_output
+        ERROR_VARIABLE create_error
     )
     if(NOT create_result EQUAL 0)
-        message(FATAL_ERROR "wokiext create failed for ${language}")
+        message(FATAL_ERROR "wokiext create failed for ${language} (${create_result})\n${create_output}${create_error}")
     endif()
 
     file(READ "${project_dir}/CMakeLists.txt" project_contents)
@@ -27,9 +29,11 @@ foreach(language IN ITEMS c cpp)
         COMMAND "${WOKIEXT}" build "../projects/test-${language}-extension"
         WORKING_DIRECTORY "${TEST_ROOT}/working"
         RESULT_VARIABLE build_result
+        OUTPUT_VARIABLE build_output
+        ERROR_VARIABLE build_error
     )
     if(NOT build_result EQUAL 0 OR NOT EXISTS "${project_dir}/extension.wasm")
-        message(FATAL_ERROR "wokiext build failed for generated ${language} project")
+        message(FATAL_ERROR "wokiext build failed for generated ${language} project (${build_result})\n${build_output}${build_error}")
     endif()
 endforeach()
 
