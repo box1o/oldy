@@ -1,10 +1,9 @@
+#include <vector>
+#include <algorithm>
+#include <stdexcept>
 #include <catch2/catch_test_macros.hpp>
 
 #include <woki/ecs.hpp>
-
-#include <algorithm>
-#include <tuple>
-#include <vector>
 
 namespace {
 
@@ -13,10 +12,14 @@ struct Position {
     float y = 0.0f;
 
     constexpr Position() noexcept = default;
+
     explicit constexpr Position(float value) noexcept
-        : x(value), y(value) {}
+        : x(value),
+          y(value) {}
+
     constexpr Position(float x_value, float y_value) noexcept
-        : x(x_value), y(y_value) {}
+        : x(x_value),
+          y(y_value) {}
 };
 
 struct Velocity {
@@ -24,8 +27,30 @@ struct Velocity {
     float y = 0.0f;
 
     constexpr Velocity() noexcept = default;
+
     constexpr Velocity(float x_value, float y_value) noexcept
-        : x(x_value), y(y_value) {}
+        : x(x_value),
+          y(y_value) {}
+};
+
+struct StableComponent {
+    int value{0};
+
+    explicit StableComponent(int initial_value)
+        : value(initial_value) {}
+
+    StableComponent(const StableComponent&) = delete;
+    StableComponent& operator=(const StableComponent&) = delete;
+    StableComponent(StableComponent&&) = delete;
+    StableComponent& operator=(StableComponent&&) = delete;
+};
+
+struct ThrowingComponent {
+    explicit ThrowingComponent(bool should_throw) {
+        if (should_throw) {
+            throw std::runtime_error("construction failed");
+        }
+    }
 };
 
 } // namespace
@@ -139,9 +164,7 @@ TEST_CASE("Registry iterates dense live entities") {
     REQUIRE(registry.Destroy(b));
 
     std::vector<woki::Entity> entities;
-    registry.EachEntity([&](woki::Entity entity) {
-        entities.push_back(entity);
-    });
+    registry.EachEntity([&](woki::Entity entity) { entities.push_back(entity); });
 
     REQUIRE(entities.size() == 2);
     REQUIRE(std::find(entities.begin(), entities.end(), a) != entities.end());
@@ -165,4 +188,57 @@ TEST_CASE("Registry can query all_of any_of and clear typed storage") {
     REQUIRE_FALSE(registry.Has<Velocity>(entity));
     REQUIRE(registry.AllOf<Position>(entity));
     REQUIRE_FALSE(registry.AllOf<Position, Velocity>(entity));
+}
+
+TEST_CASE("Clearing a registry permanently invalidates existing handles") {
+    woki::Registry registry;
+    const woki::Entity old_entity = registry.Create();
+
+    registry.Clear();
+
+    REQUIRE_FALSE(registry.Valid(old_entity));
+    REQUIRE(registry.Empty());
+
+    const woki::Entity new_entity = registry.Create();
+    REQUIRE(new_entity.Index() == old_entity.Index());
+    REQUIRE(new_entity.Generation() != old_entity.Generation());
+}
+
+TEST_CASE("Component storage supports immovable components and stable references") {
+    woki::Registry registry;
+    const woki::Entity first = registry.Create();
+    StableComponent& stable = registry.Emplace<StableComponent>(first, 42);
+
+    for (int value = 0; value < 256; ++value) {
+        const woki::Entity entity = registry.Create();
+        registry.Emplace<StableComponent>(entity, value);
+    }
+
+    REQUIRE(&registry.Get<StableComponent>(first) == &stable);
+    REQUIRE(stable.value == 42);
+    REQUIRE(registry.Remove<StableComponent>(first));
+}
+
+TEST_CASE("Failed component construction leaves storage unchanged") {
+    woki::Registry registry;
+    const woki::Entity entity = registry.Create();
+
+    REQUIRE_THROWS_AS(registry.Emplace<ThrowingComponent>(entity, true), std::runtime_error);
+    REQUIRE_FALSE(registry.Has<ThrowingComponent>(entity));
+    REQUIRE(registry.Count<ThrowingComponent>() == 0);
+}
+
+TEST_CASE("Views remain valid when registry storage changes") {
+    woki::Registry registry;
+    const woki::Entity first = registry.Create();
+    registry.Emplace<Position>(first, 1.0f, 2.0f);
+
+    const auto view = registry.View<Position>();
+
+    const woki::Entity second = registry.Create();
+    registry.Emplace<Position>(second, 3.0f, 4.0f);
+    REQUIRE(registry.Destroy(first));
+
+    REQUIRE(view.Empty());
+    REQUIRE(registry.View<Position>().Size() == 1);
 }

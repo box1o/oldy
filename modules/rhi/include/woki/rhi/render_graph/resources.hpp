@@ -1,11 +1,11 @@
 #pragma once
 
+#include <string>
+#include <vector>
+#include <string_view>
+
 #include <woki/enums.hpp>
 #include <woki/rhi/descriptors.hpp>
-
-#include <string>
-#include <string_view>
-#include <vector>
 
 namespace woki::rhi {
 
@@ -77,7 +77,9 @@ class Resource final {
 public:
     Resource() = default;
 
-    [[nodiscard]] explicit operator bool() const noexcept { return id_ != kInvalidGraphResource; }
+    [[nodiscard]] explicit operator bool() const noexcept {
+        return id_ != kInvalidGraphResource;
+    }
 
 private:
     friend class RenderGraphBuilder;
@@ -90,7 +92,9 @@ class PerFrameSlot final {
 public:
     PerFrameSlot() = default;
 
-    [[nodiscard]] explicit operator bool() const noexcept { return id_ != kInvalidGraphResource; }
+    [[nodiscard]] explicit operator bool() const noexcept {
+        return id_ != kInvalidGraphResource;
+    }
 
 private:
     friend class RenderGraphBuilder;
@@ -103,7 +107,9 @@ class Framebuffer final {
 public:
     Framebuffer() = default;
 
-    [[nodiscard]] explicit operator bool() const noexcept { return id_ != kInvalidGraphResource; }
+    [[nodiscard]] explicit operator bool() const noexcept {
+        return id_ != kInvalidGraphResource;
+    }
 
 private:
     friend class RenderGraphBuilder;

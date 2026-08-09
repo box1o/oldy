@@ -1,8 +1,8 @@
 #pragma once
 
-#include "layer.hpp"
-
 #include <vector>
+
+#include "layer.hpp"
 
 namespace woki {
 

@@ -29,7 +29,7 @@ endif()
 
 set(RHI_DEPS
     woki::core
-    woki::gfx
+    woki::platform
 )
 
 if(EMSCRIPTEN)
@@ -64,4 +64,8 @@ if(EMSCRIPTEN)
     target_compile_options(woki_rhi PUBLIC
         "--use-port=${_WGPU_PORT}"
     )
+endif()
+
+if(BUILD_TESTING)
+    add_subdirectory(tests)
 endif()

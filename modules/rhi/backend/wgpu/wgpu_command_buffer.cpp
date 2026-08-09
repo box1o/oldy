@@ -1,6 +1,5 @@
-#include "wgpu_command_buffer.hpp"
-
 #include "detail/string.hpp"
+#include "wgpu_command_buffer.hpp"
 
 namespace woki::rhi::wgpu {
 

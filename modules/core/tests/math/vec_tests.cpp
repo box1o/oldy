@@ -1,5 +1,5 @@
-#include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 #include <woki/math/vec/vec2.hpp>
 #include <woki/math/vec/vec3.hpp>
@@ -226,35 +226,23 @@ TEST_CASE("vec functions") {
     REQUIRE(ab.y == 2.0f);
     REQUIRE(ab.z == 3.0f);
 
-    auto cl = clamp(
-        vec<3, float>(0.5f, 1.5f, 2.5f),
-        vec<3, float>(1.0f, 1.0f, 1.0f),
-        vec<3, float>(2.0f, 2.0f, 2.0f));
+    auto cl = clamp(vec<3, float>(0.5f, 1.5f, 2.5f), vec<3, float>(1.0f, 1.0f, 1.0f), vec<3, float>(2.0f, 2.0f, 2.0f));
     REQUIRE(cl.x == 1.0f);
     REQUIRE(cl.y == 1.5f);
     REQUIRE(cl.z == 2.0f);
 
-    auto lp = lerp(
-        vec<3, float>(0.0f, 0.0f, 0.0f),
-        vec<3, float>(10.0f, 10.0f, 10.0f),
-        0.5f);
+    auto lp = lerp(vec<3, float>(0.0f, 0.0f, 0.0f), vec<3, float>(10.0f, 10.0f, 10.0f), 0.5f);
     REQUIRE(lp.x == 5.0f);
     REQUIRE(lp.y == 5.0f);
     REQUIRE(lp.z == 5.0f);
 
-    auto refl = reflect(
-        vec<3, float>(1.0f, -1.0f, 0.0f),
-        vec<3, float>(0.0f, 1.0f, 0.0f));
+    auto refl = reflect(vec<3, float>(1.0f, -1.0f, 0.0f), vec<3, float>(0.0f, 1.0f, 0.0f));
     REQUIRE(refl.x == 1.0f);
     REQUIRE(refl.y == 1.0f);
     REQUIRE(refl.z == 0.0f);
 
-    REQUIRE(distance(
-        vec<3, float>(0.0f, 0.0f, 0.0f),
-        vec<3, float>(3.0f, 4.0f, 0.0f)) == Approx(5.0f));
-    REQUIRE(distance_squared(
-        vec<3, float>(0.0f, 0.0f, 0.0f),
-        vec<3, float>(3.0f, 4.0f, 0.0f)) == 25.0f);
+    REQUIRE(distance(vec<3, float>(0.0f, 0.0f, 0.0f), vec<3, float>(3.0f, 4.0f, 0.0f)) == Approx(5.0f));
+    REQUIRE(distance_squared(vec<3, float>(0.0f, 0.0f, 0.0f), vec<3, float>(3.0f, 4.0f, 0.0f)) == 25.0f);
 }
 
 TEST_CASE("vec scalar min and max") {

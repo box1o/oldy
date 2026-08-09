@@ -1,10 +1,9 @@
-#include <catch2/catch_test_macros.hpp>
-
-#include <woki/ext/ext.hpp>
-
 #include <array>
 #include <filesystem>
 #include <string_view>
+#include <catch2/catch_test_macros.hpp>
+
+#include <woki/ext/ext.hpp>
 
 namespace {
 
@@ -48,14 +47,12 @@ TEST_CASE("Extension C ABI path calls copy null terminated paths") {
     auto record = MakeRecord(MakeTempDir("paths"));
     std::array<char, 512> output{};
 
-    auto status = woki::ext::host::cabi::PathData(
-        record, output.data(), static_cast<woki::u32>(output.size()));
+    auto status = woki::ext::host::cabi::PathData(record, output.data(), static_cast<woki::u32>(output.size()));
     REQUIRE(status == 0);
     REQUIRE(std::string_view(output.data()).contains("data"));
 
     std::array<char, 2> small{};
-    status = woki::ext::host::cabi::PathCache(
-        record, small.data(), static_cast<woki::u32>(small.size()));
+    status = woki::ext::host::cabi::PathCache(record, small.data(), static_cast<woki::u32>(small.size()));
     REQUIRE(status == -3);
 }
 
@@ -63,8 +60,7 @@ TEST_CASE("Extension C ABI file read and write use extension storage") {
     auto record = MakeRecord(MakeTempDir("storage"));
     const std::array<woki::u8, 3> input{4, 5, 6};
 
-    auto status = woki::ext::host::cabi::FileWrite(
-        record, "state/data.bin", input.data(), static_cast<woki::u32>(input.size()));
+    auto status = woki::ext::host::cabi::FileWrite(record, "state/data.bin", input.data(), static_cast<woki::u32>(input.size()));
     REQUIRE(status == 0);
 
     std::array<woki::u8, 3> output{};
@@ -93,11 +89,9 @@ TEST_CASE("Extension C ABI file append keeps existing contents") {
     const std::array<woki::u8, 3> first{'a', 'b', 'c'};
     const std::array<woki::u8, 3> second{'d', 'e', 'f'};
 
-    auto status = woki::ext::host::cabi::FileAppend(
-        record, "events.log", first.data(), static_cast<woki::u32>(first.size()));
+    auto status = woki::ext::host::cabi::FileAppend(record, "events.log", first.data(), static_cast<woki::u32>(first.size()));
     REQUIRE(status == 0);
-    status = woki::ext::host::cabi::FileAppend(
-        record, "events.log", second.data(), static_cast<woki::u32>(second.size()));
+    status = woki::ext::host::cabi::FileAppend(record, "events.log", second.data(), static_cast<woki::u32>(second.size()));
     REQUIRE(status == 0);
 
     std::array<woki::u8, 6> output{};
@@ -105,6 +99,5 @@ TEST_CASE("Extension C ABI file append keeps existing contents") {
     status = woki::ext::host::cabi::FileRead(record, "events.log", output.data(), &output_len);
     REQUIRE(status == 0);
     REQUIRE(output_len == output.size());
-    REQUIRE(
-        std::string_view(reinterpret_cast<const char*>(output.data()), output.size()) == "abcdef");
+    REQUIRE(std::string_view(reinterpret_cast<const char*>(output.data()), output.size()) == "abcdef");
 }

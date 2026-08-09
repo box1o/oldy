@@ -1,17 +1,15 @@
-#include "woki/ext/wasm/backend.hpp"
-
 #include "woki/ext/package.hpp"
+#include "woki/ext/wasm/backend.hpp"
 #include "woki/ext/wasm/guest_module.hpp"
-#include "woki/ext/wasm/web_engine.hpp"
 
-#if defined(WOKI_EXTENSION_WITH_WASMTIME)
+#if defined(__EMSCRIPTEN__)
+#include "woki/ext/wasm/web_engine.hpp"
+#elif defined(WOKI_EXTENSION_WITH_WASMTIME)
 #include "woki/ext/wasm/wasmtime_engine.hpp"
 #endif
 
-#include <array>
-#include <filesystem>
-#include <fstream>
 #include <string>
+#include <filesystem>
 
 namespace woki::ext::wasm {
 
@@ -25,15 +23,15 @@ namespace fs = std::filesystem;
 
 [[nodiscard]] Result<void> RequireEngine(const Engine* engine) {
     if (engine == nullptr) {
-        return Err(ErrorCode::InvalidState,
-            "Wasm backend has no engine. Provide a Wasmtime/Wasmer engine implementation.");
+        return Err(ErrorCode::InvalidState, "Wasm backend has no engine. Provide a Wasmtime/Wasmer engine implementation.");
     }
     return Ok();
 }
 
 } // namespace
 
-Backend::Backend(scope<Engine> engine) noexcept : engine_(std::move(engine)) {}
+Backend::Backend(scope<Engine> engine) noexcept
+    : engine_(std::move(engine)) {}
 
 scope<Backend> Backend::Create() {
 #ifdef __EMSCRIPTEN__
@@ -74,10 +72,7 @@ Result<void> Backend::Load(Record& record) {
     }
     if (*api_version != record.manifest.api_version) {
         engine_->Discard(record);
-        return Err(ErrorCode::ValidationInvalidState,
-            "Extension apiVersion mismatch. Manifest declares " +
-                std::to_string(record.manifest.api_version) + ", wasm exports " +
-                std::to_string(*api_version) + ".");
+        return Err(ErrorCode::ValidationInvalidState, "Extension apiVersion mismatch. Manifest declares " + std::to_string(record.manifest.api_version) + ", wasm exports " + std::to_string(*api_version) + ".");
     }
 
 #if defined(__EMSCRIPTEN__)
@@ -101,8 +96,7 @@ Result<void> Backend::Initialize(Record& record) {
     }
     if (*result != 0) {
         engine_->Discard(record);
-        return Err(ErrorCode::ValidationInvalidState,
-            "Extension ext_init returned failure code " + std::to_string(*result) + ".");
+        return Err(ErrorCode::ValidationInvalidState, "Extension ext_init returned failure code " + std::to_string(*result) + ".");
     }
 
     return Ok();
@@ -130,11 +124,9 @@ void Backend::DispatchEvent(Record& record, u32 event_type, std::span<const u8> 
     }
 }
 
-Result<void> Backend::DispatchCommand(
-    Record& record, std::string_view command_id, std::span<const u8> payload) {
+Result<void> Backend::DispatchCommand(Record& record, std::string_view command_id, std::span<const u8> payload) {
     if (engine_ == nullptr) {
-        return Err(ErrorCode::InvalidState,
-            "Wasm backend has no engine. Cannot dispatch extension command.");
+        return Err(ErrorCode::InvalidState, "Wasm backend has no engine. Cannot dispatch extension command.");
     }
 
     auto result = engine_->Command(record, command_id, payload);
@@ -142,9 +134,7 @@ Result<void> Backend::DispatchCommand(
         return Err(result.error());
     }
     if (*result != 0) {
-        return Err(ErrorCode::ValidationInvalidState,
-            "Extension command '" + std::string(command_id) + "' returned failure code " +
-                std::to_string(*result) + ".");
+        return Err(ErrorCode::ValidationInvalidState, "Extension command '" + std::string(command_id) + "' returned failure code " + std::to_string(*result) + ".");
     }
     return Ok();
 }

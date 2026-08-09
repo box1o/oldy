@@ -1,8 +1,8 @@
-#include "woki/ext/manager.hpp"
-
+#include <string>
 #include <algorithm>
 #include <filesystem>
-#include <string>
+
+#include "woki/ext/manager.hpp"
 
 namespace woki::ext {
 
@@ -18,18 +18,21 @@ void LoadOne(Runtime& runtime, Record& record) {
         return;
     }
     if (auto initialized = runtime.Initialize(record); !initialized) {
-        slog::Warn(
-            "Extension '{}' failed to initialize: {}", record.id, initialized.error().Message());
+        slog::Warn("Extension '{}' failed to initialize: {}", record.id, initialized.error().Message());
     }
 }
 
 } // namespace
 
-Manager::Manager(RuntimeBackend* backend) noexcept : runtime_(backend) {}
+Manager::Manager(RuntimeBackend* backend) noexcept
+    : runtime_(backend) {}
 
-Manager::Manager(scope<RuntimeBackend> backend) noexcept : runtime_(std::move(backend)) {}
+Manager::Manager(scope<RuntimeBackend> backend) noexcept
+    : runtime_(std::move(backend)) {}
 
-void Manager::SetBackend(RuntimeBackend* backend) noexcept { runtime_.SetBackend(backend); }
+void Manager::SetBackend(RuntimeBackend* backend) noexcept {
+    runtime_.SetBackend(backend);
+}
 
 void Manager::SetBackend(scope<RuntimeBackend> backend) noexcept {
     runtime_.SetBackend(std::move(backend));
@@ -122,12 +125,10 @@ Result<void> Manager::ScanSource(const std::filesystem::path& source_root) {
 Result<void> Manager::Load(std::string_view id) {
     Record* record = Find(id);
     if (record == nullptr) {
-        return Err(ErrorCode::FileNotFound,
-            "Extension '" + std::string(id) + "' is not registered. Run Scan() first.");
+        return Err(ErrorCode::FileNotFound, "Extension '" + std::string(id) + "' is not registered. Run Scan() first.");
     }
     if (record->state != State::PermissionChecked) {
-        return Err(ErrorCode::ValidationInvalidState,
-            "Extension '" + std::string(id) + "' is not loadable from its current state.");
+        return Err(ErrorCode::ValidationInvalidState, "Extension '" + std::string(id) + "' is not loadable from its current state.");
     }
 
     auto loaded = runtime_.Load(*record);
@@ -160,8 +161,7 @@ void Manager::DispatchEvent(u32 event_type, std::span<const u8> payload) {
 }
 
 Result<void> Manager::ExecuteCommand(std::string_view command_id, std::span<const u8> payload) {
-    return command_dispatcher_.Execute(
-        commands_, runtime_, registry_.Records(), command_id, payload);
+    return command_dispatcher_.Execute(commands_, runtime_, registry_.Records(), command_id, payload);
 }
 
 void Manager::Unload(std::string_view id) {
@@ -178,9 +178,13 @@ void Manager::UnloadAll() {
     }
 }
 
-const std::vector<Record>& Manager::Records() const noexcept { return registry_.Records(); }
+const std::vector<Record>& Manager::Records() const noexcept {
+    return registry_.Records();
+}
 
-const CommandRegistry& Manager::Commands() const noexcept { return commands_; }
+const CommandRegistry& Manager::Commands() const noexcept {
+    return commands_;
+}
 
 Record* Manager::Find(std::string_view id) noexcept {
     auto& records = registry_.Records();

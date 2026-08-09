@@ -1,9 +1,9 @@
-#include "woki/ext/registry.hpp"
-
+#include <string>
 #include <algorithm>
 #include <filesystem>
-#include <string>
 #include <system_error>
+
+#include "woki/ext/registry.hpp"
 
 namespace woki::ext {
 
@@ -66,7 +66,9 @@ Result<Roots> RootsFromBase(const fs::path& base) {
     return Ok(std::move(roots));
 }
 
-void Registry::SetRoots(Roots roots) { roots_ = std::move(roots); }
+void Registry::SetRoots(Roots roots) {
+    roots_ = std::move(roots);
+}
 
 Result<void> Registry::Scan() {
     records_.clear();
@@ -84,8 +86,7 @@ Result<void> Registry::Scan() {
         return Ok();
     }
     if (!fs::is_directory(roots_.extensions, error)) {
-        return Err(ErrorCode::ValidationInvalidState,
-            "Extension root is not a directory: " + roots_.extensions.string());
+        return Err(ErrorCode::ValidationInvalidState, "Extension root is not a directory: " + roots_.extensions.string());
     }
 
     for (const fs::directory_entry& entry : fs::directory_iterator(roots_.extensions, error)) {
@@ -96,7 +97,7 @@ Result<void> Registry::Scan() {
             continue;
         }
 
-        const fs::path package_root = entry.path();
+        const fs::path& package_root = entry.path();
         const std::string package_id = package_root.filename().string();
         auto manifest = LoadManifest(package_root / "manifest.yaml");
         if (!manifest) {
@@ -155,8 +156,7 @@ Result<void> Registry::ScanSource(const fs::path& source_root) {
         return Ok();
     }
     if (!fs::is_directory(source_root, error)) {
-        return Err(ErrorCode::ValidationInvalidState,
-            "Source extension root is not a directory: " + source_root.string());
+        return Err(ErrorCode::ValidationInvalidState, "Source extension root is not a directory: " + source_root.string());
     }
 
     for (const fs::directory_entry& entry : fs::directory_iterator(source_root, error)) {
@@ -167,7 +167,7 @@ Result<void> Registry::ScanSource(const fs::path& source_root) {
             continue;
         }
 
-        const fs::path package_root = entry.path();
+        const fs::path& package_root = entry.path();
         const std::string package_name = package_root.filename().string();
         auto manifest = LoadManifest(package_root / "manifest.yaml");
         if (!manifest) {
@@ -206,8 +206,12 @@ Result<void> Registry::ScanSource(const fs::path& source_root) {
     return Ok();
 }
 
-const std::vector<Record>& Registry::Records() const noexcept { return records_; }
+const std::vector<Record>& Registry::Records() const noexcept {
+    return records_;
+}
 
-std::vector<Record>& Registry::Records() noexcept { return records_; }
+std::vector<Record>& Registry::Records() noexcept {
+    return records_;
+}
 
 } // namespace woki::ext

@@ -1,11 +1,10 @@
-#include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 #include <woki/math/mat/mat2.hpp>
 #include <woki/math/mat/mat3.hpp>
 #include <woki/math/mat/mat4.hpp>
 #include <woki/math/mat/functions.hpp>
-#include <woki/math/common/constants.hpp>
 
 using namespace woki::math;
 using Catch::Approx;
@@ -19,16 +18,12 @@ TEST_CASE("mat2 identity") {
 }
 
 TEST_CASE("mat2 determinant") {
-    mat<2, 2, float> m(layout::rowm,
-                       1.0f, 2.0f,
-                       3.0f, 4.0f);
+    mat<2, 2, float> m(layout::rowm, 1.0f, 2.0f, 3.0f, 4.0f);
     REQUIRE(m.det() == Approx(-2.0f));
 }
 
 TEST_CASE("mat2 inverse exact values") {
-    mat<2, 2, float> m(layout::rowm,
-                       4.0f, 7.0f,
-                       2.0f, 6.0f);
+    mat<2, 2, float> m(layout::rowm, 4.0f, 7.0f, 2.0f, 6.0f);
     auto inv = m.inverse();
     // Ground truth: [[0.6, -0.7], [-0.2, 0.4]]
     REQUIRE(inv(0, 0) == Approx(0.6f));
@@ -44,9 +39,7 @@ TEST_CASE("mat2 inverse exact values") {
 }
 
 TEST_CASE("mat2 col and row access") {
-    mat<2, 2, float> m(layout::rowm,
-                       1.0f, 2.0f,
-                       3.0f, 4.0f);
+    mat<2, 2, float> m(layout::rowm, 1.0f, 2.0f, 3.0f, 4.0f);
     auto col0 = m.col(0);
     REQUIRE(col0[0] == 1.0f);
     REQUIRE(col0[1] == 3.0f);
@@ -77,11 +70,7 @@ TEST_CASE("mat4 identity") {
 }
 
 TEST_CASE("mat4 element access") {
-    mat<4, 4, float> m(layout::rowm,
-                       1.0f,  2.0f,  3.0f,  4.0f,
-                       5.0f,  6.0f,  7.0f,  8.0f,
-                       9.0f,  10.0f, 11.0f, 12.0f,
-                       13.0f, 14.0f, 15.0f, 16.0f);
+    mat<4, 4, float> m(layout::rowm, 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f, 9.0f, 10.0f, 11.0f, 12.0f, 13.0f, 14.0f, 15.0f, 16.0f);
 
     REQUIRE(m(0, 0) == 1.0f);
     REQUIRE(m(0, 1) == 2.0f);
@@ -91,11 +80,7 @@ TEST_CASE("mat4 element access") {
 }
 
 TEST_CASE("mat4 col and row access") {
-    mat<4, 4, float> m(layout::rowm,
-                       1.0f, 2.0f, 3.0f, 4.0f,
-                       5.0f, 6.0f, 7.0f, 8.0f,
-                       9.0f, 10.0f, 11.0f, 12.0f,
-                       13.0f, 14.0f, 15.0f, 16.0f);
+    mat<4, 4, float> m(layout::rowm, 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f, 9.0f, 10.0f, 11.0f, 12.0f, 13.0f, 14.0f, 15.0f, 16.0f);
 
     auto col0 = m.col(0);
     REQUIRE(col0[0] == 1.0f);
@@ -123,17 +108,9 @@ TEST_CASE("mat4 scalar multiplication") {
 }
 
 TEST_CASE("mat4 matrix multiplication") {
-    mat<4, 4, float> a(layout::rowm,
-                       1.0f, 0.0f, 0.0f, 0.0f,
-                       0.0f, 2.0f, 0.0f, 0.0f,
-                       0.0f, 0.0f, 3.0f, 0.0f,
-                       0.0f, 0.0f, 0.0f, 4.0f);
+    mat<4, 4, float> a(layout::rowm, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 2.0f, 0.0f, 0.0f, 0.0f, 0.0f, 3.0f, 0.0f, 0.0f, 0.0f, 0.0f, 4.0f);
 
-    mat<4, 4, float> b(layout::rowm,
-                       1.0f, 0.0f, 0.0f, 0.0f,
-                       0.0f, 1.0f, 0.0f, 0.0f,
-                       0.0f, 0.0f, 1.0f, 0.0f,
-                       0.0f, 0.0f, 0.0f, 1.0f);
+    mat<4, 4, float> b(layout::rowm, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
 
     auto c = a * b;
     REQUIRE(c(0, 0) == 1.0f);
@@ -143,11 +120,7 @@ TEST_CASE("mat4 matrix multiplication") {
 }
 
 TEST_CASE("mat4 transpose") {
-    mat<4, 4, float> m(layout::rowm,
-                       1.0f, 2.0f, 3.0f, 4.0f,
-                       5.0f, 6.0f, 7.0f, 8.0f,
-                       9.0f, 10.0f, 11.0f, 12.0f,
-                       13.0f, 14.0f, 15.0f, 16.0f);
+    mat<4, 4, float> m(layout::rowm, 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f, 9.0f, 10.0f, 11.0f, 12.0f, 13.0f, 14.0f, 15.0f, 16.0f);
 
     auto t = m.transpose();
     REQUIRE(t(0, 1) == 5.0f);
@@ -160,20 +133,12 @@ TEST_CASE("mat4 determinant") {
     mat<4, 4, float> m = mat<4, 4, float>::identity();
     REQUIRE(m.det() == Approx(1.0f));
 
-    mat<4, 4, float> s(layout::rowm,
-                       2.0f, 0.0f, 0.0f, 0.0f,
-                       0.0f, 3.0f, 0.0f, 0.0f,
-                       0.0f, 0.0f, 4.0f, 0.0f,
-                       0.0f, 0.0f, 0.0f, 5.0f);
+    mat<4, 4, float> s(layout::rowm, 2.0f, 0.0f, 0.0f, 0.0f, 0.0f, 3.0f, 0.0f, 0.0f, 0.0f, 0.0f, 4.0f, 0.0f, 0.0f, 0.0f, 0.0f, 5.0f);
     REQUIRE(s.det() == Approx(120.0f));
 }
 
 TEST_CASE("mat4 translate inverse exact values") {
-    mat<4, 4, float> m(layout::rowm,
-                       1.0f, 0.0f, 0.0f, 2.0f,
-                       0.0f, 1.0f, 0.0f, 3.0f,
-                       0.0f, 0.0f, 1.0f, 4.0f,
-                       0.0f, 0.0f, 0.0f, 1.0f);
+    mat<4, 4, float> m(layout::rowm, 1.0f, 0.0f, 0.0f, 2.0f, 0.0f, 1.0f, 0.0f, 3.0f, 0.0f, 0.0f, 1.0f, 4.0f, 0.0f, 0.0f, 0.0f, 1.0f);
     // Ground truth: inverse(translate) = translate(-tx, -ty, -tz)
     auto inv = m.inverse();
     REQUIRE(inv(0, 3) == Approx(-2.0f));
@@ -194,9 +159,7 @@ TEST_CASE("mat4 translate inverse exact values") {
 TEST_CASE("mat4 generic member det and inverse") {
     // Use the generic base class for a non-specialized size
     // (Testing that .det() and .inverse() members compile and work)
-    mat<2, 2, float> m(layout::rowm,
-                       2.0f, 0.0f,
-                       0.0f, 3.0f);
+    mat<2, 2, float> m(layout::rowm, 2.0f, 0.0f, 0.0f, 3.0f);
     REQUIRE(m.det() == Approx(6.0f));
     auto inv = m.inverse();
     REQUIRE(inv(0, 0) == Approx(0.5f));
@@ -207,18 +170,12 @@ TEST_CASE("mat3 identity and determinant") {
     auto m = mat<3, 3, float>::identity();
     REQUIRE(m.det() == Approx(1.0f));
 
-    mat<3, 3, float> a(layout::rowm,
-                       2.0f, 0.0f, 0.0f,
-                       0.0f, 3.0f, 0.0f,
-                       0.0f, 0.0f, 4.0f);
+    mat<3, 3, float> a(layout::rowm, 2.0f, 0.0f, 0.0f, 0.0f, 3.0f, 0.0f, 0.0f, 0.0f, 4.0f);
     REQUIRE(a.det() == Approx(24.0f));
 }
 
 TEST_CASE("mat3 inverse exact values") {
-    mat<3, 3, float> m(layout::rowm,
-                       1.0f, 2.0f, 3.0f,
-                       0.0f, 1.0f, 4.0f,
-                       5.0f, 6.0f, 0.0f);
+    mat<3, 3, float> m(layout::rowm, 1.0f, 2.0f, 3.0f, 0.0f, 1.0f, 4.0f, 5.0f, 6.0f, 0.0f);
     // Ground truth: det=1, inverse has exact integer entries
     REQUIRE(m.det() == Approx(1.0f));
 
@@ -264,20 +221,13 @@ TEST_CASE("mat3 col and row access") {
 TEST_CASE("mat3 comparison") {
     mat<3, 3, float> a = mat<3, 3, float>::identity();
     mat<3, 3, float> b = mat<3, 3, float>::identity();
-    mat<3, 3, float> c(layout::rowm,
-                       1.0f, 0.0f, 0.0f,
-                       0.0f, 2.0f, 0.0f,
-                       0.0f, 0.0f, 1.0f);
+    mat<3, 3, float> c(layout::rowm, 1.0f, 0.0f, 0.0f, 0.0f, 2.0f, 0.0f, 0.0f, 0.0f, 1.0f);
 
     REQUIRE(a == b);
     REQUIRE(a != c);
 }
 
 TEST_CASE("mat trace") {
-    mat<4, 4, float> m(layout::rowm,
-                       1.0f, 2.0f, 3.0f, 4.0f,
-                       5.0f, 6.0f, 7.0f, 8.0f,
-                       9.0f, 10.0f, 11.0f, 12.0f,
-                       13.0f, 14.0f, 15.0f, 16.0f);
+    mat<4, 4, float> m(layout::rowm, 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f, 9.0f, 10.0f, 11.0f, 12.0f, 13.0f, 14.0f, 15.0f, 16.0f);
     REQUIRE(trace(m) == 1.0f + 6.0f + 11.0f + 16.0f);
 }

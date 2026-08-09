@@ -19,11 +19,11 @@ inline constexpr i32 kInvalid = -5;
 [[nodiscard]] i32 PathData(Record& record, char* out, u32 out_cap);
 [[nodiscard]] i32 PathCache(Record& record, char* out, u32 out_cap);
 [[nodiscard]] i32 FileRead(Record& record, const char* rel_path, u8* out, u32* inout_len);
-[[nodiscard]] i32 FileRead( Record& record, const char* rel_path, u32 rel_path_len, u8* out, u32* inout_len);
+[[nodiscard]] i32 FileRead(Record& record, const char* rel_path, u32 rel_path_len, u8* out, u32* inout_len);
 [[nodiscard]] i32 FileWrite(Record& record, const char* rel_path, const u8* data, u32 len);
-[[nodiscard]] i32 FileWrite( Record& record, const char* rel_path, u32 rel_path_len, const u8* data, u32 len);
+[[nodiscard]] i32 FileWrite(Record& record, const char* rel_path, u32 rel_path_len, const u8* data, u32 len);
 [[nodiscard]] i32 FileAppend(Record& record, const char* rel_path, const u8* data, u32 len);
-[[nodiscard]] i32 FileAppend( Record& record, const char* rel_path, u32 rel_path_len, const u8* data, u32 len);
+[[nodiscard]] i32 FileAppend(Record& record, const char* rel_path, u32 rel_path_len, const u8* data, u32 len);
 [[nodiscard]] i32 ConfigGet(Record& record, const char* key, char* out, u32 out_cap);
 [[nodiscard]] i32 ConfigSet(Record& record, const char* key, const char* value, u32 len);
 

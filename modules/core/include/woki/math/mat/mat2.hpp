@@ -1,16 +1,16 @@
 #pragma once
 
-#include "fwd.hpp"
-#include "../detail/arithmetic.hpp"
-#include "../common/functions.hpp"
-
 #include <array>
 #include <cassert>
 #include <cstddef>
 
+#include "fwd.hpp"
+#include "../common/functions.hpp"
+#include "../detail/arithmetic.hpp"
+
 namespace woki::math {
 
-template<arithmetic T>
+template <arithmetic T>
 class mat<2, 2, T> {
 public:
     static constexpr std::size_t rows = 2;
@@ -23,20 +23,17 @@ public:
             T m00, m10;
             T m01, m11;
         };
+
         std::array<col_type, 2> data_;
     };
 
     constexpr mat() noexcept
-        : data_{col_type{T{}, T{}},
-                col_type{T{}, T{}}} {}
+        : data_{col_type{T{}, T{}}, col_type{T{}, T{}}} {}
 
     explicit constexpr mat(T value) noexcept
-        : data_{col_type{value, value},
-                col_type{value, value}} {}
+        : data_{col_type{value, value}, col_type{value, value}} {}
 
-    constexpr mat(layout order,
-                  T v0, T v1,
-                  T v2, T v3) noexcept {
+    constexpr mat(layout order, T v0, T v1, T v2, T v3) noexcept {
         if (order == layout::rowm) {
             data_[0] = {v0, v2};
             data_[1] = {v1, v3};
@@ -46,7 +43,7 @@ public:
         }
     }
 
-    template<arithmetic U>
+    template <arithmetic U>
     constexpr explicit mat(const mat<2, 2, U>& other) noexcept {
         for (std::size_t j = 0; j < 2; ++j) {
             for (std::size_t i = 0; i < 2; ++i) {
@@ -56,9 +53,7 @@ public:
     }
 
     [[nodiscard]] static constexpr mat identity() noexcept {
-        return mat(layout::rowm,
-                   T{1}, T{0},
-                   T{0}, T{1});
+        return mat(layout::rowm, T{1}, T{0}, T{0}, T{1});
     }
 
     [[nodiscard]] constexpr T& operator()(std::size_t r, std::size_t c) noexcept {
@@ -116,27 +111,35 @@ public:
     }
 
     constexpr mat& operator+=(const mat& rhs) noexcept {
-        m00 += rhs.m00; m01 += rhs.m01;
-        m10 += rhs.m10; m11 += rhs.m11;
+        m00 += rhs.m00;
+        m01 += rhs.m01;
+        m10 += rhs.m10;
+        m11 += rhs.m11;
         return *this;
     }
 
     constexpr mat& operator-=(const mat& rhs) noexcept {
-        m00 -= rhs.m00; m01 -= rhs.m01;
-        m10 -= rhs.m10; m11 -= rhs.m11;
+        m00 -= rhs.m00;
+        m01 -= rhs.m01;
+        m10 -= rhs.m10;
+        m11 -= rhs.m11;
         return *this;
     }
 
     constexpr mat& operator*=(T s) noexcept {
-        m00 *= s; m01 *= s;
-        m10 *= s; m11 *= s;
+        m00 *= s;
+        m01 *= s;
+        m10 *= s;
+        m11 *= s;
         return *this;
     }
 
     constexpr mat& operator/=(T s) noexcept {
         assert(s != T{});
-        m00 /= s; m01 /= s;
-        m10 /= s; m11 /= s;
+        m00 /= s;
+        m01 /= s;
+        m10 /= s;
+        m11 /= s;
         return *this;
     }
 
@@ -168,18 +171,14 @@ public:
     // NOTE: mat2 uses the generic operator* in base.hpp for mat*mat.
 
     [[nodiscard]] constexpr mat transpose() const noexcept {
-        return mat(layout::rowm,
-                   m00, m01,
-                   m10, m11);
+        return mat(layout::rowm, m00, m01, m10, m11);
     }
 
     [[nodiscard]] friend constexpr bool operator==(const mat& a, const mat& b) noexcept {
         if constexpr (floating_point<T>) {
-            return approx_equal(a.m00, b.m00) && approx_equal(a.m01, b.m01) &&
-                   approx_equal(a.m10, b.m10) && approx_equal(a.m11, b.m11);
+            return approx_equal(a.m00, b.m00) && approx_equal(a.m01, b.m01) && approx_equal(a.m10, b.m10) && approx_equal(a.m11, b.m11);
         }
-        return a.m00 == b.m00 && a.m01 == b.m01 &&
-               a.m10 == b.m10 && a.m11 == b.m11;
+        return a.m00 == b.m00 && a.m01 == b.m01 && a.m10 == b.m10 && a.m11 == b.m11;
     }
 
     [[nodiscard]] constexpr bool operator!=(const mat& other) const noexcept {
@@ -190,15 +189,15 @@ public:
         return m00 * m11 - m01 * m10;
     }
 
-    [[nodiscard]] mat inverse() const noexcept requires floating_point<T> {
+    [[nodiscard]] mat inverse() const noexcept
+    requires floating_point<T>
+    {
         const T d = det();
         if (abs(d) <= epsilon<T>) {
             return identity();
         }
         const T inv_det = T{1} / d;
-        return mat(layout::rowm,
-                    m11 * inv_det, -m01 * inv_det,
-                   -m10 * inv_det,  m00 * inv_det);
+        return mat(layout::rowm, m11 * inv_det, -m01 * inv_det, -m10 * inv_det, m00 * inv_det);
     }
 };
 

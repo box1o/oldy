@@ -19,7 +19,7 @@ ifeq ($(findstring clang,$(CXX)),clang)
 endif
 
 .DEFAULT_GOAL := run
-.PHONY: configure build rebuild clean install run test all \
+.PHONY: configure build rebuild clean install run test all format format-check \
 	configure-web build-web web
 
 RUN_ARGS       := $(if $(CONFIG),--config $(CONFIG),)
@@ -64,6 +64,12 @@ release:
 	@$(MAKE) run BUILD_TYPE=Release
 
 all: build
+
+format:
+	@python3 scripts/format.py
+
+format-check:
+	@python3 scripts/format.py --check
 
 configure-web:
 	@echo "→ Configuring web ($(BUILD_TYPE))..."

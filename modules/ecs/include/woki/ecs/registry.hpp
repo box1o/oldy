@@ -1,22 +1,21 @@
 #pragma once
 
+#include <span>
+#include <tuple>
+#include <limits>
+#include <vector>
+#include <cstddef>
+#include <utility>
+#include <concepts>
+#include <iterator>
+#include <typeindex>
+#include <functional>
+#include <type_traits>
+#include <unordered_map>
+
 #include <woki/core.hpp>
 
 #include "entity.hpp"
-
-#include <concepts>
-#include <cstddef>
-#include <functional>
-#include <iterator>
-#include <limits>
-#include <memory>
-#include <span>
-#include <tuple>
-#include <type_traits>
-#include <typeindex>
-#include <unordered_map>
-#include <utility>
-#include <vector>
 
 namespace woki {
 
@@ -24,9 +23,7 @@ template <bool IsConst, typename... Components>
 class BasicView;
 
 template <typename T>
-concept Component =
-    !std::is_const_v<T> && !std::is_volatile_v<T> && !std::is_reference_v<T> &&
-    std::is_object_v<T> && std::destructible<T>;
+concept Component = !std::is_const_v<T> && !std::is_volatile_v<T> && !std::is_reference_v<T> && std::is_object_v<T> && std::destructible<T>;
 
 namespace detail {
 
@@ -58,11 +55,18 @@ public:
         const u32 index = entity.Index();
         EnsureSparse(index);
 
+        auto component = createScope<T>(std::forward<Args>(args)...);
         const u32 position = static_cast<u32>(entities_.size());
-        sparse_[index] = position;
         entities_.push_back(entity);
-        data_.emplace_back(std::forward<Args>(args)...);
-        return data_.back();
+        try {
+            data_.push_back(std::move(component));
+        } catch (...) {
+            entities_.pop_back();
+            throw;
+        }
+
+        sparse_[index] = position;
+        return *data_.back();
     }
 
     [[nodiscard]] bool Contains(Entity entity) const noexcept {
@@ -80,7 +84,7 @@ public:
             return nullptr;
         }
 
-        return &data_[sparse_[entity.Index()]];
+        return data_[sparse_[entity.Index()]].get();
     }
 
     [[nodiscard]] const T* TryGet(Entity entity) const noexcept {
@@ -88,7 +92,7 @@ public:
             return nullptr;
         }
 
-        return &data_[sparse_[entity.Index()]];
+        return data_[sparse_[entity.Index()]].get();
     }
 
     T& Get(Entity entity) {
@@ -150,7 +154,7 @@ private:
 
     std::vector<u32> sparse_;
     std::vector<Entity> entities_;
-    std::vector<T> data_;
+    std::vector<scope<T>> data_;
 };
 
 } // namespace detail
@@ -173,23 +177,17 @@ public:
         if (!free_list_.empty()) {
             index = free_list_.back();
             free_list_.pop_back();
-            active_[index] = true;
         } else {
+            WOKI_ASSERT_MSG(generations_.size() < Entity::kInvalidIndex, "Entity index space exhausted");
             index = static_cast<u32>(generations_.size());
             generations_.push_back(0);
-            active_.push_back(true);
             entity_positions_.push_back(kInvalidPosition);
         }
 
         const Entity entity(index, generations_[index]);
         entity_positions_[index] = static_cast<u32>(entities_.size());
         entities_.push_back(entity);
-        ++alive_count_;
         return entity;
-    }
-
-    [[nodiscard]] Entity Spawn() {
-        return Create();
     }
 
     [[nodiscard]] bool Destroy(Entity entity) {
@@ -211,10 +209,8 @@ public:
 
         entities_.pop_back();
         entity_positions_[index] = kInvalidPosition;
-        active_[index] = false;
         generations_[index] = detail::NextEntityGeneration(generations_[index]);
         free_list_.push_back(index);
-        --alive_count_;
         return true;
     }
 
@@ -224,32 +220,32 @@ public:
         }
 
         const u32 index = entity.Index();
-        return index < generations_.size() && active_[index] && generations_[index] == entity.Generation();
-    }
-
-    [[nodiscard]] bool Alive(Entity entity) const noexcept {
-        return Valid(entity);
+        return index < generations_.size() && entity_positions_[index] != kInvalidPosition && generations_[index] == entity.Generation();
     }
 
     void Clear() noexcept {
-        generations_.clear();
-        active_.clear();
-        entity_positions_.clear();
-        entities_.clear();
-        free_list_.clear();
-        alive_count_ = 0;
-
         for (auto& [_, storage] : storages_) {
             storage->Clear();
+        }
+
+        entities_.clear();
+        free_list_.clear();
+        free_list_.reserve(generations_.size());
+
+        for (std::size_t position = 0; position < generations_.size(); ++position) {
+            const u32 index = static_cast<u32>(position);
+            generations_[index] = detail::NextEntityGeneration(generations_[index]);
+            entity_positions_[index] = kInvalidPosition;
+            free_list_.push_back(index);
         }
     }
 
     [[nodiscard]] std::size_t Size() const noexcept {
-        return alive_count_;
+        return entities_.size();
     }
 
     [[nodiscard]] bool Empty() const noexcept {
-        return alive_count_ == 0;
+        return entities_.empty();
     }
 
     [[nodiscard]] std::span<const Entity> Entities() const noexcept {
@@ -263,7 +259,7 @@ public:
     template <typename Func>
     void EachEntity(Func&& func) const {
         for (Entity entity : entities_) {
-            std::invoke(std::forward<Func>(func), entity);
+            std::invoke(func, entity);
         }
     }
 
@@ -364,7 +360,7 @@ public:
     [[nodiscard]] auto View() & -> BasicView<false, Components...>;
 
     template <Component... Components>
-    [[nodiscard]] auto View() const & -> BasicView<true, Components...>;
+    [[nodiscard]] auto View() const& -> BasicView<true, Components...>;
 
 private:
     template <bool IsConst, typename... Components>
@@ -398,19 +394,17 @@ private:
             return *static_cast<detail::ComponentStorage<T>*>(it->second.get());
         }
 
-        auto storage = std::make_unique<detail::ComponentStorage<T>>();
+        auto storage = createScope<detail::ComponentStorage<T>>();
         auto* storage_ptr = storage.get();
         storages_.emplace(key, std::move(storage));
         return *storage_ptr;
     }
 
     std::vector<u32> generations_;
-    std::vector<bool> active_;
     std::vector<u32> entity_positions_;
     std::vector<Entity> entities_;
     std::vector<u32> free_list_;
-    std::unordered_map<std::type_index, std::unique_ptr<detail::IComponentStorage>> storages_;
-    std::size_t alive_count_ = 0;
+    std::unordered_map<std::type_index, scope<detail::IComponentStorage>> storages_;
 };
 
 template <bool IsConst, typename... Components>
@@ -430,7 +424,8 @@ public:
         Iterator() = default;
 
         explicit Iterator(const BasicView* view, std::size_t index) noexcept
-            : view_(view), index_(index) {
+            : view_(view),
+              index_(index) {
             Advance();
         }
 
@@ -442,6 +437,12 @@ public:
             ++index_;
             Advance();
             return *this;
+        }
+
+        Iterator operator++(int) noexcept {
+            Iterator previous = *this;
+            ++(*this);
+            return previous;
         }
 
         [[nodiscard]] bool operator==(const Iterator& other) const noexcept = default;
@@ -484,21 +485,16 @@ public:
 
     [[nodiscard]] auto Get(Entity entity) const {
         WOKI_ASSERT_MSG(ContainsAll(entity), "Entity is not part of this view");
-
-        if constexpr (IsConst) {
-            return std::forward_as_tuple(registry_->template Get<Components>(entity)...);
-        } else {
-            return std::forward_as_tuple(registry_->template Get<Components>(entity)...);
-        }
+        return std::forward_as_tuple(registry_->template Get<Components>(entity)...);
     }
 
     template <typename Func>
     void Each(Func&& func) const {
         for (Entity entity : *this) {
             if constexpr (std::is_invocable_v<Func, Entity, decltype(registry_->template Get<Components>(entity))...>) {
-                std::invoke(std::forward<Func>(func), entity, registry_->template Get<Components>(entity)...);
+                std::invoke(func, entity, registry_->template Get<Components>(entity)...);
             } else {
-                std::invoke(std::forward<Func>(func), registry_->template Get<Components>(entity)...);
+                std::invoke(func, registry_->template Get<Components>(entity)...);
             }
         }
     }
@@ -506,11 +502,7 @@ public:
 private:
     template <Component T>
     [[nodiscard]] const detail::IComponentStorage* CandidateStorage() const noexcept {
-        if constexpr (IsConst) {
-            return registry_->template FindStorage<T>();
-        } else {
-            return registry_->template FindStorage<T>();
-        }
+        return registry_->template FindStorage<T>();
     }
 
     void SelectLeadStorage() noexcept {
@@ -534,7 +526,13 @@ private:
             return;
         }
 
-        entities_ = lead != nullptr ? lead->DenseEntities() : std::span<const Entity>{};
+        if (lead == nullptr) {
+            entities_.clear();
+            return;
+        }
+
+        const auto entities = lead->DenseEntities();
+        entities_.assign(entities.begin(), entities.end());
     }
 
     [[nodiscard]] bool ContainsAll(Entity entity) const noexcept {
@@ -542,7 +540,7 @@ private:
     }
 
     RegistryType* registry_ = nullptr;
-    std::span<const Entity> entities_{};
+    std::vector<Entity> entities_{};
 };
 
 template <Component... Components>
@@ -551,7 +549,7 @@ template <Component... Components>
 }
 
 template <Component... Components>
-[[nodiscard]] inline auto Registry::View() const & -> BasicView<true, Components...> {
+[[nodiscard]] inline auto Registry::View() const& -> BasicView<true, Components...> {
     return BasicView<true, Components...>(*this);
 }
 

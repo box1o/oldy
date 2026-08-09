@@ -17,9 +17,8 @@ public:
     [[nodiscard]] bool IsValid() const noexcept override;
     [[nodiscard]] const InstanceDesc& GetDesc() const noexcept override;
 
-    [[nodiscard]] Result<scope<Surface>> CreateSurface(const SurfaceDescriptor& desc) override;
-    [[nodiscard]] Result<scope<Surface>> CreateSurface(
-        Window& window, SurfaceDesc desc = {}) override;
+    [[nodiscard]] Result<ref<Surface>> CreateSurface(const SurfaceDescriptor& desc) override;
+    [[nodiscard]] Result<ref<Surface>> CreateSurface(Window& window, SurfaceDesc desc = {}) override;
 
     void GetWGSLLanguageFeatures(SupportedWGSLLanguageFeatures& features) const override;
     [[nodiscard]] bool HasWGSLLanguageFeature(WGSLLanguageFeatureName feature) const noexcept override;
@@ -31,10 +30,7 @@ public:
     [[nodiscard]] WaitStatus WaitAny(std::span<FutureWaitInfo> wait_infos, u64 timeout_ns) override;
 
     [[nodiscard]] Result<scope<Adapter>> RequestAdapter(RequestAdapterDesc desc = {}) override;
-    [[nodiscard]] Future RequestAdapter(
-        RequestAdapterDesc desc,
-        CallbackMode callback_mode,
-        RequestAdapterCallback callback) override;
+    [[nodiscard]] Future RequestAdapter(RequestAdapterDesc desc, CallbackMode callback_mode, RequestAdapterCallback callback) override;
 
     [[nodiscard]] NativeHandles GetNativeHandles() const noexcept override;
 
@@ -42,10 +38,8 @@ public:
 
 private:
     [[nodiscard]] bool Initialize() noexcept;
-    [[nodiscard]] WGPURequestAdapterOptions BuildRequestAdapterOptions(
-        const RequestAdapterDesc& desc) const;
-    [[nodiscard]] WGPUWaitStatus WaitAnyNative(
-        size_t future_count, WGPUFutureWaitInfo* futures, u64 timeout_ns) const noexcept;
+    [[nodiscard]] WGPURequestAdapterOptions BuildRequestAdapterOptions(const RequestAdapterDesc& desc) const;
+    [[nodiscard]] WGPUWaitStatus WaitAnyNative(size_t future_count, WGPUFutureWaitInfo* futures, u64 timeout_ns) const noexcept;
 
     InstanceDesc desc_;
     detail::InstanceHandle handle_;

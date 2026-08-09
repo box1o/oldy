@@ -1,12 +1,12 @@
 #pragma once
 
-#include <woki/rhi/descriptors.hpp>
-#include <woki/rhi/types.hpp>
-
-#include "../wgpu_enums.hpp"
-#include "string.hpp"
-
 #include <webgpu/webgpu.h>
+
+#include <woki/rhi/types.hpp>
+#include <woki/rhi/descriptors.hpp>
+
+#include "string.hpp"
+#include "../wgpu_enums.hpp"
 
 namespace woki::rhi::wgpu::detail {
 
@@ -20,10 +20,8 @@ inline void FillLimitsFromNative(const WGPULimits& native_limits, Limits& limits
     limits.max_bind_groups = native_limits.maxBindGroups;
     limits.max_bind_groups_plus_vertex_buffers = native_limits.maxBindGroupsPlusVertexBuffers;
     limits.max_bindings_per_bind_group = native_limits.maxBindingsPerBindGroup;
-    limits.max_dynamic_uniform_buffers_per_pipeline_layout =
-        native_limits.maxDynamicUniformBuffersPerPipelineLayout;
-    limits.max_dynamic_storage_buffers_per_pipeline_layout =
-        native_limits.maxDynamicStorageBuffersPerPipelineLayout;
+    limits.max_dynamic_uniform_buffers_per_pipeline_layout = native_limits.maxDynamicUniformBuffersPerPipelineLayout;
+    limits.max_dynamic_storage_buffers_per_pipeline_layout = native_limits.maxDynamicStorageBuffersPerPipelineLayout;
     limits.max_sampled_textures_per_shader_stage = native_limits.maxSampledTexturesPerShaderStage;
     limits.max_samplers_per_shader_stage = native_limits.maxSamplersPerShaderStage;
     limits.max_storage_buffers_per_shader_stage = native_limits.maxStorageBuffersPerShaderStage;
@@ -75,12 +73,10 @@ inline void FillLimitsFromNative(const WGPULimits& native_limits, Limits& limits
         native_limits.maxBindingsPerBindGroup = limits.max_bindings_per_bind_group;
     }
     if (limits.max_dynamic_uniform_buffers_per_pipeline_layout != kLimitU32Undefined) {
-        native_limits.maxDynamicUniformBuffersPerPipelineLayout =
-            limits.max_dynamic_uniform_buffers_per_pipeline_layout;
+        native_limits.maxDynamicUniformBuffersPerPipelineLayout = limits.max_dynamic_uniform_buffers_per_pipeline_layout;
     }
     if (limits.max_dynamic_storage_buffers_per_pipeline_layout != kLimitU32Undefined) {
-        native_limits.maxDynamicStorageBuffersPerPipelineLayout =
-            limits.max_dynamic_storage_buffers_per_pipeline_layout;
+        native_limits.maxDynamicStorageBuffersPerPipelineLayout = limits.max_dynamic_storage_buffers_per_pipeline_layout;
     }
     if (limits.max_sampled_textures_per_shader_stage != kLimitU32Undefined) {
         native_limits.maxSampledTexturesPerShaderStage = limits.max_sampled_textures_per_shader_stage;

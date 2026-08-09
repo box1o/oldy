@@ -1,12 +1,11 @@
 #pragma once
 
 #include <utility>
-
 #include <webgpu/webgpu.h>
 
 namespace woki::rhi::wgpu::detail {
 
-template <typename Handle, void (*ReleaseFn)(Handle)>
+template <typename Handle, void (*AddRefFn)(Handle), void (*ReleaseFn)(Handle)>
 class GpuHandle {
 public:
     GpuHandle() = default;
@@ -14,10 +13,22 @@ public:
     explicit GpuHandle(Handle handle) noexcept
         : handle_(handle) {}
 
-    ~GpuHandle() { reset(); }
+    [[nodiscard]] static GpuHandle Retain(Handle handle) noexcept {
+        if (handle != nullptr) {
+            AddRefFn(handle);
+        }
+        return GpuHandle(handle);
+    }
+
+    ~GpuHandle() {
+        reset();
+    }
 
     GpuHandle(GpuHandle&& other) noexcept
         : handle_(other.release()) {}
+
+    GpuHandle(const GpuHandle& other) noexcept
+        : GpuHandle(Retain(other.handle_)) {}
 
     GpuHandle& operator=(GpuHandle&& other) noexcept {
         if (this != &other) {
@@ -26,11 +37,21 @@ public:
         return *this;
     }
 
-    GpuHandle(const GpuHandle&) = delete;
-    GpuHandle& operator=(const GpuHandle&) = delete;
+    GpuHandle& operator=(const GpuHandle& other) noexcept {
+        if (this != &other) {
+            GpuHandle copy(other);
+            swap(copy);
+        }
+        return *this;
+    }
 
-    [[nodiscard]] Handle get() const noexcept { return handle_; }
-    [[nodiscard]] explicit operator bool() const noexcept { return handle_ != nullptr; }
+    [[nodiscard]] Handle get() const noexcept {
+        return handle_;
+    }
+
+    [[nodiscard]] explicit operator bool() const noexcept {
+        return handle_ != nullptr;
+    }
 
     void reset(Handle handle = nullptr) noexcept {
         if (handle_ != nullptr) {
@@ -39,51 +60,45 @@ public:
         handle_ = handle;
     }
 
-    [[nodiscard]] Handle release() noexcept { return std::exchange(handle_, nullptr); }
+    [[nodiscard]] Handle release() noexcept {
+        return std::exchange(handle_, nullptr);
+    }
+
+    void swap(GpuHandle& other) noexcept {
+        std::swap(handle_, other.handle_);
+    }
 
 private:
     Handle handle_{nullptr};
 };
 
-using InstanceHandle = GpuHandle<WGPUInstance, wgpuInstanceRelease>;
-using SurfaceHandle = GpuHandle<WGPUSurface, wgpuSurfaceRelease>;
-using AdapterHandle = GpuHandle<WGPUAdapter, wgpuAdapterRelease>;
-using TextureHandle = GpuHandle<WGPUTexture, wgpuTextureRelease>;
-using TextureViewHandle = GpuHandle<WGPUTextureView, wgpuTextureViewRelease>;
-using DeviceHandle = GpuHandle<WGPUDevice, wgpuDeviceRelease>;
-using QueueHandle = GpuHandle<WGPUQueue, wgpuQueueRelease>;
-using BufferHandle = GpuHandle<WGPUBuffer, wgpuBufferRelease>;
-using CommandBufferHandle = GpuHandle<WGPUCommandBuffer, wgpuCommandBufferRelease>;
-using CommandEncoderHandle = GpuHandle<WGPUCommandEncoder, wgpuCommandEncoderRelease>;
-using ComputePassEncoderHandle = GpuHandle<WGPUComputePassEncoder, wgpuComputePassEncoderRelease>;
-using RenderPassEncoderHandle = GpuHandle<WGPURenderPassEncoder, wgpuRenderPassEncoderRelease>;
-using TexelBufferViewHandle = GpuHandle<WGPUTexelBufferView, wgpuTexelBufferViewRelease>;
-using RenderBundleHandle = GpuHandle<WGPURenderBundle, wgpuRenderBundleRelease>;
-using BindGroupHandle = GpuHandle<WGPUBindGroup, wgpuBindGroupRelease>;
-using BindGroupLayoutHandle = GpuHandle<WGPUBindGroupLayout, wgpuBindGroupLayoutRelease>;
-using ComputePipelineHandle = GpuHandle<WGPUComputePipeline, wgpuComputePipelineRelease>;
-using ExternalTextureHandle = GpuHandle<WGPUExternalTexture, wgpuExternalTextureRelease>;
-using PipelineLayoutHandle = GpuHandle<WGPUPipelineLayout, wgpuPipelineLayoutRelease>;
-using QuerySetHandle = GpuHandle<WGPUQuerySet, wgpuQuerySetRelease>;
-using RenderBundleEncoderHandle = GpuHandle<WGPURenderBundleEncoder, wgpuRenderBundleEncoderRelease>;
-using RenderPipelineHandle = GpuHandle<WGPURenderPipeline, wgpuRenderPipelineRelease>;
-using ResourceTableHandle = GpuHandle<WGPUResourceTable, wgpuResourceTableRelease>;
-using SamplerHandle = GpuHandle<WGPUSampler, wgpuSamplerRelease>;
-using ShaderModuleHandle = GpuHandle<WGPUShaderModule, wgpuShaderModuleRelease>;
-using SharedBufferMemoryHandle = GpuHandle<WGPUSharedBufferMemory, wgpuSharedBufferMemoryRelease>;
-using SharedFenceHandle = GpuHandle<WGPUSharedFence, wgpuSharedFenceRelease>;
-using SharedTextureMemoryHandle = GpuHandle<WGPUSharedTextureMemory, wgpuSharedTextureMemoryRelease>;
-
-inline void retain(WGPUInstance handle) noexcept {
-    if (handle != nullptr) {
-        wgpuInstanceAddRef(handle);
-    }
-}
-
-inline void retain(WGPUAdapter handle) noexcept {
-    if (handle != nullptr) {
-        wgpuAdapterAddRef(handle);
-    }
-}
+using InstanceHandle = GpuHandle<WGPUInstance, wgpuInstanceAddRef, wgpuInstanceRelease>;
+using SurfaceHandle = GpuHandle<WGPUSurface, wgpuSurfaceAddRef, wgpuSurfaceRelease>;
+using AdapterHandle = GpuHandle<WGPUAdapter, wgpuAdapterAddRef, wgpuAdapterRelease>;
+using TextureHandle = GpuHandle<WGPUTexture, wgpuTextureAddRef, wgpuTextureRelease>;
+using TextureViewHandle = GpuHandle<WGPUTextureView, wgpuTextureViewAddRef, wgpuTextureViewRelease>;
+using DeviceHandle = GpuHandle<WGPUDevice, wgpuDeviceAddRef, wgpuDeviceRelease>;
+using QueueHandle = GpuHandle<WGPUQueue, wgpuQueueAddRef, wgpuQueueRelease>;
+using BufferHandle = GpuHandle<WGPUBuffer, wgpuBufferAddRef, wgpuBufferRelease>;
+using CommandBufferHandle = GpuHandle<WGPUCommandBuffer, wgpuCommandBufferAddRef, wgpuCommandBufferRelease>;
+using CommandEncoderHandle = GpuHandle<WGPUCommandEncoder, wgpuCommandEncoderAddRef, wgpuCommandEncoderRelease>;
+using ComputePassEncoderHandle = GpuHandle<WGPUComputePassEncoder, wgpuComputePassEncoderAddRef, wgpuComputePassEncoderRelease>;
+using RenderPassEncoderHandle = GpuHandle<WGPURenderPassEncoder, wgpuRenderPassEncoderAddRef, wgpuRenderPassEncoderRelease>;
+using TexelBufferViewHandle = GpuHandle<WGPUTexelBufferView, wgpuTexelBufferViewAddRef, wgpuTexelBufferViewRelease>;
+using RenderBundleHandle = GpuHandle<WGPURenderBundle, wgpuRenderBundleAddRef, wgpuRenderBundleRelease>;
+using BindGroupHandle = GpuHandle<WGPUBindGroup, wgpuBindGroupAddRef, wgpuBindGroupRelease>;
+using BindGroupLayoutHandle = GpuHandle<WGPUBindGroupLayout, wgpuBindGroupLayoutAddRef, wgpuBindGroupLayoutRelease>;
+using ComputePipelineHandle = GpuHandle<WGPUComputePipeline, wgpuComputePipelineAddRef, wgpuComputePipelineRelease>;
+using ExternalTextureHandle = GpuHandle<WGPUExternalTexture, wgpuExternalTextureAddRef, wgpuExternalTextureRelease>;
+using PipelineLayoutHandle = GpuHandle<WGPUPipelineLayout, wgpuPipelineLayoutAddRef, wgpuPipelineLayoutRelease>;
+using QuerySetHandle = GpuHandle<WGPUQuerySet, wgpuQuerySetAddRef, wgpuQuerySetRelease>;
+using RenderBundleEncoderHandle = GpuHandle<WGPURenderBundleEncoder, wgpuRenderBundleEncoderAddRef, wgpuRenderBundleEncoderRelease>;
+using RenderPipelineHandle = GpuHandle<WGPURenderPipeline, wgpuRenderPipelineAddRef, wgpuRenderPipelineRelease>;
+using ResourceTableHandle = GpuHandle<WGPUResourceTable, wgpuResourceTableAddRef, wgpuResourceTableRelease>;
+using SamplerHandle = GpuHandle<WGPUSampler, wgpuSamplerAddRef, wgpuSamplerRelease>;
+using ShaderModuleHandle = GpuHandle<WGPUShaderModule, wgpuShaderModuleAddRef, wgpuShaderModuleRelease>;
+using SharedBufferMemoryHandle = GpuHandle<WGPUSharedBufferMemory, wgpuSharedBufferMemoryAddRef, wgpuSharedBufferMemoryRelease>;
+using SharedFenceHandle = GpuHandle<WGPUSharedFence, wgpuSharedFenceAddRef, wgpuSharedFenceRelease>;
+using SharedTextureMemoryHandle = GpuHandle<WGPUSharedTextureMemory, wgpuSharedTextureMemoryAddRef, wgpuSharedTextureMemoryRelease>;
 
 } // namespace woki::rhi::wgpu::detail

@@ -11,7 +11,7 @@ class WgpuSurfaceImpl;
 
 class WgpuSwapchainImpl final : public Swapchain {
 public:
-    WgpuSwapchainImpl(WgpuDeviceImpl& device, WgpuSurfaceImpl& surface, SwapchainDesc desc);
+    WgpuSwapchainImpl(ref<WgpuDeviceImpl> device, ref<WgpuSurfaceImpl> surface, SwapchainDesc desc);
     ~WgpuSwapchainImpl() override;
 
     [[nodiscard]] TextureFormat ColorFormat() const noexcept override;
@@ -26,20 +26,20 @@ public:
 private:
     [[nodiscard]] Result<void> Configure();
     [[nodiscard]] Result<void> CreateOrResizeDepth();
+    void ReleaseCurrentTexture() noexcept;
     void ReleaseDepthResources() noexcept;
 
-    WgpuDeviceImpl* device_{nullptr};
-    WgpuSurfaceImpl* surface_{nullptr};
+    ref<WgpuDeviceImpl> device_{};
+    ref<WgpuSurfaceImpl> surface_{};
     SwapchainDesc desc_{};
     u32 width_{0};
     u32 height_{0};
+    detail::TextureHandle current_texture_;
     detail::TextureHandle depth_texture_;
     scope<TextureView> depth_view_;
+    bool configured_{false};
 };
 
-[[nodiscard]] Result<scope<Swapchain>> CreateSwapchainObject(
-    WgpuDeviceImpl& device,
-    Surface& surface,
-    SwapchainDesc desc);
+[[nodiscard]] Result<scope<Swapchain>> CreateSwapchainObject(ref<WgpuDeviceImpl> device, ref<Surface> surface, SwapchainDesc desc);
 
 } // namespace woki::rhi::wgpu

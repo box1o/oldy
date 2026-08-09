@@ -1,7 +1,7 @@
 #pragma once
 
 #include <woki/core.hpp>
-#include <woki/gfx.hpp>
+#include <woki/platform.hpp>
 
 namespace woki {
 

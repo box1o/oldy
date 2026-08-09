@@ -1,6 +1,6 @@
-#include "woki/ext/path_safety.hpp"
-
 #include <algorithm>
+
+#include "woki/ext/path_safety.hpp"
 
 namespace woki::ext {
 

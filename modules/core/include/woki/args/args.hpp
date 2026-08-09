@@ -2,18 +2,17 @@
 
 // IWYU pragma: private, include "woki/core.hpp"
 
-#include "../error/result.hpp"
-
-#include <cxxopts.hpp>
-
-#include <exception>
-#include <optional>
-#include <sstream>
 #include <string>
+#include <vector>
+#include <sstream>
+#include <utility>
+#include <optional>
+#include <exception>
+#include <cxxopts.hpp>
 #include <string_view>
 #include <type_traits>
-#include <utility>
-#include <vector>
+
+#include "../error/result.hpp"
 
 namespace woki {
 
@@ -51,10 +50,7 @@ public:
 
     template <typename T>
     void AddOption(std::string option, std::string description, const T& default_value) {
-        options_.add_options()(
-            std::move(option),
-            std::move(description),
-            cxxopts::value<T>()->default_value(detail::OptionDefaultValue(default_value)));
+        options_.add_options()(std::move(option), std::move(description), cxxopts::value<T>()->default_value(detail::OptionDefaultValue(default_value)));
     }
 
     void AddPositional(std::string option);

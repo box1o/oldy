@@ -1,8 +1,8 @@
 #pragma once
 
-#include "types.hpp"
-
 #include <string_view>
+
+#include "types.hpp"
 
 namespace woki::rhi {
 

@@ -1,19 +1,17 @@
-#include <woki/core.hpp>
-#include <woki/gfx.hpp>
-#include <woki/rhi.hpp>
-
 #include <array>
 
-int main(int argc, char* argv[]) {
+#include <woki/rhi.hpp>
+#include <woki/core.hpp>
+#include <woki/platform.hpp>
+
+int main() {
     using namespace woki;
 
-    auto window = Window::Create({
+    auto window = TRY(Window::Create({
         .title = "woki",
-    });
-
-    auto instance = TRY(rhi::Instance::Create({
-        .enable_validation = true,
     }));
+
+    auto instance = TRY(rhi::Instance::Create());
 
     auto surface = TRY(instance->CreateSurface(*window));
 
@@ -21,7 +19,7 @@ int main(int argc, char* argv[]) {
         .compatible_surface = surface.get(),
     }));
 
-    auto device = TRY(adapter->RequestDevice({}));
+    auto device = TRY(adapter->RequestDevice());
 
     rhi::SurfaceCapabilities capabilities{};
     TRY(surface->GetCapabilities(*adapter, capabilities));
@@ -30,14 +28,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    const rhi::TextureFormat color_format = capabilities.formats.front();
-
-    auto swapchain = TRY(rhi::Swapchain::Builder(*device, *surface)
-            .SizeSource(window.get())
-            .ColorFormat(color_format)
-            .EnableDepth(false)
-            .Label("MainSwapchain")
-            .Build());
+    auto swapchain = TRY(rhi::Swapchain::Builder(device, surface).Size(window->GetWidth(), window->GetHeight()).ColorFormat(capabilities.formats.front()).EnableDepth(false).Label("MainSwapchain").Build());
 
     while (!window->ShouldClose()) {
         window->PollEvents();
@@ -48,17 +39,24 @@ int main(int argc, char* argv[]) {
             .label = "MainCommandEncoder",
         }));
 
-        const rhi::RenderPassColorAttachmentDesc color_attachment{
-            .view = &frame.ColorView(),
-            .load_op = rhi::LoadOp::Clear,
-            .store_op = rhi::StoreOp::Store,
-            .clear_value = { 0.1, 0.15, 0.25, 1.0, },
+        const std::array color_attachments{
+            rhi::RenderPassColorAttachmentDesc{
+                .view = &frame.ColorView(),
+                .load_op = rhi::LoadOp::Clear,
+                .store_op = rhi::StoreOp::Store,
+                .clear_value =
+                    {
+                        0.1,
+                        0.15,
+                        0.25,
+                        1.0,
+                    },
+            },
         };
 
         const rhi::RenderPassDescTyped render_pass_desc{
             .label = "ClearPass",
-            .color_attachments =
-                std::span<const rhi::RenderPassColorAttachmentDesc>(&color_attachment, 1),
+            .color_attachments = color_attachments,
         };
 
         auto render_pass = TRY(encoder->BeginRenderPass(render_pass_desc));
@@ -69,7 +67,7 @@ int main(int argc, char* argv[]) {
             .label = "MainCommandBuffer",
         }));
 
-        std::array<rhi::CommandBuffer*, 1> commands{
+        const std::array commands{
             command_buffer.get(),
         };
 

@@ -1,15 +1,14 @@
+#include <string>
+#include <cstring>
+#include <algorithm>
+#include <filesystem>
+#include <string_view>
+
+#include "woki/ext/limits.hpp"
+#include "woki/ext/host/api.hpp"
 #include "woki/ext/host/cabi.hpp"
 
-#include "woki/ext/host/api.hpp"
-#include "woki/ext/limits.hpp"
-
 #include "types.h"
-
-#include <algorithm>
-#include <cstring>
-#include <filesystem>
-#include <string>
-#include <string_view>
 
 namespace woki::ext::host::cabi {
 
@@ -30,24 +29,23 @@ static_assert(cabi::kInvalid == WOKI_EXT_INVALID);
 
 [[nodiscard]] i32 StatusFromError(const Error& error) noexcept {
     switch (error.Code()) {
-    case ErrorCode::FileNotFound:
-        return cabi::kNotFound;
-    case ErrorCode::ValidationOutOfRange:
-        return cabi::kNoSpace;
-    case ErrorCode::ValidationInvalidState:
-        return cabi::kDenied;
-    case ErrorCode::InvalidArgument:
-    case ErrorCode::ParseInvalidFormat:
-    case ErrorCode::ParseMissingField:
-    case ErrorCode::ParseTypeMismatch:
-        return cabi::kInvalid;
-    default:
-        return cabi::kErr;
+        case ErrorCode::FileNotFound:
+            return cabi::kNotFound;
+        case ErrorCode::ValidationOutOfRange:
+            return cabi::kNoSpace;
+        case ErrorCode::ValidationInvalidState:
+            return cabi::kDenied;
+        case ErrorCode::InvalidArgument:
+        case ErrorCode::ParseInvalidFormat:
+        case ErrorCode::ParseMissingField:
+        case ErrorCode::ParseTypeMismatch:
+            return cabi::kInvalid;
+        default:
+            return cabi::kErr;
     }
 }
 
-[[nodiscard]] Result<std::string_view> BoundedString(
-    const char* data, u32 len, u32 max_len, std::string_view field) {
+[[nodiscard]] Result<std::string_view> BoundedString(const char* data, u32 len, u32 max_len, std::string_view field) {
     if (data == nullptr) {
         return Err(ErrorCode::InvalidArgument, std::string(field) + " pointer is null.");
     }
@@ -57,8 +55,7 @@ static_assert(cabi::kInvalid == WOKI_EXT_INVALID);
     return Ok(std::string_view(data, len));
 }
 
-[[nodiscard]] Result<std::string_view> BoundedCString(
-    const char* data, u32 max_len, std::string_view field) {
+[[nodiscard]] Result<std::string_view> BoundedCString(const char* data, u32 max_len, std::string_view field) {
     if (data == nullptr) {
         return Err(ErrorCode::InvalidArgument, std::string(field) + " pointer is null.");
     }
@@ -88,16 +85,16 @@ static_assert(cabi::kInvalid == WOKI_EXT_INVALID);
 
 [[nodiscard]] LogLevel ParseLogLevel(u32 level) noexcept {
     switch (level) {
-    case 0:
-        return LogLevel::Debug;
-    case 1:
-        return LogLevel::Info;
-    case 2:
-        return LogLevel::Warn;
-    case 3:
-        return LogLevel::Error;
-    default:
-        return LogLevel::Info;
+        case 0:
+            return LogLevel::Debug;
+        case 1:
+            return LogLevel::Info;
+        case 2:
+            return LogLevel::Warn;
+        case 3:
+            return LogLevel::Error;
+        default:
+            return LogLevel::Info;
     }
 }
 
@@ -193,8 +190,7 @@ i32 FileWrite(Record& record, const char* rel_path, u32 rel_path_len, const u8* 
     }
 
     HostApi host(record);
-    auto written =
-        host.WriteFile(std::filesystem::path(std::string(*path)), std::span<const u8>(data, len));
+    auto written = host.WriteFile(std::filesystem::path(std::string(*path)), std::span<const u8>(data, len));
     if (!written) {
         return StatusFromError(written.error());
     }
@@ -223,8 +219,7 @@ i32 FileAppend(Record& record, const char* rel_path, u32 rel_path_len, const u8*
     }
 
     HostApi host(record);
-    auto appended =
-        host.AppendFile(std::filesystem::path(std::string(*path)), std::span<const u8>(data, len));
+    auto appended = host.AppendFile(std::filesystem::path(std::string(*path)), std::span<const u8>(data, len));
     if (!appended) {
         return StatusFromError(appended.error());
     }

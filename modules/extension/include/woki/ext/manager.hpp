@@ -2,10 +2,10 @@
 
 // IWYU pragma: private, include "woki/ext/ext.hpp"
 
-#include "registry.hpp"
-#include "runtime.hpp"
-
 #include <filesystem>
+
+#include "runtime.hpp"
+#include "registry.hpp"
 
 namespace woki::ext {
 
@@ -27,8 +27,7 @@ public:
 
     void Tick(f64 delta_ms);
     void DispatchEvent(u32 event_type, std::span<const u8> payload);
-    [[nodiscard]] Result<void> ExecuteCommand(
-        std::string_view command_id, std::span<const u8> payload = {});
+    [[nodiscard]] Result<void> ExecuteCommand(std::string_view command_id, std::span<const u8> payload = {});
     void Unload(std::string_view id);
     void UnloadAll();
 

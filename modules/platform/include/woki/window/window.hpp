@@ -1,9 +1,9 @@
 #pragma once
 
+#include <map>
 #include <array>
-#include <functional>
 #include <string>
-#include <unordered_map>
+#include <functional>
 
 #include <woki/core.hpp>
 #include <woki/events/events.hpp>
@@ -25,11 +25,14 @@ struct WindowOptions {
     bool decorated{true};
 };
 
-class Window final {
+class Window final : public ref_from_this<Window> {
+    struct ConstructionKey {};
+
 public:
     using EventCallback = std::function<void(events::Event&)>;
     using ResizeCallback = std::function<void(u32 width, u32 height)>;
 
+    explicit Window(ConstructionKey);
     ~Window();
 
     Window(const Window&) = delete;
@@ -37,7 +40,7 @@ public:
     Window(Window&&) = delete;
     Window& operator=(Window&&) = delete;
 
-    [[nodiscard]] static scope<Window> Create(const WindowOptions& options = {});
+    [[nodiscard]] static Result<ref<Window>> Create(const WindowOptions& options = {});
 
     [[nodiscard]] const std::string& GetTitle() const noexcept;
     [[nodiscard]] u32 GetWidth() const noexcept;
@@ -68,12 +71,8 @@ public:
     void RemoveResizeCallback(CallbackId id);
 
 private:
-    Window() = default;
-
     bool Initialize(const WindowOptions& options) noexcept;
-    bool InitializeGlfw() noexcept;
     bool CreateGlfwWindow(const WindowOptions& options) noexcept;
-    static void ShutdownGlfwIfNeeded() noexcept;
 
     void SetupCallbacks() noexcept;
     void UpdateWindowMetrics() noexcept;
@@ -84,7 +83,8 @@ private:
     void HandleWindowCloseRequested() noexcept;
     void EmitEvent(events::Event& event);
 
-    template <typename T, typename... Args> void EmitEvent(Args&&... args) {
+    template <typename T, typename... Args>
+    void EmitEvent(Args&&... args) {
         T event(std::forward<Args>(args)...);
         EmitEvent(event);
     }
@@ -96,8 +96,8 @@ private:
     struct Impl;
     scope<Impl> impl_;
 
-    std::unordered_map<CallbackId, EventCallback> event_callbacks_;
-    std::unordered_map<CallbackId, ResizeCallback> resize_callbacks_;
+    std::map<CallbackId, EventCallback> event_callbacks_;
+    std::map<CallbackId, ResizeCallback> resize_callbacks_;
     CallbackId next_callback_id_{1};
 
     std::string title_{"woki"};
@@ -117,9 +117,6 @@ private:
     bool has_cursor_position_{false};
     bool close_event_emitted_{false};
     std::array<bool, 8> mouse_buttons_down_{};
-
-    static inline u32 glfw_window_count_ = 0;
-    static inline bool glfw_initialized_ = false;
 };
 
 } // namespace woki

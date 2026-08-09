@@ -2,9 +2,9 @@
 
 // IWYU pragma: private, include "woki/core.hpp"
 
-#include "../types/types.hpp"
-
 #include <chrono>
+
+#include "../types/types.hpp"
 
 namespace woki {
 
@@ -41,20 +41,17 @@ public:
 
     template <typename Duration>
     [[nodiscard]] static u64 ToMilliseconds(Duration duration) noexcept {
-        return static_cast<u64>(
-            std::chrono::duration_cast<std::chrono::milliseconds>(duration).count());
+        return static_cast<u64>(std::chrono::duration_cast<std::chrono::milliseconds>(duration).count());
     }
 
     template <typename Duration>
     [[nodiscard]] static u64 ToMicroseconds(Duration duration) noexcept {
-        return static_cast<u64>(
-            std::chrono::duration_cast<std::chrono::microseconds>(duration).count());
+        return static_cast<u64>(std::chrono::duration_cast<std::chrono::microseconds>(duration).count());
     }
 
     template <typename Duration>
     [[nodiscard]] static u64 ToNanoseconds(Duration duration) noexcept {
-        return static_cast<u64>(
-            std::chrono::duration_cast<std::chrono::nanoseconds>(duration).count());
+        return static_cast<u64>(std::chrono::duration_cast<std::chrono::nanoseconds>(duration).count());
     }
 };
 
@@ -94,7 +91,7 @@ public:
     [[nodiscard]] u64 FrameCount() const noexcept;
 
 private:
-    Clock::TimePoint start_time_;
+    Clock::TimePoint start_time_{};
     Clock::TimePoint last_tick_;
     f64 delta_seconds_ = 0.0;
     f64 total_seconds_ = 0.0;

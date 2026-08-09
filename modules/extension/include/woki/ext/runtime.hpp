@@ -2,11 +2,11 @@
 
 // IWYU pragma: private, include "woki/ext/ext.hpp"
 
-#include "registry.hpp"
-
-#include <memory>
 #include <span>
+#include <memory>
 #include <string_view>
+
+#include "registry.hpp"
 
 namespace woki::ext {
 
@@ -18,8 +18,7 @@ public:
     [[nodiscard]] virtual Result<void> Initialize(Record& record) = 0;
     virtual void Tick(Record& record, f64 delta_ms) = 0;
     virtual void DispatchEvent(Record& record, u32 event_type, std::span<const u8> payload) = 0;
-    [[nodiscard]] virtual Result<void> DispatchCommand(
-        Record& record, std::string_view command_id, std::span<const u8> payload) = 0;
+    [[nodiscard]] virtual Result<void> DispatchCommand(Record& record, std::string_view command_id, std::span<const u8> payload) = 0;
     virtual void Unload(Record& record) = 0;
 };
 
@@ -37,8 +36,7 @@ public:
     [[nodiscard]] Result<void> Initialize(Record& record);
     void Tick(Record& record, f64 delta_ms);
     void DispatchEvent(Record& record, u32 event_type, std::span<const u8> payload);
-    [[nodiscard]] Result<void> DispatchCommand(
-        Record& record, std::string_view command_id, std::span<const u8> payload);
+    [[nodiscard]] Result<void> DispatchCommand(Record& record, std::string_view command_id, std::span<const u8> payload);
     void Unload(Record& record);
 
 private:

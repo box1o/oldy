@@ -2,12 +2,12 @@
 
 // IWYU pragma: private, include "woki/core.hpp"
 
-#include "../error/result.hpp"
-
+#include <string>
 #include <cstdlib>
 #include <optional>
-#include <string>
 #include <string_view>
+
+#include "../error/result.hpp"
 
 namespace woki::env {
 

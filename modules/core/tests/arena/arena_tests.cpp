@@ -1,15 +1,14 @@
-#include <catch2/catch_test_macros.hpp>
-#include <woki/core.hpp>
-
-#include <cstddef>
-#include <cstdint>
 #include <array>
 #include <limits>
-#include <memory_resource>
-#include <stdexcept>
 #include <string>
-#include <utility>
 #include <vector>
+#include <cstddef>
+#include <cstdint>
+#include <utility>
+#include <memory_resource>
+#include <catch2/catch_test_macros.hpp>
+
+#include <woki/core.hpp>
 
 namespace {
 
@@ -17,7 +16,8 @@ struct Counted {
     static inline int alive = 0;
     static inline int destroyed = 0;
 
-    explicit Counted(std::string value) : name(std::move(value)) {
+    explicit Counted(std::string value)
+        : name(std::move(value)) {
         ++alive;
     }
 
@@ -32,7 +32,8 @@ struct Counted {
 struct Ordered {
     static inline std::vector<int> destroyed;
 
-    explicit Ordered(int value) : id(value) {}
+    explicit Ordered(int value)
+        : id(value) {}
 
     ~Ordered() {
         destroyed.push_back(id);

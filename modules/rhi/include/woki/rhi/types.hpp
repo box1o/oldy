@@ -1,18 +1,17 @@
 #pragma once
 
-#include "forward.hpp"
-
-#include "../enums.hpp"
-
+#include <span>
 #include <cmath>
+#include <string>
+#include <vector>
 #include <cstddef>
 #include <functional>
-#include <span>
-#include <string>
 #include <string_view>
-#include <vector>
 
 #include <woki/core.hpp>
+
+#include "forward.hpp"
+#include "../enums.hpp"
 
 namespace woki::rhi {
 
@@ -60,36 +59,28 @@ struct NativeHandles final {
     void* resource{nullptr};
 };
 
-using RequestAdapterCallback =
-    std::function<void(RequestAdapterStatus status, scope<Adapter> adapter, std::string_view message)>;
+using RequestAdapterCallback = std::function<void(RequestAdapterStatus status, scope<Adapter> adapter, std::string_view message)>;
 
-using RequestDeviceCallback =
-    std::function<void(RequestDeviceStatus status, scope<Device> device, std::string_view message)>;
+using RequestDeviceCallback = std::function<void(RequestDeviceStatus status, ref<Device> device, std::string_view message)>;
 
 using DeviceLostCallback = std::function<void(DeviceLostReason reason, std::string_view message)>;
 using UncapturedErrorCallback = std::function<void(ErrorType type, std::string_view message)>;
 
-using PopErrorScopeCallback =
-    std::function<void(PopErrorScopeStatus status, ErrorType type, std::string_view message)>;
+using PopErrorScopeCallback = std::function<void(PopErrorScopeStatus status, ErrorType type, std::string_view message)>;
 
-using QueueWorkDoneCallback =
-    std::function<void(QueueWorkDoneStatus status, std::string_view message)>;
+using QueueWorkDoneCallback = std::function<void(QueueWorkDoneStatus status, std::string_view message)>;
 
-using CreateComputePipelineCallback = std::function<void(
-    CreatePipelineAsyncStatus status, scope<ComputePipeline> pipeline, std::string_view message)>;
+using CreateComputePipelineCallback = std::function<void(CreatePipelineAsyncStatus status, scope<ComputePipeline> pipeline, std::string_view message)>;
 
-using CreateRenderPipelineCallback = std::function<void(
-    CreatePipelineAsyncStatus status, scope<RenderPipeline> pipeline, std::string_view message)>;
+using CreateRenderPipelineCallback = std::function<void(CreatePipelineAsyncStatus status, scope<RenderPipeline> pipeline, std::string_view message)>;
 
 using LoggingCallback = std::function<void(LoggingType type, std::string_view message)>;
 
-using ShaderModuleCompilationInfoCallback = std::function<void(
-    CompilationInfoRequestStatus status, const CompilationInfo* compilation_info, std::string_view message)>;
+using ShaderModuleCompilationInfoCallback = std::function<void(CompilationInfoRequestStatus status, const CompilationInfo* compilation_info, std::string_view message)>;
 
-using MapAsyncCallback =
-    std::function<void(MapAsyncStatus status, std::string_view message)>;
+using MapAsyncCallback = std::function<void(MapAsyncStatus status, std::string_view message)>;
 
-using Proc = void(*)();
+using Proc = void (*)();
 
 inline constexpr u64 kWholeSize = ~0ULL;
 inline constexpr size_t kWholeMapSize = kWholeSize;

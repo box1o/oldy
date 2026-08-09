@@ -4,7 +4,6 @@
 
 namespace woki::rhi {
 
-
 enum class AdapterType : u32 {
     DiscreteGPU,
     IntegratedGPU,

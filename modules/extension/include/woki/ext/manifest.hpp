@@ -2,15 +2,15 @@
 
 // IWYU pragma: private, include "woki/ext/ext.hpp"
 
-#include "command.hpp"
-#include "perm.hpp"
+#include <string>
+#include <vector>
+#include <filesystem>
+#include <string_view>
 
 #include <woki/core.hpp>
 
-#include <filesystem>
-#include <string>
-#include <string_view>
-#include <vector>
+#include "perm.hpp"
+#include "command.hpp"
 
 namespace woki::ext {
 
@@ -29,8 +29,7 @@ struct Manifest {
 
 [[nodiscard]] Result<Manifest> LoadManifest(const std::filesystem::path& path);
 [[nodiscard]] Result<void> ValidateManifest(const Manifest& manifest);
-[[nodiscard]] Result<void> ValidateManifestForPackage(
-    const Manifest& manifest, std::string_view package_id);
+[[nodiscard]] Result<void> ValidateManifestForPackage(const Manifest& manifest, std::string_view package_id);
 [[nodiscard]] bool HasPermission(const Manifest& manifest, Permission permission) noexcept;
 
 } // namespace woki::ext

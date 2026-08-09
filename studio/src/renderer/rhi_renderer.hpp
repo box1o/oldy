@@ -2,8 +2,8 @@
 
 #include <woki/enums.hpp>
 #include <woki/events/events.hpp>
-#include <woki/rhi/render_graph/resources.hpp>
 #include <woki/window/window.hpp>
+#include <woki/rhi/render_graph/resources.hpp>
 
 namespace woki::rhi {
 class Adapter;
@@ -21,7 +21,7 @@ class Surface;
 class Swapchain;
 class Texture;
 class TextureView;
-}
+} // namespace woki::rhi
 
 namespace woki {
 
@@ -39,7 +39,9 @@ public:
     void HandleEvent(events::Event& event);
     [[nodiscard]] bool RenderFrame(f64 delta_ms);
 
-    [[nodiscard]] bool IsReady() const noexcept { return ready_; }
+    [[nodiscard]] bool IsReady() const noexcept {
+        return ready_;
+    }
 
 private:
     [[nodiscard]] bool CreateDeferredPipelines();
@@ -48,31 +50,31 @@ private:
     [[nodiscard]] bool UpdateUniforms(f64 delta_ms);
 
     scope<rhi::Instance> instance_;
-    scope<rhi::Surface> surface_;
     scope<rhi::Adapter> adapter_;
-    scope<rhi::Device> device_;
+    ref<rhi::Device> device_;
+    ref<rhi::Surface> surface_;
     scope<rhi::Swapchain> swapchain_;
-    scope<rhi::ShaderModule> gbuffer_shader_;
-    scope<rhi::ShaderModule> lighting_shader_;
-    scope<rhi::ShaderModule> present_shader_;
-    scope<rhi::ShaderModule> texture_debug_shader_;
-    scope<rhi::BindGroupLayout> gbuffer_bind_group_layout_;
-    scope<rhi::BindGroupLayout> lighting_bind_group_layout_;
-    scope<rhi::BindGroupLayout> present_bind_group_layout_;
-    scope<rhi::BindGroup> gbuffer_bind_group_;
-    scope<rhi::Buffer> vertex_buffer_;
-    scope<rhi::Buffer> index_buffer_;
-    scope<rhi::Buffer> uniform_buffer_;
-    scope<rhi::PipelineLayout> gbuffer_pipeline_layout_;
-    scope<rhi::PipelineLayout> lighting_pipeline_layout_;
-    scope<rhi::PipelineLayout> present_pipeline_layout_;
-    scope<rhi::RenderPipeline> gbuffer_pipeline_;
-    scope<rhi::RenderPipeline> lighting_pipeline_;
-    scope<rhi::RenderPipeline> present_pipeline_;
-    scope<rhi::RenderPipeline> texture_debug_pipeline_;
-    scope<rhi::Sampler> linear_sampler_;
+    ref<rhi::ShaderModule> gbuffer_shader_;
+    ref<rhi::ShaderModule> lighting_shader_;
+    ref<rhi::ShaderModule> present_shader_;
+    ref<rhi::ShaderModule> texture_debug_shader_;
+    ref<rhi::BindGroupLayout> gbuffer_bind_group_layout_;
+    ref<rhi::BindGroupLayout> lighting_bind_group_layout_;
+    ref<rhi::BindGroupLayout> present_bind_group_layout_;
+    ref<rhi::BindGroup> gbuffer_bind_group_;
+    ref<rhi::Buffer> vertex_buffer_;
+    ref<rhi::Buffer> index_buffer_;
+    ref<rhi::Buffer> uniform_buffer_;
+    ref<rhi::PipelineLayout> gbuffer_pipeline_layout_;
+    ref<rhi::PipelineLayout> lighting_pipeline_layout_;
+    ref<rhi::PipelineLayout> present_pipeline_layout_;
+    ref<rhi::RenderPipeline> gbuffer_pipeline_;
+    ref<rhi::RenderPipeline> lighting_pipeline_;
+    ref<rhi::RenderPipeline> present_pipeline_;
+    ref<rhi::RenderPipeline> texture_debug_pipeline_;
+    ref<rhi::Sampler> linear_sampler_;
     scope<rhi::Texture> history_texture_;
-    scope<rhi::RenderGraph> render_graph_;
+    ref<rhi::RenderGraph> render_graph_;
     rhi::PerFrameSlot backbuffer_{};
     rhi::Resource gbuffer_albedo_{};
     rhi::Resource gbuffer_normal_{};
@@ -87,7 +89,7 @@ private:
     f32 cube_yaw_{0.65f};
     f32 cube_pitch_{0.45f};
     bool rotating_with_mouse_{false};
-    bool show_texture_debug_{false};
+    ref<bool> show_texture_debug_{createRef<bool>(false)};
     bool ready_{false};
 };
 

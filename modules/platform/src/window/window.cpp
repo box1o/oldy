@@ -1,5 +1,6 @@
-#include "../../include/woki/window/window.hpp"
 #include <GLFW/glfw3.h>
+
+#include "../../include/woki/window/window.hpp"
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten/html5.h>
@@ -8,29 +9,50 @@
 #endif
 
 #include <array>
+#include <mutex>
 #include <vector>
 
 namespace woki {
-
-struct Window::Impl {
-    GLFWwindow* window{nullptr};
-    GLFWcursor* cursor{nullptr};
-
-    ~Impl() {
-        if (cursor != nullptr) {
-            glfwDestroyCursor(cursor);
-            cursor = nullptr;
-        }
-    }
-};
-
 namespace {
 
 constexpr u32 kMouseButtonCount = 8;
 
-void GlfwErrorCallback(int error, const char* description) {
-    slog::Error("GLFW error ({}): {}", error, description != nullptr ? description : "(null)");
-}
+class GlfwRuntime final {
+public:
+    [[nodiscard]] static bool Acquire() noexcept {
+        const std::scoped_lock lock(mutex_);
+        if (reference_count_ == 0) {
+            glfwSetErrorCallback(GlfwErrorCallback);
+            if (glfwInit() == GLFW_FALSE) {
+                slog::Critical("GLFW initialization failed");
+                return false;
+            }
+        }
+
+        ++reference_count_;
+        return true;
+    }
+
+    static void Release() noexcept {
+        const std::scoped_lock lock(mutex_);
+        if (reference_count_ == 0) {
+            return;
+        }
+
+        --reference_count_;
+        if (reference_count_ == 0) {
+            glfwTerminate();
+        }
+    }
+
+private:
+    static void GlfwErrorCallback(int error, const char* description) {
+        slog::Error("GLFW error ({}): {}", error, description != nullptr ? description : "(null)");
+    }
+
+    static inline std::mutex mutex_{};
+    static inline u32 reference_count_{0};
+};
 
 events::MouseButton ToMouseButton(int button) noexcept {
     return static_cast<events::MouseButton>(button);
@@ -42,21 +64,26 @@ bool IsSupportedMouseButton(int button) noexcept {
 
 GLFWcursor* CreateStandardCursor(CursorType type) noexcept {
     switch (type) {
-    case CursorType::kArrow:
-        return glfwCreateStandardCursor(GLFW_ARROW_CURSOR);
-    case CursorType::kIBeam:
-        return glfwCreateStandardCursor(GLFW_IBEAM_CURSOR);
-    case CursorType::kCrosshair:
-        return glfwCreateStandardCursor(GLFW_CROSSHAIR_CURSOR);
-    case CursorType::kHand:
-        return glfwCreateStandardCursor(GLFW_HAND_CURSOR);
-    case CursorType::kHResize:
-        return glfwCreateStandardCursor(GLFW_HRESIZE_CURSOR);
-    case CursorType::kVResize:
-        return glfwCreateStandardCursor(GLFW_VRESIZE_CURSOR);
+        case CursorType::kArrow:
+            return glfwCreateStandardCursor(GLFW_ARROW_CURSOR);
+        case CursorType::kIBeam:
+            return glfwCreateStandardCursor(GLFW_IBEAM_CURSOR);
+        case CursorType::kCrosshair:
+            return glfwCreateStandardCursor(GLFW_CROSSHAIR_CURSOR);
+        case CursorType::kHand:
+            return glfwCreateStandardCursor(GLFW_HAND_CURSOR);
+        case CursorType::kHResize:
+            return glfwCreateStandardCursor(GLFW_HRESIZE_CURSOR);
+        case CursorType::kVResize:
+            return glfwCreateStandardCursor(GLFW_VRESIZE_CURSOR);
     }
 
     return nullptr;
+}
+
+[[nodiscard]] ref<Window> GetWindow(GLFWwindow* window) noexcept {
+    auto* observer = static_cast<Window*>(glfwGetWindowUserPointer(window));
+    return observer != nullptr ? observer->weak_from_this().lock() : nullptr;
 }
 
 #ifndef __EMSCRIPTEN__
@@ -78,45 +105,60 @@ void ApplyWindowIcon(GLFWwindow* window) noexcept {
 
 } // namespace
 
-scope<Window> Window::Create(const WindowOptions& options) {
-    auto window = scope<Window>(new Window());
-    window->impl_ = createScope<Impl>();
+struct Window::Impl {
+    GLFWwindow* window{nullptr};
+    GLFWcursor* cursor{nullptr};
+    bool owns_runtime{false};
+
+    ~Impl() {
+        Destroy();
+    }
+
+    void Destroy() noexcept {
+        if (cursor != nullptr) {
+            glfwDestroyCursor(cursor);
+            cursor = nullptr;
+        }
+
+        if (window != nullptr) {
+            glfwSetWindowUserPointer(window, nullptr);
+            glfwDestroyWindow(window);
+            window = nullptr;
+        }
+
+        if (owns_runtime) {
+            GlfwRuntime::Release();
+            owns_runtime = false;
+        }
+    }
+};
+
+Result<ref<Window>> Window::Create(const WindowOptions& options) {
+    auto window = createRef<Window>(ConstructionKey{});
 
     if (!window->Initialize(options)) {
-        return nullptr;
+        return Err(ErrorCode::FailedToAcquireResource, "Failed to create platform window");
     }
 
-    return window;
+    return Ok(std::move(window));
 }
 
-Window::~Window() { Close(); }
+Window::Window(ConstructionKey)
+    : impl_(createScope<Impl>()) {}
+
+Window::~Window() {
+    if (impl_ != nullptr) {
+        impl_->Destroy();
+    }
+}
 
 bool Window::Initialize(const WindowOptions& options) noexcept {
-    if (!InitializeGlfw()) {
+    if (impl_ == nullptr || !GlfwRuntime::Acquire()) {
         return false;
     }
+    impl_->owns_runtime = true;
 
-    if (!CreateGlfwWindow(options)) {
-        return false;
-    }
-
-    return true;
-}
-
-bool Window::InitializeGlfw() noexcept {
-    if (glfw_initialized_) {
-        return true;
-    }
-
-    glfwSetErrorCallback(GlfwErrorCallback);
-
-    if (!glfwInit()) {
-        slog::Critical("GLFW initialization failed");
-        return false;
-    }
-
-    glfw_initialized_ = true;
-    return true;
+    return CreateGlfwWindow(options);
 }
 
 bool Window::CreateGlfwWindow(const WindowOptions& options) noexcept {
@@ -133,16 +175,12 @@ bool Window::CreateGlfwWindow(const WindowOptions& options) noexcept {
 #endif
 
     GLFWmonitor* monitor = options.fullscreen ? glfwGetPrimaryMonitor() : nullptr;
-    impl_->window = glfwCreateWindow(static_cast<int>(options.width),
-        static_cast<int>(options.height), options.title.c_str(), monitor, nullptr);
+    impl_->window = glfwCreateWindow(static_cast<int>(options.width), static_cast<int>(options.height), options.title.c_str(), monitor, nullptr);
 
     if (impl_->window == nullptr) {
         slog::Critical("Failed to create GLFW window");
-        ShutdownGlfwIfNeeded();
         return false;
     }
-
-    ++glfw_window_count_;
 
     title_ = options.title;
     fullscreen_ = options.fullscreen;
@@ -161,20 +199,11 @@ bool Window::CreateGlfwWindow(const WindowOptions& options) noexcept {
     return true;
 }
 
-void Window::ShutdownGlfwIfNeeded() noexcept {
-    if (!glfw_initialized_ || glfw_window_count_ != 0) {
-        return;
-    }
-
-    glfwTerminate();
-    glfw_initialized_ = false;
-}
-
 void Window::SetupCallbacks() noexcept {
     glfwSetWindowUserPointer(impl_->window, this);
 
     glfwSetWindowCloseCallback(impl_->window, [](GLFWwindow* window) {
-        auto* self = static_cast<Window*>(glfwGetWindowUserPointer(window));
+        auto self = GetWindow(window);
         if (self == nullptr) {
             return;
         }
@@ -183,7 +212,7 @@ void Window::SetupCallbacks() noexcept {
     });
 
     glfwSetFramebufferSizeCallback(impl_->window, [](GLFWwindow* window, int width, int height) {
-        auto* self = static_cast<Window*>(glfwGetWindowUserPointer(window));
+        auto self = GetWindow(window);
         if (self == nullptr) {
             return;
         }
@@ -192,7 +221,7 @@ void Window::SetupCallbacks() noexcept {
     });
 
     glfwSetWindowPosCallback(impl_->window, [](GLFWwindow* window, int xpos, int ypos) {
-        auto* self = static_cast<Window*>(glfwGetWindowUserPointer(window));
+        auto self = GetWindow(window);
         if (self == nullptr) {
             return;
         }
@@ -201,7 +230,7 @@ void Window::SetupCallbacks() noexcept {
     });
 
     glfwSetWindowFocusCallback(impl_->window, [](GLFWwindow* window, int focused) {
-        auto* self = static_cast<Window*>(glfwGetWindowUserPointer(window));
+        auto self = GetWindow(window);
         if (self == nullptr) {
             return;
         }
@@ -214,7 +243,7 @@ void Window::SetupCallbacks() noexcept {
     });
 
     glfwSetWindowIconifyCallback(impl_->window, [](GLFWwindow* window, int iconified) {
-        auto* self = static_cast<Window*>(glfwGetWindowUserPointer(window));
+        auto self = GetWindow(window);
         if (self == nullptr) {
             return;
         }
@@ -227,7 +256,7 @@ void Window::SetupCallbacks() noexcept {
     });
 
     glfwSetWindowMaximizeCallback(impl_->window, [](GLFWwindow* window, int maximized) {
-        auto* self = static_cast<Window*>(glfwGetWindowUserPointer(window));
+        auto self = GetWindow(window);
         if (self == nullptr) {
             return;
         }
@@ -239,40 +268,39 @@ void Window::SetupCallbacks() noexcept {
         }
     });
 
-    glfwSetWindowContentScaleCallback(
-        impl_->window, [](GLFWwindow* window, float xscale, float yscale) {
-            auto* self = static_cast<Window*>(glfwGetWindowUserPointer(window));
-            if (self == nullptr) {
-                return;
-            }
+    glfwSetWindowContentScaleCallback(impl_->window, [](GLFWwindow* window, float xscale, float yscale) {
+        auto self = GetWindow(window);
+        if (self == nullptr) {
+            return;
+        }
 
-            self->HandleContentScaleChanged(xscale, yscale);
-        });
+        self->HandleContentScaleChanged(xscale, yscale);
+    });
 
     glfwSetKeyCallback(impl_->window, [](GLFWwindow* window, int key, int, int action, int) {
-        auto* self = static_cast<Window*>(glfwGetWindowUserPointer(window));
+        auto self = GetWindow(window);
         if (self == nullptr || key < 0) {
             return;
         }
 
         const auto key_code = static_cast<events::KeyCode>(key);
         switch (action) {
-        case GLFW_PRESS:
-            self->EmitEvent<events::KeyPressedEvent>(key_code, 0u);
-            break;
-        case GLFW_REPEAT:
-            self->EmitEvent<events::KeyPressedEvent>(key_code, 1u);
-            break;
-        case GLFW_RELEASE:
-            self->EmitEvent<events::KeyReleasedEvent>(key_code);
-            break;
-        default:
-            break;
+            case GLFW_PRESS:
+                self->EmitEvent<events::KeyPressedEvent>(key_code, 0u);
+                break;
+            case GLFW_REPEAT:
+                self->EmitEvent<events::KeyPressedEvent>(key_code, 1u);
+                break;
+            case GLFW_RELEASE:
+                self->EmitEvent<events::KeyReleasedEvent>(key_code);
+                break;
+            default:
+                break;
         }
     });
 
     glfwSetCharCallback(impl_->window, [](GLFWwindow* window, unsigned int codepoint) {
-        auto* self = static_cast<Window*>(glfwGetWindowUserPointer(window));
+        auto self = GetWindow(window);
         if (self == nullptr) {
             return;
         }
@@ -281,7 +309,7 @@ void Window::SetupCallbacks() noexcept {
     });
 
     glfwSetCursorPosCallback(impl_->window, [](GLFWwindow* window, double xpos, double ypos) {
-        auto* self = static_cast<Window*>(glfwGetWindowUserPointer(window));
+        auto self = GetWindow(window);
         if (self == nullptr) {
             return;
         }
@@ -290,17 +318,16 @@ void Window::SetupCallbacks() noexcept {
     });
 
     glfwSetScrollCallback(impl_->window, [](GLFWwindow* window, double xoffset, double yoffset) {
-        auto* self = static_cast<Window*>(glfwGetWindowUserPointer(window));
+        auto self = GetWindow(window);
         if (self == nullptr) {
             return;
         }
 
-        self->EmitEvent<events::MouseScrolledEvent>(
-            static_cast<f32>(xoffset), static_cast<f32>(yoffset));
+        self->EmitEvent<events::MouseScrolledEvent>(static_cast<f32>(xoffset), static_cast<f32>(yoffset));
     });
 
     glfwSetMouseButtonCallback(impl_->window, [](GLFWwindow* window, int button, int action, int) {
-        auto* self = static_cast<Window*>(glfwGetWindowUserPointer(window));
+        auto self = GetWindow(window);
         if (self == nullptr) {
             return;
         }
@@ -309,7 +336,7 @@ void Window::SetupCallbacks() noexcept {
     });
 
     glfwSetCursorEnterCallback(impl_->window, [](GLFWwindow* window, int entered) {
-        auto* self = static_cast<Window*>(glfwGetWindowUserPointer(window));
+        auto self = GetWindow(window);
         if (self == nullptr) {
             return;
         }
@@ -433,7 +460,8 @@ void Window::HandleWindowCloseRequested() noexcept {
 #ifdef __EMSCRIPTEN__
 void Window::SetupEmscriptenResize() noexcept {
     auto callback = [](int, const EmscriptenUiEvent*, void* user_data) -> EM_BOOL {
-        auto* self = static_cast<Window*>(user_data);
+        auto* observer = static_cast<Window*>(user_data);
+        auto self = observer != nullptr ? observer->weak_from_this().lock() : nullptr;
         if (self == nullptr) {
             return EM_FALSE;
         }
@@ -450,8 +478,7 @@ void Window::SetupEmscriptenResize() noexcept {
             return EM_FALSE;
         }
 
-        emscripten_set_canvas_element_size(
-            "canvas", static_cast<int>(pixel_width), static_cast<int>(pixel_height));
+        emscripten_set_canvas_element_size("canvas", static_cast<int>(pixel_width), static_cast<int>(pixel_height));
         self->HandleResize(pixel_width, pixel_height);
         return EM_TRUE;
     };
@@ -478,7 +505,7 @@ bool Window::ShouldClose() const noexcept {
 }
 
 void Window::PollEvents() const noexcept {
-    if (!glfw_initialized_) {
+    if (impl_ == nullptr || !impl_->owns_runtime) {
         return;
     }
 
@@ -486,7 +513,7 @@ void Window::PollEvents() const noexcept {
 }
 
 void Window::WaitEvents() const noexcept {
-    if (!glfw_initialized_) {
+    if (impl_ == nullptr || !impl_->owns_runtime) {
         return;
     }
 
@@ -498,22 +525,10 @@ void Window::Close() noexcept {
         return;
     }
 
+    [[maybe_unused]] const auto keep_alive = weak_from_this().lock();
     HandleWindowCloseRequested();
 
-    if (impl_->cursor != nullptr) {
-        glfwDestroyCursor(impl_->cursor);
-        impl_->cursor = nullptr;
-    }
-
-    glfwSetWindowUserPointer(impl_->window, nullptr);
-    glfwDestroyWindow(impl_->window);
-    impl_->window = nullptr;
-
-    if (glfw_window_count_ > 0) {
-        --glfw_window_count_;
-    }
-
-    ShutdownGlfwIfNeeded();
+    impl_->Destroy();
 }
 
 void Window::EmitEvent(events::Event& event) {
@@ -540,15 +555,15 @@ void Window::SetCursorMode(CursorMode mode) noexcept {
 
     int glfw_cursor_mode = GLFW_CURSOR_NORMAL;
     switch (mode) {
-    case CursorMode::kNormal:
-        glfw_cursor_mode = GLFW_CURSOR_NORMAL;
-        break;
-    case CursorMode::kHidden:
-        glfw_cursor_mode = GLFW_CURSOR_HIDDEN;
-        break;
-    case CursorMode::kDisabled:
-        glfw_cursor_mode = GLFW_CURSOR_DISABLED;
-        break;
+        case CursorMode::kNormal:
+            glfw_cursor_mode = GLFW_CURSOR_NORMAL;
+            break;
+        case CursorMode::kHidden:
+            glfw_cursor_mode = GLFW_CURSOR_HIDDEN;
+            break;
+        case CursorMode::kDisabled:
+            glfw_cursor_mode = GLFW_CURSOR_DISABLED;
+            break;
     }
 
     glfwSetInputMode(impl_->window, GLFW_CURSOR, glfw_cursor_mode);
@@ -581,7 +596,9 @@ CallbackId Window::AddEventCallback(EventCallback callback) {
     return callback_id;
 }
 
-void Window::RemoveEventCallback(CallbackId id) { event_callbacks_.erase(id); }
+void Window::RemoveEventCallback(CallbackId id) {
+    event_callbacks_.erase(id);
+}
 
 CallbackId Window::AddResizeCallback(ResizeCallback callback) {
     const CallbackId callback_id = next_callback_id_++;
@@ -589,24 +606,44 @@ CallbackId Window::AddResizeCallback(ResizeCallback callback) {
     return callback_id;
 }
 
-void Window::RemoveResizeCallback(CallbackId id) { resize_callbacks_.erase(id); }
+void Window::RemoveResizeCallback(CallbackId id) {
+    resize_callbacks_.erase(id);
+}
 
-const std::string& Window::GetTitle() const noexcept { return title_; }
+const std::string& Window::GetTitle() const noexcept {
+    return title_;
+}
 
-u32 Window::GetWidth() const noexcept { return width_; }
+u32 Window::GetWidth() const noexcept {
+    return width_;
+}
 
-u32 Window::GetHeight() const noexcept { return height_; }
+u32 Window::GetHeight() const noexcept {
+    return height_;
+}
 
-f32 Window::GetAspectRatio() const noexcept { return aspect_ratio_; }
+f32 Window::GetAspectRatio() const noexcept {
+    return aspect_ratio_;
+}
 
-bool Window::IsFullscreen() const noexcept { return fullscreen_; }
+bool Window::IsFullscreen() const noexcept {
+    return fullscreen_;
+}
 
-f32 Window::GetContentScaleX() const noexcept { return content_scale_x_; }
+f32 Window::GetContentScaleX() const noexcept {
+    return content_scale_x_;
+}
 
-f32 Window::GetContentScaleY() const noexcept { return content_scale_y_; }
+f32 Window::GetContentScaleY() const noexcept {
+    return content_scale_y_;
+}
 
-CursorMode Window::GetCursorMode() const noexcept { return cursor_mode_; }
+CursorMode Window::GetCursorMode() const noexcept {
+    return cursor_mode_;
+}
 
-CursorType Window::GetCursorType() const noexcept { return cursor_type_; }
+CursorType Window::GetCursorType() const noexcept {
+    return cursor_type_;
+}
 
 } // namespace woki

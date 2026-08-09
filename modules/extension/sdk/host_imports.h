@@ -1,9 +1,9 @@
 #pragma once
 
-#include "macros.h"
-#include "types.h"
-
 #include <stdint.h>
+
+#include "types.h"
+#include "macros.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -28,16 +28,13 @@ WOKI_IMPORT("woki_host", "host_file_append")
 int32_t host_file_append(const char* rel_path, const uint8_t* data, uint32_t len);
 
 WOKI_IMPORT("woki_host", "host_file_read_n")
-int32_t host_file_read_n(
-    const char* rel_path, uint32_t rel_path_len, uint8_t* out, uint32_t* inout_len);
+int32_t host_file_read_n(const char* rel_path, uint32_t rel_path_len, uint8_t* out, uint32_t* inout_len);
 
 WOKI_IMPORT("woki_host", "host_file_write_n")
-int32_t host_file_write_n(
-    const char* rel_path, uint32_t rel_path_len, const uint8_t* data, uint32_t len);
+int32_t host_file_write_n(const char* rel_path, uint32_t rel_path_len, const uint8_t* data, uint32_t len);
 
 WOKI_IMPORT("woki_host", "host_file_append_n")
-int32_t host_file_append_n(
-    const char* rel_path, uint32_t rel_path_len, const uint8_t* data, uint32_t len);
+int32_t host_file_append_n(const char* rel_path, uint32_t rel_path_len, const uint8_t* data, uint32_t len);
 
 WOKI_IMPORT("woki_host", "host_config_get")
 int32_t host_config_get(const char* key, char* out, uint32_t out_cap);

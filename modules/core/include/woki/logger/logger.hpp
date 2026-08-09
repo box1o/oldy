@@ -2,8 +2,8 @@
 
 // IWYU pragma: private, include "woki/core.hpp"
 
-#include <cstddef>
 #include <string>
+#include <cstddef>
 #include <string_view>
 
 #ifdef __EMSCRIPTEN__
@@ -17,13 +17,12 @@ namespace slog {
 
 enum class Level { Trace, Debug, Info, Warn, Error, Critical, Off };
 
-void Configure(
-    std::string name               = "woki",
-    Level          level           = Level::Info,
-    const std::string& pattern     = "[%H:%M:%S] [%^%l%$] %v",
-    const std::string& logFile     = "",
-    std::size_t    maxFileSize     = 5 * 1024 * 1024,
-    std::size_t    maxFiles        = 3);
+void Configure(std::string name = "woki",
+    Level level = Level::Info,
+    const std::string& pattern = "[%H:%M:%S] [%^%l%$] %v",
+    const std::string& logFile = "",
+    std::size_t maxFileSize = 5 * 1024 * 1024,
+    std::size_t maxFiles = 3);
 
 namespace detail {
 
@@ -31,11 +30,11 @@ namespace detail {
 using LoggerHandle = spdlog::logger;
 LoggerHandle* Logger() noexcept;
 #else
-void LogWebTrace  (const char* msg);
-void LogWebDebug  (const char* msg);
-void LogWebInfo   (const char* msg);
-void LogWebWarn   (const char* msg);
-void LogWebError  (const char* msg);
+void LogWebTrace(const char* msg);
+void LogWebDebug(const char* msg);
+void LogWebInfo(const char* msg);
+void LogWebWarn(const char* msg);
+void LogWebError(const char* msg);
 void LogWebCritical(const char* msg);
 #endif
 

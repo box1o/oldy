@@ -2,16 +2,16 @@
 
 // IWYU pragma: private, include "woki/core.hpp"
 
-#include "../types/types.hpp"
-
-#include <cstddef>
+#include <new>
 #include <limits>
 #include <memory>
-#include <memory_resource>
-#include <new>
-#include <type_traits>
-#include <utility>
 #include <vector>
+#include <cstddef>
+#include <utility>
+#include <type_traits>
+#include <memory_resource>
+
+#include "../types/types.hpp"
 
 namespace woki {
 
@@ -29,12 +29,7 @@ public:
 
 private:
     static bool is_power_of_two(std::size_t value) noexcept;
-    bool next_allocation(
-        std::size_t bytes,
-        std::size_t alignment,
-        std::size_t& aligned_offset,
-        std::size_t& next_offset
-    ) const noexcept;
+    bool next_allocation(std::size_t bytes, std::size_t alignment, std::size_t& aligned_offset, std::size_t& next_offset) const noexcept;
 
     void* do_allocate(std::size_t bytes, std::size_t alignment) override;
     void do_deallocate(void* ptr, std::size_t bytes, std::size_t alignment) override;
@@ -70,18 +65,10 @@ public:
 
         void* memory = resource_.allocate(sizeof(T), alignof(T));
 
-        T* object = std::construct_at(
-            static_cast<T*>(memory),
-            std::forward<Args>(args)...
-        );
+        T* object = std::construct_at(static_cast<T*>(memory), std::forward<Args>(args)...);
 
         if constexpr (!std::is_trivially_destructible_v<T>) {
-            destructors_.push_back({
-                object,
-                [](void* ptr) {
-                    std::destroy_at(static_cast<T*>(ptr));
-                }
-            });
+            destructors_.push_back({object, [](void* ptr) { std::destroy_at(static_cast<T*>(ptr)); }});
         }
 
         return object;
@@ -90,19 +77,13 @@ public:
     template <typename T>
     [[nodiscard]] T* allocate(u64 count = 1) {
         static_assert(!std::is_void_v<T>, "Arena::allocate<void> is invalid");
-        static_assert(
-            std::is_trivially_destructible_v<T>,
-            "Arena::allocate<T> only supports trivially destructible types. Use create<T>() instead."
-        );
+        static_assert(std::is_trivially_destructible_v<T>, "Arena::allocate<T> only supports trivially destructible types. Use create<T>() instead.");
 
         if (count > std::numeric_limits<std::size_t>::max() / sizeof(T)) {
             throw std::bad_alloc{};
         }
 
-        void* memory = resource_.allocate(
-            sizeof(T) * static_cast<std::size_t>(count),
-            alignof(T)
-        );
+        void* memory = resource_.allocate(sizeof(T) * static_cast<std::size_t>(count), alignof(T));
 
         return static_cast<T*>(memory);
     }

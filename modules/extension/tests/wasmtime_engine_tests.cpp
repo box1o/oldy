@@ -7,10 +7,10 @@
 
 #if defined(WOKI_EXTENSION_WITH_WASMTIME)
 
-#include <cstdlib>
-#include <filesystem>
-#include <fstream>
 #include <string>
+#include <cstdlib>
+#include <fstream>
+#include <filesystem>
 #include <string_view>
 
 namespace {
@@ -30,8 +30,7 @@ void WriteFile(const fs::path& path, std::string_view contents) {
     output << contents;
 }
 
-[[nodiscard]] bool CompileWasm(
-    const fs::path& source, const fs::path& wasm, std::string_view exports) {
+[[nodiscard]] bool CompileWasm(const fs::path& source, const fs::path& wasm, std::string_view exports) {
     return woki_test_compile_wasm(source.string(), wasm.string(), exports);
 }
 
@@ -43,8 +42,7 @@ void WriteFile(const fs::path& path, std::string_view contents) {
            "--export=ext_on_unload";
 }
 
-[[nodiscard]] woki::ext::Record MakeRecord(const fs::path& root,
-    std::vector<woki::ext::Permission> permissions = {woki::ext::Permission::Log}) {
+[[nodiscard]] woki::ext::Record MakeRecord(const fs::path& root, std::vector<woki::ext::Permission> permissions = {woki::ext::Permission::Log}) {
     woki::ext::Record record;
     record.id = "woki.test";
     record.state = woki::ext::State::PermissionChecked;
@@ -250,10 +248,11 @@ __attribute__((export_name("ext_on_command"))) int ext_on_command(unsigned comma
 __attribute__((export_name("ext_on_unload"))) void ext_on_unload(void) {}
 )c");
     REQUIRE(CompileWasm(source, root / "extension.wasm",
-        StandardExports() + " "
-        "-Wl,--export=ext_on_command "
-        "-Wl,--export=ext_alloc "
-        "-Wl,--export=ext_free"));
+        StandardExports()
+            + " "
+              "-Wl,--export=ext_on_command "
+              "-Wl,--export=ext_alloc "
+              "-Wl,--export=ext_free"));
 
     auto record = MakeRecord(root);
     auto backend = MakeBackend();

@@ -1,21 +1,16 @@
+
 #include "woki/ext/wasm/web_engine.hpp"
 
+#ifdef __EMSCRIPTEN__
 #include "perm_bits.h"
 
-#include <string>
-
-#ifdef __EMSCRIPTEN__
-
 extern "C" {
-int woki_web_ext_load(const char* id, const char* wasm_path, const char* data_path,
-    const char* cache_path, unsigned permissions);
+int woki_web_ext_load(const char* id, const char* wasm_path, const char* data_path, const char* cache_path, unsigned permissions);
 int woki_web_ext_api_version(const char* id);
 int woki_web_ext_init(const char* id);
 int woki_web_ext_tick(const char* id, double delta_ms);
-int woki_web_ext_event(const char* id, unsigned event_type, const unsigned char* payload,
-    unsigned payload_len);
-int woki_web_ext_command(
-    const char* id, const char* command_id, const unsigned char* payload, unsigned payload_len);
+int woki_web_ext_event(const char* id, unsigned event_type, const unsigned char* payload, unsigned payload_len);
+int woki_web_ext_command(const char* id, const char* command_id, const unsigned char* payload, unsigned payload_len);
 void woki_web_ext_unload(const char* id);
 const char* woki_web_ext_last_error();
 }
@@ -68,8 +63,7 @@ enum PermissionBits : unsigned {
 
 #ifndef __EMSCRIPTEN__
 [[nodiscard]] Error Unsupported() {
-    return Error(ErrorCode::InvalidState,
-        "WebEngine is only available when building Woki with Emscripten.");
+    return Error(ErrorCode::InvalidState, "WebEngine is only available when building Woki with Emscripten.");
 }
 #endif
 
@@ -81,8 +75,7 @@ Result<void> WebEngine::Load(Record& record, host::HostApi& host) {
     const std::string wasm_path = record.package.wasm.generic_string();
     const std::string data_path = record.package.data_root.generic_string();
     const std::string cache_path = record.package.cache_root.generic_string();
-    const int loaded = woki_web_ext_load(record.id.c_str(), wasm_path.c_str(), data_path.c_str(),
-        cache_path.c_str(), PermissionMask(record.manifest));
+    const int loaded = woki_web_ext_load(record.id.c_str(), wasm_path.c_str(), data_path.c_str(), cache_path.c_str(), PermissionMask(record.manifest));
     if (loaded != 0) {
         return Err(WebError("Failed to load web extension"));
     }
@@ -134,8 +127,7 @@ Result<void> WebEngine::Tick(Record& record, f64 delta_ms) {
 
 Result<void> WebEngine::Event(Record& record, u32 event_type, std::span<const u8> payload) {
 #ifdef __EMSCRIPTEN__
-    const int dispatched = woki_web_ext_event(record.id.c_str(), event_type, payload.data(),
-        static_cast<unsigned>(payload.size()));
+    const int dispatched = woki_web_ext_event(record.id.c_str(), event_type, payload.data(), static_cast<unsigned>(payload.size()));
     if (dispatched != 0) {
         return Err(WebError("Extension ext_on_event failed"));
     }
@@ -148,12 +140,10 @@ Result<void> WebEngine::Event(Record& record, u32 event_type, std::span<const u8
 #endif
 }
 
-Result<i32> WebEngine::Command(
-    Record& record, std::string_view command_id, std::span<const u8> payload) {
+Result<i32> WebEngine::Command(Record& record, std::string_view command_id, std::span<const u8> payload) {
 #ifdef __EMSCRIPTEN__
     const std::string owned_command_id(command_id);
-    const int dispatched = woki_web_ext_command(record.id.c_str(), owned_command_id.c_str(),
-        payload.data(), static_cast<unsigned>(payload.size()));
+    const int dispatched = woki_web_ext_command(record.id.c_str(), owned_command_id.c_str(), payload.data(), static_cast<unsigned>(payload.size()));
     if (dispatched < 0) {
         return Err(WebError("Extension ext_on_command failed"));
     }

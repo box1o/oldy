@@ -1,20 +1,86 @@
+---
+Language: Cpp
 BasedOnStyle: LLVM
+Standard: Latest
+
+ColumnLimit: 220
+
 IndentWidth: 4
-UseTab: Never
+ContinuationIndentWidth: 4
 TabWidth: 4
-ColumnLimit: 100
-# Pointer and reference alignment
-PointerAlignment: Left
-ReferenceAlignment: Left
-# Braces
-BreakBeforeBraces: Attach
-AllowShortFunctionsOnASingleLine: true
-AllowShortIfStatementsOnASingleLine: true
-AllowShortLoopsOnASingleLine: true
-AllowShortBlocksOnASingleLine: Empty
-# Indentation
-IndentCaseLabels: false
+UseTab: Never
 NamespaceIndentation: None
+AlignAfterOpenBracket: false
+
+BreakBeforeCloseBracketFunction: true
+BreakAfterOpenBracketFunction: false
+BreakBeforeCloseBracketBracedList: false
+BreakAfterOpenBracketBracedList: false
+
+PenaltyBreakAssignment: 10000
+PenaltyBreakBeforeFirstCallParameter: 1
+PenaltyBreakBeforeMemberAccess: 0
+
+BreakBeforeBraces: Attach
+AllowShortBlocksOnASingleLine: Never
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+
+BinPackArguments: true
+BinPackParameters: false
+AllowAllArgumentsOnNextLine: false
+AllowAllParametersOfDeclarationOnNextLine: false
+
+BreakTemplateDeclarations: Yes
+BreakBeforeConceptDeclarations: Always
+RequiresClausePosition: OwnLine
+IndentRequiresClause: false
+
+Cpp11BracedListStyle: true
+SpaceBeforeCpp11BracedList: false
+SpacesInContainerLiterals: false
+BracedInitializerIndentWidth: 4
+
+ConstructorInitializerIndentWidth: 4
+PackConstructorInitializers: Never
+
+DerivePointerAlignment: false
+PointerAlignment: Left
+ReferenceAlignment: Pointer
+
+BreakBeforeBinaryOperators: NonAssignment
+BreakBeforeTernaryOperators: true
+AlignOperands: Align
+
+SpaceBeforeParens: ControlStatements
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+
+AlignConsecutiveAssignments:
+  Enabled: false
+AlignConsecutiveDeclarations:
+  Enabled: false
+
+IndentCaseLabels: true
+IndentCaseBlocks: false
+
 AccessModifierOffset: -4
-# Alignment
-AlignAfterOpenBracket: false 
+EmptyLineAfterAccessModifier: Never
+EmptyLineBeforeAccessModifier: LogicalBlock
+
+IncludeBlocks: Preserve
+SortIncludes: Never
+
+MaxEmptyLinesToKeep: 1
+KeepEmptyLinesAtTheStartOfBlocks: false
+SeparateDefinitionBlocks: Always
+ReflowComments: true
+FixNamespaceComments: true
+
+LambdaBodyIndentation: Signature
+PenaltyBreakString: 1000
+PenaltyReturnTypeOnItsOwnLine: 1000
+SortUsingDeclarations: LexicographicNumeric
+...

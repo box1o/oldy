@@ -1,22 +1,20 @@
-#include "wgpu_command_encoder.hpp"
-
-#include "detail/copy_convert.hpp"
-#include "detail/native_helpers.hpp"
-#include "detail/render_pass_descriptor.hpp"
-#include "detail/string.hpp"
-#include "wgpu_command_buffer.hpp"
-#include "wgpu_compute_pass_encoder.hpp"
-#include "wgpu_render_pass_encoder.hpp"
-
 #include <optional>
+
+#include "detail/string.hpp"
+#include "detail/copy_convert.hpp"
+#include "wgpu_command_buffer.hpp"
+#include "wgpu_command_encoder.hpp"
+#include "detail/native_helpers.hpp"
+#include "wgpu_render_pass_encoder.hpp"
+#include "wgpu_compute_pass_encoder.hpp"
+#include "detail/render_pass_descriptor.hpp"
 
 namespace woki::rhi::wgpu {
 
 WgpuCommandEncoderImpl::WgpuCommandEncoderImpl(const WGPUCommandEncoder encoder) noexcept
     : encoder_(encoder) {}
 
-Result<scope<ComputePassEncoder>> WgpuCommandEncoderImpl::BeginComputePass(
-    const ComputePassDesc& desc) {
+Result<scope<ComputePassEncoder>> WgpuCommandEncoderImpl::BeginComputePass(const ComputePassDesc& desc) {
     if (!encoder_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Command encoder is invalid");
     }
@@ -38,8 +36,7 @@ Result<scope<ComputePassEncoder>> WgpuCommandEncoderImpl::BeginComputePass(
     return Ok(createScope<WgpuComputePassEncoderImpl>(pass));
 }
 
-Result<scope<RenderPassEncoder>> WgpuCommandEncoderImpl::BeginRenderPass(
-    const RenderPassDesc& desc) {
+Result<scope<RenderPassEncoder>> WgpuCommandEncoderImpl::BeginRenderPass(const RenderPassDesc& desc) {
     if (!encoder_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Command encoder is invalid");
     }
@@ -49,8 +46,7 @@ Result<scope<RenderPassEncoder>> WgpuCommandEncoderImpl::BeginRenderPass(
     native.nextInChain = static_cast<WGPUChainedStruct*>(desc.next_in_chain);
     native.colorAttachmentCount = desc.color_attachment_count;
     native.colorAttachments = static_cast<WGPURenderPassColorAttachment*>(desc.color_attachments);
-    native.depthStencilAttachment =
-        static_cast<WGPURenderPassDepthStencilAttachment*>(desc.depth_stencil_attachment);
+    native.depthStencilAttachment = static_cast<WGPURenderPassDepthStencilAttachment*>(desc.depth_stencil_attachment);
     native.occlusionQuerySet = static_cast<WGPUQuerySet>(desc.occlusion_query_set);
     native.timestampWrites = static_cast<WGPUPassTimestampWrites*>(desc.timestamp_writes);
 
@@ -62,15 +58,13 @@ Result<scope<RenderPassEncoder>> WgpuCommandEncoderImpl::BeginRenderPass(
     return Ok(createScope<WgpuRenderPassEncoderImpl>(pass));
 }
 
-Result<scope<RenderPassEncoder>> WgpuCommandEncoderImpl::BeginRenderPass(
-    const RenderPassDescTyped& desc) {
+Result<scope<RenderPassEncoder>> WgpuCommandEncoderImpl::BeginRenderPass(const RenderPassDescTyped& desc) {
     if (!encoder_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Command encoder is invalid");
     }
 
     const detail::RenderPassDescriptorStorage storage(desc);
-    WGPURenderPassEncoder pass =
-        wgpuCommandEncoderBeginRenderPass(encoder_.get(), &storage.native);
+    WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder_.get(), &storage.native);
     if (pass == nullptr) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Failed to begin render pass");
     }
@@ -78,10 +72,7 @@ Result<scope<RenderPassEncoder>> WgpuCommandEncoderImpl::BeginRenderPass(
     return Ok(createScope<WgpuRenderPassEncoderImpl>(pass));
 }
 
-Result<void> WgpuCommandEncoderImpl::ClearBuffer(
-    const Buffer& buffer,
-    const u64 offset,
-    const u64 size) {
+Result<void> WgpuCommandEncoderImpl::ClearBuffer(const Buffer& buffer, const u64 offset, const u64 size) {
     if (!encoder_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Command encoder is invalid");
     }
@@ -90,30 +81,16 @@ Result<void> WgpuCommandEncoderImpl::ClearBuffer(
     return Ok();
 }
 
-Result<void> WgpuCommandEncoderImpl::CopyBufferToBuffer(
-    const Buffer& source,
-    const u64 source_offset,
-    const Buffer& destination,
-    const u64 destination_offset,
-    const u64 size) {
+Result<void> WgpuCommandEncoderImpl::CopyBufferToBuffer(const Buffer& source, const u64 source_offset, const Buffer& destination, const u64 destination_offset, const u64 size) {
     if (!encoder_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Command encoder is invalid");
     }
 
-    wgpuCommandEncoderCopyBufferToBuffer(
-        encoder_.get(),
-        detail::NativeBuffer(source),
-        source_offset,
-        detail::NativeBuffer(destination),
-        destination_offset,
-        size);
+    wgpuCommandEncoderCopyBufferToBuffer(encoder_.get(), detail::NativeBuffer(source), source_offset, detail::NativeBuffer(destination), destination_offset, size);
     return Ok();
 }
 
-Result<void> WgpuCommandEncoderImpl::CopyBufferToTexture(
-    const TexelCopyBufferInfo& source,
-    const TexelCopyTextureInfo& destination,
-    const Extent3D& copy_size) {
+Result<void> WgpuCommandEncoderImpl::CopyBufferToTexture(const TexelCopyBufferInfo& source, const TexelCopyTextureInfo& destination, const Extent3D& copy_size) {
     if (!encoder_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Command encoder is invalid");
     }
@@ -122,15 +99,11 @@ Result<void> WgpuCommandEncoderImpl::CopyBufferToTexture(
     const auto native_destination = detail::copy::ToWgpu(destination);
     const auto native_size = detail::copy::ToWgpu(copy_size);
 
-    wgpuCommandEncoderCopyBufferToTexture(
-        encoder_.get(), &native_source, &native_destination, &native_size);
+    wgpuCommandEncoderCopyBufferToTexture(encoder_.get(), &native_source, &native_destination, &native_size);
     return Ok();
 }
 
-Result<void> WgpuCommandEncoderImpl::CopyTextureToBuffer(
-    const TexelCopyTextureInfo& source,
-    const TexelCopyBufferInfo& destination,
-    const Extent3D& copy_size) {
+Result<void> WgpuCommandEncoderImpl::CopyTextureToBuffer(const TexelCopyTextureInfo& source, const TexelCopyBufferInfo& destination, const Extent3D& copy_size) {
     if (!encoder_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Command encoder is invalid");
     }
@@ -139,15 +112,11 @@ Result<void> WgpuCommandEncoderImpl::CopyTextureToBuffer(
     const auto native_destination = detail::copy::ToWgpu(destination);
     const auto native_size = detail::copy::ToWgpu(copy_size);
 
-    wgpuCommandEncoderCopyTextureToBuffer(
-        encoder_.get(), &native_source, &native_destination, &native_size);
+    wgpuCommandEncoderCopyTextureToBuffer(encoder_.get(), &native_source, &native_destination, &native_size);
     return Ok();
 }
 
-Result<void> WgpuCommandEncoderImpl::CopyTextureToTexture(
-    const TexelCopyTextureInfo& source,
-    const TexelCopyTextureInfo& destination,
-    const Extent3D& copy_size) {
+Result<void> WgpuCommandEncoderImpl::CopyTextureToTexture(const TexelCopyTextureInfo& source, const TexelCopyTextureInfo& destination, const Extent3D& copy_size) {
     if (!encoder_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Command encoder is invalid");
     }
@@ -156,8 +125,7 @@ Result<void> WgpuCommandEncoderImpl::CopyTextureToTexture(
     const auto native_destination = detail::copy::ToWgpu(destination);
     const auto native_size = detail::copy::ToWgpu(copy_size);
 
-    wgpuCommandEncoderCopyTextureToTexture(
-        encoder_.get(), &native_source, &native_destination, &native_size);
+    wgpuCommandEncoderCopyTextureToTexture(encoder_.get(), &native_source, &native_destination, &native_size);
     return Ok();
 }
 
@@ -202,23 +170,12 @@ void WgpuCommandEncoderImpl::PushDebugGroup(const std::string_view group_label) 
     }
 }
 
-Result<void> WgpuCommandEncoderImpl::ResolveQuerySet(
-    const QuerySet& query_set,
-    const u32 first_query,
-    const u32 query_count,
-    const Buffer& destination,
-    const u64 destination_offset) {
+Result<void> WgpuCommandEncoderImpl::ResolveQuerySet(const QuerySet& query_set, const u32 first_query, const u32 query_count, const Buffer& destination, const u64 destination_offset) {
     if (!encoder_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Command encoder is invalid");
     }
 
-    wgpuCommandEncoderResolveQuerySet(
-        encoder_.get(),
-        detail::NativeQuerySet(query_set),
-        first_query,
-        query_count,
-        detail::NativeBuffer(destination),
-        destination_offset);
+    wgpuCommandEncoderResolveQuerySet(encoder_.get(), detail::NativeQuerySet(query_set), first_query, query_count, detail::NativeBuffer(destination), destination_offset);
     return Ok();
 }
 
@@ -228,11 +185,7 @@ void WgpuCommandEncoderImpl::SetLabel(const std::string_view label) {
     }
 }
 
-Result<void> WgpuCommandEncoderImpl::WriteBuffer(
-    const Buffer& buffer,
-    const u64 buffer_offset,
-    const u8* data,
-    const u64 size) {
+Result<void> WgpuCommandEncoderImpl::WriteBuffer(const Buffer& buffer, const u64 buffer_offset, const u8* data, const u64 size) {
     if (!encoder_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Command encoder is invalid");
     }
@@ -241,20 +194,16 @@ Result<void> WgpuCommandEncoderImpl::WriteBuffer(
         return Err(ErrorCode::GraphicsResourceCreationFailed, "WriteBuffer data is null");
     }
 
-    wgpuCommandEncoderWriteBuffer(
-        encoder_.get(), detail::NativeBuffer(buffer), buffer_offset, data, size);
+    wgpuCommandEncoderWriteBuffer(encoder_.get(), detail::NativeBuffer(buffer), buffer_offset, data, size);
     return Ok();
 }
 
-Result<void> WgpuCommandEncoderImpl::WriteTimestamp(
-    const QuerySet& query_set,
-    const u32 query_index) {
+Result<void> WgpuCommandEncoderImpl::WriteTimestamp(const QuerySet& query_set, const u32 query_index) {
     if (!encoder_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Command encoder is invalid");
     }
 
-    wgpuCommandEncoderWriteTimestamp(
-        encoder_.get(), detail::NativeQuerySet(query_set), query_index);
+    wgpuCommandEncoderWriteTimestamp(encoder_.get(), detail::NativeQuerySet(query_set), query_index);
     return Ok();
 }
 

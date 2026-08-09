@@ -1,6 +1,6 @@
-#include "woki/ext/runtime.hpp"
-
 #include <string>
+
+#include "woki/ext/runtime.hpp"
 
 namespace woki::ext {
 
@@ -8,9 +8,8 @@ namespace {
 
 [[nodiscard]] Result<void> RequireBackend(RuntimeBackend* backend) {
     if (backend == nullptr) {
-        return Err(ErrorCode::InvalidState,
-            "Extension runtime backend is not configured. Add the Wasmtime backend before loading "
-            "extensions.");
+        return Err(ErrorCode::InvalidState, "Extension runtime backend is not configured. Add the Wasmtime backend before loading "
+                                            "extensions.");
     }
     return Ok();
 }
@@ -22,9 +21,12 @@ void MarkFailed(Record& record, const Error& error) {
 
 } // namespace
 
-Runtime::Runtime(RuntimeBackend* backend) noexcept : backend_(backend) {}
+Runtime::Runtime(RuntimeBackend* backend) noexcept
+    : backend_(backend) {}
 
-Runtime::Runtime(scope<RuntimeBackend> backend) noexcept { SetBackend(std::move(backend)); }
+Runtime::Runtime(scope<RuntimeBackend> backend) noexcept {
+    SetBackend(std::move(backend));
+}
 
 void Runtime::SetBackend(RuntimeBackend* backend) noexcept {
     owned_backend_.reset();
@@ -36,14 +38,17 @@ void Runtime::SetBackend(scope<RuntimeBackend> backend) noexcept {
     backend_ = owned_backend_.get();
 }
 
-RuntimeBackend* Runtime::Backend() noexcept { return backend_; }
+RuntimeBackend* Runtime::Backend() noexcept {
+    return backend_;
+}
 
-const RuntimeBackend* Runtime::Backend() const noexcept { return backend_; }
+const RuntimeBackend* Runtime::Backend() const noexcept {
+    return backend_;
+}
 
 Result<void> Runtime::Load(Record& record) {
     if (record.state != State::PermissionChecked) {
-        return Err(ErrorCode::ValidationInvalidState,
-            "Extension can only be loaded after manifest and permissions are validated.");
+        return Err(ErrorCode::ValidationInvalidState, "Extension can only be loaded after manifest and permissions are validated.");
     }
 
     auto backend = RequireBackend(backend_);
@@ -64,8 +69,7 @@ Result<void> Runtime::Load(Record& record) {
 
 Result<void> Runtime::Initialize(Record& record) {
     if (record.state != State::Loaded) {
-        return Err(ErrorCode::ValidationInvalidState,
-            "Extension can only be initialized after it is loaded.");
+        return Err(ErrorCode::ValidationInvalidState, "Extension can only be initialized after it is loaded.");
     }
 
     auto backend = RequireBackend(backend_);
@@ -99,11 +103,9 @@ void Runtime::DispatchEvent(Record& record, u32 event_type, std::span<const u8> 
     backend_->DispatchEvent(record, event_type, payload);
 }
 
-Result<void> Runtime::DispatchCommand(
-    Record& record, std::string_view command_id, std::span<const u8> payload) {
+Result<void> Runtime::DispatchCommand(Record& record, std::string_view command_id, std::span<const u8> payload) {
     if (record.state != State::Active) {
-        return Err(ErrorCode::ValidationInvalidState,
-            "Extension command can only run while the extension is active.");
+        return Err(ErrorCode::ValidationInvalidState, "Extension command can only run while the extension is active.");
     }
 
     auto backend = RequireBackend(backend_);

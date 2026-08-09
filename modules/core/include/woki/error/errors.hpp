@@ -2,11 +2,11 @@
 
 // IWYU pragma: private, include "woki/core.hpp"
 
-#include "../types/types.hpp"
-
-#include <source_location>
 #include <string>
 #include <string_view>
+#include <source_location>
+
+#include "../types/types.hpp"
 
 namespace woki {
 
@@ -67,10 +67,7 @@ enum class ErrorCode : u16 {
 
 class Error {
 public:
-    explicit Error(
-        ErrorCode code,
-        std::string_view message = {},
-        std::source_location location = std::source_location::current());
+    explicit Error(ErrorCode code, std::string_view message = {}, std::source_location location = std::source_location::current());
 
     [[nodiscard]] ErrorCode Code() const noexcept;
     [[nodiscard]] ErrorType Type() const noexcept;

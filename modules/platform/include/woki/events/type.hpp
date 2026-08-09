@@ -4,7 +4,7 @@
 
 namespace woki::events {
 
-enum class EventType : u32 {
+enum class EventType : u16 {
     kNone = 0,
 
     kWindowClosed = 1,

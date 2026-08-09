@@ -2,12 +2,12 @@
 
 // IWYU pragma: private, include "woki/ext/ext.hpp"
 
-#include <woki/core.hpp>
-
 #include <span>
 #include <string>
-#include <string_view>
 #include <vector>
+#include <string_view>
+
+#include <woki/core.hpp>
 
 namespace woki::ext {
 
@@ -39,8 +39,7 @@ private:
 
 class CommandDispatcher final {
 public:
-    [[nodiscard]] Result<void> Execute(const CommandRegistry& registry, Runtime& runtime,
-        std::span<Record> records, std::string_view command_id, std::span<const u8> payload) const;
+    [[nodiscard]] Result<void> Execute(const CommandRegistry& registry, Runtime& runtime, std::span<Record> records, std::string_view command_id, std::span<const u8> payload) const;
 };
 
 } // namespace woki::ext

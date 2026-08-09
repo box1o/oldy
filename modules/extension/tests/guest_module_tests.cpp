@@ -1,12 +1,11 @@
+#include <cstdlib>
+#include <fstream>
+#include <filesystem>
 #include <catch2/catch_test_macros.hpp>
 
 #include <woki/ext/ext.hpp>
 
 #include "wasm_test_compiler.hpp"
-
-#include <cstdlib>
-#include <filesystem>
-#include <fstream>
 
 namespace {
 
@@ -63,8 +62,7 @@ __attribute__((export_name("ext_on_event"))) void ext_on_event(unsigned t, unsig
 __attribute__((export_name("ext_on_unload"))) void ext_on_unload(void) {}
 )c");
 
-    REQUIRE(woki_test_compile_wasm(
-        source.string(), wasm.string(),
+    REQUIRE(woki_test_compile_wasm(source.string(), wasm.string(),
         "--export=ext_api_version --export=ext_init --export=ext_on_tick "
         "--export=ext_on_event --export=ext_on_unload"));
 
@@ -80,8 +78,7 @@ __attribute__((export_name("ext_on_unload"))) void ext_on_unload(void) {}
 
     woki::ext::Manifest manifest;
     manifest.id = "woki.test";
-    manifest.commands.push_back(
-        woki::ext::CommandContribution{"woki.test.hello", "Hello", "Examples"});
+    manifest.commands.push_back(woki::ext::CommandContribution{"woki.test.hello", "Hello", "Examples"});
     auto invalid = woki::ext::wasm::ValidateGuestModule(wasm, manifest);
     REQUIRE_FALSE(invalid.has_value());
 }

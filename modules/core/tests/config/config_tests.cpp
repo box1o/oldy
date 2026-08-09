@@ -1,10 +1,9 @@
-#include <catch2/catch_test_macros.hpp>
+#include <fstream>
+#include <filesystem>
 #include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 #include <woki/core.hpp>
-
-#include <filesystem>
-#include <fstream>
 
 TEST_CASE("Config stores and retrieves typed values") {
     woki::Config config;

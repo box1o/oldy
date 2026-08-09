@@ -1,23 +1,18 @@
-#include "wgpu_device.hpp"
+#include <utility>
 
-#include "detail/adapter_info.hpp"
-#include "detail/copy_convert.hpp"
-#include "detail/device_descriptor.hpp"
+#include "wgpu_enums.hpp"
+#include "wgpu_device.hpp"
+#include "wgpu_adapter.hpp"
+#include "wgpu_objects.hpp"
+#include "detail/string.hpp"
+#include "wgpu_instance.hpp"
+#include "wgpu_swapchain.hpp"
+#include "wgpu_command_encoder.hpp"
 #include "detail/device_features.hpp"
-#include "detail/external_texture_descriptor.hpp"
+#include "detail/device_descriptor.hpp"
 #include "detail/pipeline_descriptor.hpp"
 #include "detail/resource_descriptor.hpp"
-#include "detail/string.hpp"
-#include "wgpu_adapter.hpp"
-#include "wgpu_enums.hpp"
-#include "wgpu_instance.hpp"
-#include "wgpu_command_encoder.hpp"
-#include "wgpu_objects.hpp"
-#include "wgpu_swapchain.hpp"
-
-#include <memory>
-#include <utility>
-#include <vector>
+#include "detail/external_texture_descriptor.hpp"
 
 namespace woki::rhi::wgpu {
 namespace {
@@ -35,13 +30,8 @@ struct PopErrorScopeCallbackState {
     PopErrorScopeCallback callback;
 };
 
-void PopErrorScopeThunk(WGPUPopErrorScopeStatus status,
-    WGPUErrorType type,
-    WGPUStringView message,
-    void* userdata1,
-    void*) {
-    auto state = scope<PopErrorScopeCallbackState>(
-        static_cast<PopErrorScopeCallbackState*>(userdata1));
+void PopErrorScopeThunk(WGPUPopErrorScopeStatus status, WGPUErrorType type, WGPUStringView message, void* userdata1, void*) {
+    auto state = scope<PopErrorScopeCallbackState>(static_cast<PopErrorScopeCallbackState*>(userdata1));
     if (state == nullptr || !state->callback) {
         return;
     }
@@ -51,16 +41,10 @@ void PopErrorScopeThunk(WGPUPopErrorScopeStatus status,
 
 struct CreateComputePipelineCallbackState {
     CreateComputePipelineCallback callback;
-    std::shared_ptr<detail::ComputePipelineDescriptorStorage> descriptor;
 };
 
-void CreateComputePipelineThunk(WGPUCreatePipelineAsyncStatus status,
-    WGPUComputePipeline pipeline,
-    WGPUStringView message,
-    void* userdata1,
-    void*) {
-    auto state = scope<CreateComputePipelineCallbackState>(
-        static_cast<CreateComputePipelineCallbackState*>(userdata1));
+void CreateComputePipelineThunk(WGPUCreatePipelineAsyncStatus status, WGPUComputePipeline pipeline, WGPUStringView message, void* userdata1, void*) {
+    auto state = scope<CreateComputePipelineCallbackState>(static_cast<CreateComputePipelineCallbackState*>(userdata1));
     if (state == nullptr || !state->callback) {
         if (pipeline != nullptr) {
             wgpuComputePipelineRelease(pipeline);
@@ -80,16 +64,10 @@ void CreateComputePipelineThunk(WGPUCreatePipelineAsyncStatus status,
 
 struct CreateRenderPipelineCallbackState {
     CreateRenderPipelineCallback callback;
-    std::shared_ptr<detail::RenderPipelineDescriptorStorage> descriptor;
 };
 
-void CreateRenderPipelineThunk(WGPUCreatePipelineAsyncStatus status,
-    WGPURenderPipeline pipeline,
-    WGPUStringView message,
-    void* userdata1,
-    void*) {
-    auto state = scope<CreateRenderPipelineCallbackState>(
-        static_cast<CreateRenderPipelineCallbackState*>(userdata1));
+void CreateRenderPipelineThunk(WGPUCreatePipelineAsyncStatus status, WGPURenderPipeline pipeline, WGPUStringView message, void* userdata1, void*) {
+    auto state = scope<CreateRenderPipelineCallbackState>(static_cast<CreateRenderPipelineCallbackState*>(userdata1));
     if (state == nullptr || !state->callback) {
         if (pipeline != nullptr) {
             wgpuRenderPipelineRelease(pipeline);
@@ -107,11 +85,7 @@ void CreateRenderPipelineThunk(WGPUCreatePipelineAsyncStatus status,
     state->callback(FromWgpu(status), std::move(pipeline_scope), detail::StringFromView(message));
 }
 
-void LoggingCallbackThunk(
-    WGPULoggingType type,
-    WGPUStringView message,
-    void* userdata1,
-    void*) {
+void LoggingCallbackThunk(WGPULoggingType type, WGPUStringView message, void* userdata1, void*) {
     const auto* callback = static_cast<LoggingCallback*>(userdata1);
     if (callback == nullptr || !*callback) {
         return;
@@ -121,19 +95,14 @@ void LoggingCallbackThunk(
 }
 
 template <typename ResultType, typename CreateFn, typename WrapFn>
-[[nodiscard]] Result<scope<ResultType>> CreateResource(
-    WGPUDevice device,
-    CreateFn create_fn,
-    WrapFn wrap_fn,
-    std::string_view resource_name) {
+[[nodiscard]] Result<scope<ResultType>> CreateResource(WGPUDevice device, CreateFn create_fn, WrapFn wrap_fn, std::string_view resource_name) {
     if (device == nullptr) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Device is invalid");
     }
 
     const auto native_handle = create_fn(device);
     if (native_handle == nullptr) {
-        return Err(ErrorCode::GraphicsResourceCreationFailed,
-            std::string("Failed to create ") + std::string(resource_name));
+        return Err(ErrorCode::GraphicsResourceCreationFailed, std::string("Failed to create ") + std::string(resource_name));
     }
 
     return Ok(wrap_fn(native_handle));
@@ -141,83 +110,48 @@ template <typename ResultType, typename CreateFn, typename WrapFn>
 
 } // namespace
 
-WgpuDeviceImpl::WgpuDeviceImpl(
-    WgpuAdapterImpl& adapter,
-    WGPUInstance instance,
-    WGPUAdapter native_adapter,
-    WGPUDevice device,
-    detail::DeviceDescriptorStorage storage)
-    : adapter_(&adapter)
-    , instance_(instance)
-    , adapter_handle_(native_adapter)
-    , device_(device)
-    , storage_(std::move(storage))
-    , queue_(device != nullptr ? wgpuDeviceGetQueue(device) : nullptr) {
-    detail::retain(instance_.get());
-    detail::retain(adapter_handle_.get());
-}
+WgpuDeviceImpl::WgpuDeviceImpl(WGPUInstance instance, WGPUAdapter adapter, WGPUDevice device, ref<DeviceLostCallback> device_lost_callback, ref<UncapturedErrorCallback> uncaptured_error_callback)
+    : instance_(detail::InstanceHandle::Retain(instance)),
+      adapter_handle_(detail::AdapterHandle::Retain(adapter)),
+      device_lost_callback_(std::move(device_lost_callback)),
+      uncaptured_error_callback_(std::move(uncaptured_error_callback)),
+      device_(device),
+      queue_(device != nullptr ? wgpuDeviceGetQueue(device) : nullptr) {}
 
 WgpuDeviceImpl::~WgpuDeviceImpl() {
-    device_.reset();
-    adapter_handle_.reset();
-    instance_.reset();
+    if (device_ && logging_callback_) {
+        wgpuDeviceSetLoggingCallback(device_.get(), WGPU_LOGGING_CALLBACK_INFO_INIT);
+    }
 }
 
 Result<scope<BindGroup>> WgpuDeviceImpl::CreateBindGroup(const BindGroupDesc& desc) {
     const detail::BindGroupDescriptorStorage storage(desc);
-    return CreateResource<BindGroup>(
-        device_.get(),
-        [&](WGPUDevice device) { return wgpuDeviceCreateBindGroup(device, &storage.native); },
-        CreateBindGroupObject,
-        "bind group");
+    return CreateResource<BindGroup>(device_.get(), [&](WGPUDevice device) { return wgpuDeviceCreateBindGroup(device, &storage.native); }, CreateBindGroupObject, "bind group");
 }
 
 Result<scope<BindGroupLayout>> WgpuDeviceImpl::CreateBindGroupLayout(const BindGroupLayoutDesc& desc) {
     const detail::BindGroupLayoutDescriptorStorage storage(desc);
-    return CreateResource<BindGroupLayout>(
-        device_.get(),
-        [&](WGPUDevice device) {
-            return wgpuDeviceCreateBindGroupLayout(device, &storage.native);
-        },
-        CreateBindGroupLayoutObject,
-        "bind group layout");
+    return CreateResource<BindGroupLayout>(device_.get(), [&](WGPUDevice device) { return wgpuDeviceCreateBindGroupLayout(device, &storage.native); }, CreateBindGroupLayoutObject, "bind group layout");
 }
 
 Result<scope<Buffer>> WgpuDeviceImpl::CreateBuffer(const BufferDesc& desc) {
     const detail::BufferDescriptorStorage storage(desc);
-    return CreateResource<Buffer>(
-        device_.get(),
-        [&](WGPUDevice device) { return wgpuDeviceCreateBuffer(device, &storage.native); },
-        CreateBufferObject,
-        "buffer");
+    return CreateResource<Buffer>(device_.get(), [&](WGPUDevice device) { return wgpuDeviceCreateBuffer(device, &storage.native); }, CreateBufferObject, "buffer");
 }
 
 Result<scope<CommandEncoder>> WgpuDeviceImpl::CreateCommandEncoder(const CommandEncoderDesc& desc) {
     const detail::CommandEncoderDescriptorStorage storage(desc);
     return CreateResource<CommandEncoder>(
-        device_.get(),
-        [&](WGPUDevice device) {
-            return wgpuDeviceCreateCommandEncoder(device, &storage.native);
-        },
-        [](WGPUCommandEncoder handle) { return createScope<WgpuCommandEncoderImpl>(handle); },
-        "command encoder");
+        device_.get(), [&](WGPUDevice device) { return wgpuDeviceCreateCommandEncoder(device, &storage.native); }, [](WGPUCommandEncoder handle) { return createScope<WgpuCommandEncoderImpl>(handle); }, "command encoder"
+    );
 }
 
 Result<scope<ComputePipeline>> WgpuDeviceImpl::CreateComputePipeline(const ComputePipelineDesc& desc) {
     const detail::ComputePipelineDescriptorStorage storage(desc);
-    return CreateResource<ComputePipeline>(
-        device_.get(),
-        [&](WGPUDevice device) {
-            return wgpuDeviceCreateComputePipeline(device, &storage.native);
-        },
-        CreateComputePipelineObject,
-        "compute pipeline");
+    return CreateResource<ComputePipeline>(device_.get(), [&](WGPUDevice device) { return wgpuDeviceCreateComputePipeline(device, &storage.native); }, CreateComputePipelineObject, "compute pipeline");
 }
 
-Future WgpuDeviceImpl::CreateComputePipelineAsync(
-    const ComputePipelineDesc& desc,
-    CallbackMode callback_mode,
-    CreateComputePipelineCallback callback) {
+Future WgpuDeviceImpl::CreateComputePipelineAsync(const ComputePipelineDesc& desc, CallbackMode callback_mode, CreateComputePipelineCallback callback) {
     if (!device_) {
         return MakeInvalidFuture("Device is invalid");
     }
@@ -225,136 +159,80 @@ Future WgpuDeviceImpl::CreateComputePipelineAsync(
         return MakeInvalidFuture("CreateComputePipelineAsync requires a callback");
     }
 
-    auto descriptor = std::make_shared<detail::ComputePipelineDescriptorStorage>(desc);
-    auto* callback_state = new CreateComputePipelineCallbackState{
+    auto callback_state = createScope<CreateComputePipelineCallbackState>(CreateComputePipelineCallbackState{
         .callback = std::move(callback),
-        .descriptor = std::move(descriptor),
-    };
+    });
+    const detail::ComputePipelineDescriptorStorage descriptor(desc);
 
-    WGPUCreateComputePipelineAsyncCallbackInfo callback_info =
-        WGPU_CREATE_COMPUTE_PIPELINE_ASYNC_CALLBACK_INFO_INIT;
+    WGPUCreateComputePipelineAsyncCallbackInfo callback_info = WGPU_CREATE_COMPUTE_PIPELINE_ASYNC_CALLBACK_INFO_INIT;
     callback_info.mode = ToWgpu(callback_mode);
     callback_info.callback = CreateComputePipelineThunk;
-    callback_info.userdata1 = callback_state;
+    callback_info.userdata1 = callback_state.get();
 
-    const WGPUFuture native_future = wgpuDeviceCreateComputePipelineAsync(
-        device_.get(), &callback_state->descriptor->native, callback_info);
+    auto* transferred_state = callback_state.release();
+    const WGPUFuture native_future = wgpuDeviceCreateComputePipelineAsync(device_.get(), &descriptor.native, callback_info);
 
     Future future{};
     future.id = native_future.id;
+    if (future.id == 0) {
+        callback_state.reset(transferred_state);
+        future.message = "Compute pipeline request failed to start";
+    }
     return future;
 }
 
 Result<scope<Buffer>> WgpuDeviceImpl::CreateErrorBuffer(const BufferDesc& desc) {
     const detail::BufferDescriptorStorage storage(desc);
-    return CreateResource<Buffer>(
-        device_.get(),
-        [&](WGPUDevice device) { return wgpuDeviceCreateErrorBuffer(device, &storage.native); },
-        CreateBufferObject,
-        "error buffer");
+    return CreateResource<Buffer>(device_.get(), [&](WGPUDevice device) { return wgpuDeviceCreateErrorBuffer(device, &storage.native); }, CreateBufferObject, "error buffer");
 }
 
 Result<scope<ExternalTexture>> WgpuDeviceImpl::CreateErrorExternalTexture() {
-    return CreateResource<ExternalTexture>(
-        device_.get(),
-        [&](WGPUDevice device) { return wgpuDeviceCreateErrorExternalTexture(device); },
-        CreateExternalTextureObject,
-        "error external texture");
+    return CreateResource<ExternalTexture>(device_.get(), [&](WGPUDevice device) { return wgpuDeviceCreateErrorExternalTexture(device); }, CreateExternalTextureObject, "error external texture");
 }
 
-Result<scope<ShaderModule>> WgpuDeviceImpl::CreateErrorShaderModule(
-    const ShaderModuleDesc& desc,
-    const std::string_view error_message) {
+Result<scope<ShaderModule>> WgpuDeviceImpl::CreateErrorShaderModule(const ShaderModuleDesc& desc, const std::string_view error_message) {
     const detail::ShaderModuleDescriptorStorage storage(desc);
     return CreateResource<ShaderModule>(
-        device_.get(),
-        [&](WGPUDevice device) {
-            return wgpuDeviceCreateErrorShaderModule(
-                device, &storage.native, detail::ToStringView(error_message));
-        },
-        CreateShaderModuleObject,
-        "error shader module");
+        device_.get(), [&](WGPUDevice device) { return wgpuDeviceCreateErrorShaderModule(device, &storage.native, detail::ToStringView(error_message)); }, CreateShaderModuleObject, "error shader module"
+    );
 }
 
 Result<scope<Texture>> WgpuDeviceImpl::CreateErrorTexture(const TextureDesc& desc) {
     const detail::TextureDescriptorStorage storage(desc);
-    return CreateResource<Texture>(
-        device_.get(),
-        [&](WGPUDevice device) { return wgpuDeviceCreateErrorTexture(device, &storage.native); },
-        CreateTextureObject,
-        "error texture");
+    return CreateResource<Texture>(device_.get(), [&](WGPUDevice device) { return wgpuDeviceCreateErrorTexture(device, &storage.native); }, CreateTextureObject, "error texture");
 }
 
 Result<scope<ExternalTexture>> WgpuDeviceImpl::CreateExternalTexture(const ExternalTextureDesc& desc) {
     const detail::ExternalTextureDescriptorStorage storage(desc);
-    return CreateResource<ExternalTexture>(
-        device_.get(),
-        [&](WGPUDevice device) {
-            return wgpuDeviceCreateExternalTexture(device, &storage.native);
-        },
-        CreateExternalTextureObject,
-        "external texture");
+    return CreateResource<ExternalTexture>(device_.get(), [&](WGPUDevice device) { return wgpuDeviceCreateExternalTexture(device, &storage.native); }, CreateExternalTextureObject, "external texture");
 }
 
 Result<scope<PipelineLayout>> WgpuDeviceImpl::CreatePipelineLayout(const PipelineLayoutDesc& desc) {
     const detail::PipelineLayoutDescriptorStorage storage(desc);
-    return CreateResource<PipelineLayout>(
-        device_.get(),
-        [&](WGPUDevice device) {
-            return wgpuDeviceCreatePipelineLayout(device, &storage.native);
-        },
-        CreatePipelineLayoutObject,
-        "pipeline layout");
+    return CreateResource<PipelineLayout>(device_.get(), [&](WGPUDevice device) { return wgpuDeviceCreatePipelineLayout(device, &storage.native); }, CreatePipelineLayoutObject, "pipeline layout");
 }
 
 Result<scope<QuerySet>> WgpuDeviceImpl::CreateQuerySet(const QuerySetDesc& desc) {
     const detail::QuerySetDescriptorStorage storage(desc);
-    return CreateResource<QuerySet>(
-        device_.get(),
-        [&](WGPUDevice device) { return wgpuDeviceCreateQuerySet(device, &storage.native); },
-        CreateQuerySetObject,
-        "query set");
+    return CreateResource<QuerySet>(device_.get(), [&](WGPUDevice device) { return wgpuDeviceCreateQuerySet(device, &storage.native); }, CreateQuerySetObject, "query set");
 }
 
-Result<scope<RenderBundleEncoder>> WgpuDeviceImpl::CreateRenderBundleEncoder(
-    const RenderBundleEncoderDesc& desc) {
+Result<scope<RenderBundleEncoder>> WgpuDeviceImpl::CreateRenderBundleEncoder(const RenderBundleEncoderDesc& desc) {
     const detail::RenderBundleEncoderDescriptorStorage storage(desc);
-    return CreateResource<RenderBundleEncoder>(
-        device_.get(),
-        [&](WGPUDevice device) {
-            return wgpuDeviceCreateRenderBundleEncoder(device, &storage.native);
-        },
-        CreateRenderBundleEncoderObject,
-        "render bundle encoder");
+    return CreateResource<RenderBundleEncoder>(device_.get(), [&](WGPUDevice device) { return wgpuDeviceCreateRenderBundleEncoder(device, &storage.native); }, CreateRenderBundleEncoderObject, "render bundle encoder");
 }
 
 Result<scope<RenderPipeline>> WgpuDeviceImpl::CreateRenderPipeline(const RenderPipelineDesc& desc) {
     const detail::RenderPipelineDescriptorStorage storage(desc);
-    return CreateResource<RenderPipeline>(
-        device_.get(),
-        [&](WGPUDevice device) {
-            return wgpuDeviceCreateRenderPipeline(device, &storage.native);
-        },
-        CreateRenderPipelineObject,
-        "render pipeline");
+    return CreateResource<RenderPipeline>(device_.get(), [&](WGPUDevice device) { return wgpuDeviceCreateRenderPipeline(device, &storage.native); }, CreateRenderPipelineObject, "render pipeline");
 }
 
-Result<scope<RenderPipeline>> WgpuDeviceImpl::CreateRenderPipeline(
-    const RenderPipelineDescTyped& desc) {
+Result<scope<RenderPipeline>> WgpuDeviceImpl::CreateRenderPipeline(const RenderPipelineDescTyped& desc) {
     const detail::RenderPipelineTypedDescriptorStorage storage(desc);
-    return CreateResource<RenderPipeline>(
-        device_.get(),
-        [&](WGPUDevice device) {
-            return wgpuDeviceCreateRenderPipeline(device, &storage.native);
-        },
-        CreateRenderPipelineObject,
-        "render pipeline");
+    return CreateResource<RenderPipeline>(device_.get(), [&](WGPUDevice device) { return wgpuDeviceCreateRenderPipeline(device, &storage.native); }, CreateRenderPipelineObject, "render pipeline");
 }
 
-Future WgpuDeviceImpl::CreateRenderPipelineAsync(
-    const RenderPipelineDesc& desc,
-    CallbackMode callback_mode,
-    CreateRenderPipelineCallback callback) {
+Future WgpuDeviceImpl::CreateRenderPipelineAsync(const RenderPipelineDesc& desc, CallbackMode callback_mode, CreateRenderPipelineCallback callback) {
     if (!device_) {
         return MakeInvalidFuture("Device is invalid");
     }
@@ -362,70 +240,50 @@ Future WgpuDeviceImpl::CreateRenderPipelineAsync(
         return MakeInvalidFuture("CreateRenderPipelineAsync requires a callback");
     }
 
-    auto descriptor = std::make_shared<detail::RenderPipelineDescriptorStorage>(desc);
-    auto* callback_state = new CreateRenderPipelineCallbackState{
+    auto callback_state = createScope<CreateRenderPipelineCallbackState>(CreateRenderPipelineCallbackState{
         .callback = std::move(callback),
-        .descriptor = std::move(descriptor),
-    };
+    });
+    const detail::RenderPipelineDescriptorStorage descriptor(desc);
 
-    WGPUCreateRenderPipelineAsyncCallbackInfo callback_info =
-        WGPU_CREATE_RENDER_PIPELINE_ASYNC_CALLBACK_INFO_INIT;
+    WGPUCreateRenderPipelineAsyncCallbackInfo callback_info = WGPU_CREATE_RENDER_PIPELINE_ASYNC_CALLBACK_INFO_INIT;
     callback_info.mode = ToWgpu(callback_mode);
     callback_info.callback = CreateRenderPipelineThunk;
-    callback_info.userdata1 = callback_state;
+    callback_info.userdata1 = callback_state.get();
 
-    const WGPUFuture native_future = wgpuDeviceCreateRenderPipelineAsync(
-        device_.get(), &callback_state->descriptor->native, callback_info);
+    auto* transferred_state = callback_state.release();
+    const WGPUFuture native_future = wgpuDeviceCreateRenderPipelineAsync(device_.get(), &descriptor.native, callback_info);
 
     Future future{};
     future.id = native_future.id;
+    if (future.id == 0) {
+        callback_state.reset(transferred_state);
+        future.message = "Render pipeline request failed to start";
+    }
     return future;
 }
 
 Result<scope<ResourceTable>> WgpuDeviceImpl::CreateResourceTable(const ResourceTableDesc& desc) {
     const detail::ResourceTableDescriptorStorage storage(desc);
-    return CreateResource<ResourceTable>(
-        device_.get(),
-        [&](WGPUDevice device) {
-            return wgpuDeviceCreateResourceTable(device, &storage.native);
-        },
-        CreateResourceTableObject,
-        "resource table");
+    return CreateResource<ResourceTable>(device_.get(), [&](WGPUDevice device) { return wgpuDeviceCreateResourceTable(device, &storage.native); }, CreateResourceTableObject, "resource table");
 }
 
 Result<scope<Sampler>> WgpuDeviceImpl::CreateSampler(const SamplerDesc& desc) {
     const detail::SamplerDescriptorStorage storage(desc);
-    return CreateResource<Sampler>(
-        device_.get(),
-        [&](WGPUDevice device) { return wgpuDeviceCreateSampler(device, &storage.native); },
-        CreateSamplerObject,
-        "sampler");
+    return CreateResource<Sampler>(device_.get(), [&](WGPUDevice device) { return wgpuDeviceCreateSampler(device, &storage.native); }, CreateSamplerObject, "sampler");
 }
 
 Result<scope<ShaderModule>> WgpuDeviceImpl::CreateShaderModule(const ShaderModuleDesc& desc) {
     const detail::ShaderModuleDescriptorStorage storage(desc);
-    return CreateResource<ShaderModule>(
-        device_.get(),
-        [&](WGPUDevice device) {
-            return wgpuDeviceCreateShaderModule(device, &storage.native);
-        },
-        CreateShaderModuleObject,
-        "shader module");
+    return CreateResource<ShaderModule>(device_.get(), [&](WGPUDevice device) { return wgpuDeviceCreateShaderModule(device, &storage.native); }, CreateShaderModuleObject, "shader module");
 }
 
 Result<scope<Texture>> WgpuDeviceImpl::CreateTexture(const TextureDesc& desc) {
     const detail::TextureDescriptorStorage storage(desc);
-    return CreateResource<Texture>(
-        device_.get(),
-        [&](WGPUDevice device) { return wgpuDeviceCreateTexture(device, &storage.native); },
-        CreateTextureObject,
-        "texture");
+    return CreateResource<Texture>(device_.get(), [&](WGPUDevice device) { return wgpuDeviceCreateTexture(device, &storage.native); }, CreateTextureObject, "texture");
 }
 
-Result<scope<Swapchain>> WgpuDeviceImpl::CreateSwapchain(
-    Surface& surface,
-    SwapchainDesc desc) {
-    return CreateSwapchainObject(*this, surface, std::move(desc));
+Result<scope<Swapchain>> WgpuDeviceImpl::CreateSwapchain(ref<Surface> surface, SwapchainDesc desc) {
+    return CreateSwapchainObject(shared_from_this(), std::move(surface), std::move(desc));
 }
 
 void WgpuDeviceImpl::Destroy() {
@@ -444,18 +302,12 @@ Result<scope<Adapter>> WgpuDeviceImpl::GetAdapter() const {
     if (!device_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Device is invalid");
     }
-    if (adapter_ == nullptr) {
-        return Err(ErrorCode::GraphicsResourceCreationFailed, "Adapter is unavailable");
-    }
-
     WGPUAdapter native_adapter = wgpuDeviceGetAdapter(device_.get());
     if (native_adapter == nullptr) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Failed to get adapter from device");
     }
 
-    detail::retain(native_adapter);
-    auto& instance = static_cast<WgpuInstanceImpl&>(adapter_->GetInstance());
-    return Ok(createScope<WgpuAdapterImpl>(instance, native_adapter));
+    return Ok(createScope<WgpuAdapterImpl>(instance_.get(), native_adapter));
 }
 
 Result<void> WgpuDeviceImpl::GetAdapterInfo(AdapterInfo& info) const {
@@ -483,9 +335,7 @@ Result<void> WgpuDeviceImpl::GetAdapterInfo(AdapterInfo& info) const {
     return Ok();
 }
 
-Result<void> WgpuDeviceImpl::GetAHardwareBufferProperties(
-    void* handle,
-    void* properties) const {
+Result<void> WgpuDeviceImpl::GetAHardwareBufferProperties(void* handle, void* properties) const {
     if (!device_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Device is invalid");
     }
@@ -493,12 +343,8 @@ Result<void> WgpuDeviceImpl::GetAHardwareBufferProperties(
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Invalid AHardwareBuffer arguments");
     }
 
-    if (wgpuDeviceGetAHardwareBufferProperties(
-            device_.get(),
-            handle,
-            static_cast<WGPUAHardwareBufferProperties*>(properties)) != WGPUStatus_Success) {
-        return Err(ErrorCode::GraphicsResourceCreationFailed,
-            "Failed to query AHardwareBuffer properties");
+    if (wgpuDeviceGetAHardwareBufferProperties(device_.get(), handle, static_cast<WGPUAHardwareBufferProperties*>(properties)) != WGPUStatus_Success) {
+        return Err(ErrorCode::GraphicsResourceCreationFailed, "Failed to query AHardwareBuffer properties");
     }
 
     return Ok();
@@ -525,46 +371,32 @@ Future WgpuDeviceImpl::GetLostFuture() const {
 }
 
 Queue& WgpuDeviceImpl::GetQueue() const noexcept {
-    return const_cast<WgpuQueueImpl&>(queue_);
+    return queue_;
 }
 
 bool WgpuDeviceImpl::HasFeature(const FeatureName feature) const noexcept {
     return detail::DeviceHasFeature(device_.get(), feature);
 }
 
-Result<scope<SharedBufferMemory>> WgpuDeviceImpl::ImportSharedBufferMemory(
-    const SharedBufferMemoryDesc& desc) {
+Result<scope<SharedBufferMemory>> WgpuDeviceImpl::ImportSharedBufferMemory(const SharedBufferMemoryDesc& desc) {
     WGPUSharedBufferMemoryDescriptor native = WGPU_SHARED_BUFFER_MEMORY_DESCRIPTOR_INIT;
     native.label = detail::ToStringView(desc.label);
     native.nextInChain = static_cast<WGPUChainedStruct*>(desc.next_in_chain);
-    return CreateResource<SharedBufferMemory>(
-        device_.get(),
-        [&](WGPUDevice device) { return wgpuDeviceImportSharedBufferMemory(device, &native); },
-        CreateSharedBufferMemoryObject,
-        "shared buffer memory");
+    return CreateResource<SharedBufferMemory>(device_.get(), [&](WGPUDevice device) { return wgpuDeviceImportSharedBufferMemory(device, &native); }, CreateSharedBufferMemoryObject, "shared buffer memory");
 }
 
 Result<scope<SharedFence>> WgpuDeviceImpl::ImportSharedFence(const SharedFenceDesc& desc) {
     WGPUSharedFenceDescriptor native = WGPU_SHARED_FENCE_DESCRIPTOR_INIT;
     native.label = detail::ToStringView(desc.label);
     native.nextInChain = static_cast<WGPUChainedStruct*>(desc.next_in_chain);
-    return CreateResource<SharedFence>(
-        device_.get(),
-        [&](WGPUDevice device) { return wgpuDeviceImportSharedFence(device, &native); },
-        CreateSharedFenceObject,
-        "shared fence");
+    return CreateResource<SharedFence>(device_.get(), [&](WGPUDevice device) { return wgpuDeviceImportSharedFence(device, &native); }, CreateSharedFenceObject, "shared fence");
 }
 
-Result<scope<SharedTextureMemory>> WgpuDeviceImpl::ImportSharedTextureMemory(
-    const SharedTextureMemoryDesc& desc) {
+Result<scope<SharedTextureMemory>> WgpuDeviceImpl::ImportSharedTextureMemory(const SharedTextureMemoryDesc& desc) {
     WGPUSharedTextureMemoryDescriptor native = WGPU_SHARED_TEXTURE_MEMORY_DESCRIPTOR_INIT;
     native.label = detail::ToStringView(desc.label);
     native.nextInChain = static_cast<WGPUChainedStruct*>(desc.next_in_chain);
-    return CreateResource<SharedTextureMemory>(
-        device_.get(),
-        [&](WGPUDevice device) { return wgpuDeviceImportSharedTextureMemory(device, &native); },
-        CreateSharedTextureMemoryObject,
-        "shared texture memory");
+    return CreateResource<SharedTextureMemory>(device_.get(), [&](WGPUDevice device) { return wgpuDeviceImportSharedTextureMemory(device, &native); }, CreateSharedTextureMemoryObject, "shared texture memory");
 }
 
 void WgpuDeviceImpl::InjectError(const ErrorType type, const std::string_view message) {
@@ -573,9 +405,7 @@ void WgpuDeviceImpl::InjectError(const ErrorType type, const std::string_view me
     }
 }
 
-Future WgpuDeviceImpl::PopErrorScope(
-    CallbackMode callback_mode,
-    PopErrorScopeCallback callback) const {
+Future WgpuDeviceImpl::PopErrorScope(CallbackMode callback_mode, PopErrorScopeCallback callback) const {
     if (!device_) {
         return MakeInvalidFuture("Device is invalid");
     }
@@ -583,17 +413,22 @@ Future WgpuDeviceImpl::PopErrorScope(
         return MakeInvalidFuture("PopErrorScope requires a callback");
     }
 
-    auto* callback_state = new PopErrorScopeCallbackState{.callback = std::move(callback)};
+    auto callback_state = createScope<PopErrorScopeCallbackState>(PopErrorScopeCallbackState{.callback = std::move(callback)});
 
     WGPUPopErrorScopeCallbackInfo callback_info = WGPU_POP_ERROR_SCOPE_CALLBACK_INFO_INIT;
     callback_info.mode = ToWgpu(callback_mode);
     callback_info.callback = PopErrorScopeThunk;
-    callback_info.userdata1 = callback_state;
+    callback_info.userdata1 = callback_state.get();
 
+    auto* transferred_state = callback_state.release();
     const WGPUFuture native_future = wgpuDevicePopErrorScope(device_.get(), callback_info);
 
     Future future{};
     future.id = native_future.id;
+    if (future.id == 0) {
+        callback_state.reset(transferred_state);
+        future.message = "PopErrorScope request failed to start";
+    }
     return future;
 }
 
@@ -620,7 +455,7 @@ void WgpuDeviceImpl::SetLoggingCallback(LoggingCallback callback) {
         return;
     }
 
-    logging_callback_ = std::make_shared<LoggingCallback>(std::move(callback));
+    logging_callback_ = createRef<LoggingCallback>(std::move(callback));
 
     WGPULoggingCallbackInfo callback_info = WGPU_LOGGING_CALLBACK_INFO_INIT;
     callback_info.callback = LoggingCallbackThunk;

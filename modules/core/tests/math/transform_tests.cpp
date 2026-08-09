@@ -1,12 +1,12 @@
-#include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
 
-#include <woki/math/interop/transform.hpp>
-#include <woki/math/interop/op.hpp>
-#include <woki/math/vec/vec4.hpp>
 #include <woki/math/mat/mat4.hpp>
-#include <woki/math/common/functions.hpp>
+#include <woki/math/vec/vec4.hpp>
+#include <woki/math/interop/op.hpp>
 #include <woki/math/common/constants.hpp>
+#include <woki/math/common/functions.hpp>
+#include <woki/math/interop/transform.hpp>
 
 using namespace woki::math;
 using Catch::Approx;

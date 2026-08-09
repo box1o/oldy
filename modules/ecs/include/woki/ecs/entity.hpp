@@ -1,9 +1,9 @@
 #pragma once
 
-#include <woki/core.hpp>
-
-#include <compare>
 #include <limits>
+#include <compare>
+
+#include <woki/core.hpp>
 
 namespace woki {
 
@@ -15,7 +15,8 @@ public:
     constexpr Entity() noexcept = default;
 
     explicit constexpr Entity(u32 index, u32 generation = 0) noexcept
-        : index_(index), generation_(generation) {}
+        : index_(index),
+          generation_(generation) {}
 
     explicit constexpr Entity(u64 value) noexcept
         : index_(static_cast<u32>(value & 0xFFFFFFFFull)),

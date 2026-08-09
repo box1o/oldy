@@ -3,8 +3,8 @@
 #include <concepts>
 #include <string_view>
 
-#include "woki/events/category.hpp"
 #include "woki/events/type.hpp"
+#include "woki/events/category.hpp"
 
 namespace woki::events {
 
@@ -30,6 +30,22 @@ public:
 
     bool handled{false};
     f64 timestamp{0.0};
+};
+
+template <EventType Type, EventCategory... Categories>
+class TypedEvent : public Event {
+public:
+    [[nodiscard]] static constexpr EventType GetStaticType() noexcept {
+        return Type;
+    }
+
+    [[nodiscard]] EventType GetEventType() const noexcept final {
+        return Type;
+    }
+
+    [[nodiscard]] u16 GetCategoryFlags() const noexcept final {
+        return (static_cast<u16>(Categories) | ... | static_cast<u16>(EventCategory::kNone));
+    }
 };
 
 } // namespace woki::events

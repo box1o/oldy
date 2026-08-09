@@ -1,13 +1,12 @@
-#include "wgpu_objects.hpp"
-
-#include "detail/compilation_info.hpp"
-#include "detail/handle.hpp"
-#include "detail/native_helpers.hpp"
-#include "detail/resource_descriptor.hpp"
-#include "detail/string.hpp"
-#include "wgpu_enums.hpp"
-
 #include <utility>
+
+#include "wgpu_enums.hpp"
+#include "wgpu_objects.hpp"
+#include "detail/handle.hpp"
+#include "detail/string.hpp"
+#include "detail/native_helpers.hpp"
+#include "detail/compilation_info.hpp"
+#include "detail/resource_descriptor.hpp"
 
 namespace woki::rhi::wgpu {
 namespace {
@@ -21,11 +20,7 @@ struct MapAsyncCallbackState {
     MapAsyncCallback callback;
 };
 
-void BufferMapAsyncThunk(
-    const WGPUMapAsyncStatus status,
-    const WGPUStringView message,
-    void* userdata1,
-    void*) {
+void BufferMapAsyncThunk(const WGPUMapAsyncStatus status, const WGPUStringView message, void* userdata1, void*) {
     auto state = scope<MapAsyncCallbackState>(static_cast<MapAsyncCallbackState*>(userdata1));
     if (state == nullptr || !state->callback) {
         return;
@@ -38,13 +33,8 @@ struct CompilationInfoCallbackState {
     ShaderModuleCompilationInfoCallback callback;
 };
 
-void ShaderModuleCompilationInfoThunk(
-    const WGPUCompilationInfoRequestStatus status,
-    const WGPUCompilationInfo* compilation_info,
-    void* userdata1,
-    void*) {
-    auto state = scope<CompilationInfoCallbackState>(
-        static_cast<CompilationInfoCallbackState*>(userdata1));
+void ShaderModuleCompilationInfoThunk(const WGPUCompilationInfoRequestStatus status, const WGPUCompilationInfo* compilation_info, void* userdata1, void*) {
+    auto state = scope<CompilationInfoCallbackState>(static_cast<CompilationInfoCallbackState*>(userdata1));
     if (state == nullptr || !state->callback) {
         return;
     }
@@ -216,20 +206,14 @@ public:
     explicit WgpuBufferImpl(WGPUBuffer handle) noexcept
         : handle_(handle) {}
 
-    [[nodiscard]] Result<scope<TexelBufferView>> CreateTexelView(
-        const TexelBufferViewDesc& desc) const override;
+    [[nodiscard]] Result<scope<TexelBufferView>> CreateTexelView(const TexelBufferViewDesc& desc) const override;
     void Destroy() override;
     [[nodiscard]] const void* GetConstMappedRange(size_t offset, size_t size) const override;
     [[nodiscard]] void* GetMappedRange(size_t offset, size_t size) override;
     [[nodiscard]] BufferMapState GetMapState() const override;
     [[nodiscard]] u64 GetSize() const override;
     [[nodiscard]] BufferUsage GetUsage() const override;
-    [[nodiscard]] Future MapAsync(
-        MapMode mode,
-        size_t offset,
-        size_t size,
-        CallbackMode callback_mode,
-        MapAsyncCallback callback) const override;
+    [[nodiscard]] Future MapAsync(MapMode mode, size_t offset, size_t size, CallbackMode callback_mode, MapAsyncCallback callback) const override;
     [[nodiscard]] Result<void> ReadMappedRange(size_t offset, void* data, size_t size) const override;
     void SetLabel(std::string_view label) override;
     void Unmap() override;
@@ -272,27 +256,15 @@ public:
     explicit WgpuRenderBundleEncoderImpl(WGPURenderBundleEncoder handle) noexcept
         : encoder_(handle) {}
 
-    void Draw(
-        u32 vertex_count,
-        u32 instance_count,
-        u32 first_vertex,
-        u32 first_instance) override;
-    void DrawIndexed(
-        u32 index_count,
-        u32 instance_count,
-        u32 first_index,
-        i32 base_vertex,
-        u32 first_instance) override;
+    void Draw(u32 vertex_count, u32 instance_count, u32 first_vertex, u32 first_instance) override;
+    void DrawIndexed(u32 index_count, u32 instance_count, u32 first_index, i32 base_vertex, u32 first_instance) override;
     void DrawIndexedIndirect(const Buffer& indirect_buffer, u64 indirect_offset) override;
     void DrawIndirect(const Buffer& indirect_buffer, u64 indirect_offset) override;
     [[nodiscard]] Result<scope<RenderBundle>> Finish(const RenderBundleDesc& desc) override;
     void InsertDebugMarker(std::string_view marker_label) override;
     void PopDebugGroup() override;
     void PushDebugGroup(std::string_view group_label) override;
-    void SetBindGroup(
-        u32 group_index,
-        const BindGroup* group,
-        std::span<const u32> dynamic_offsets) override;
+    void SetBindGroup(u32 group_index, const BindGroup* group, std::span<const u32> dynamic_offsets) override;
     void SetImmediates(u32 offset, const void* data, size_t size) override;
     void SetIndexBuffer(const Buffer& buffer, IndexFormat format, u64 offset, u64 size) override;
     void SetLabel(std::string_view label) override;
@@ -327,9 +299,7 @@ public:
     explicit WgpuShaderModuleImpl(WGPUShaderModule handle) noexcept
         : handle_(handle) {}
 
-    [[nodiscard]] Future GetCompilationInfo(
-        CallbackMode callback_mode,
-        ShaderModuleCompilationInfoCallback callback) const override;
+    [[nodiscard]] Future GetCompilationInfo(CallbackMode callback_mode, ShaderModuleCompilationInfoCallback callback) const override;
     void SetLabel(std::string_view label) override;
     [[nodiscard]] NativeHandles GetNativeHandles() const noexcept override;
 
@@ -342,13 +312,9 @@ public:
     explicit WgpuSharedBufferMemoryImpl(WGPUSharedBufferMemory handle) noexcept
         : handle_(handle) {}
 
-    [[nodiscard]] Result<void> BeginAccess(
-        const Buffer& buffer,
-        const SharedBufferMemoryBeginAccessDesc& desc) const override;
+    [[nodiscard]] Result<void> BeginAccess(const Buffer& buffer, const SharedBufferMemoryBeginAccessDesc& desc) const override;
     [[nodiscard]] Result<scope<Buffer>> CreateBuffer(const BufferDesc& desc) const override;
-    [[nodiscard]] Result<void> EndAccess(
-        const Buffer& buffer,
-        SharedBufferMemoryEndAccessState& state) const override;
+    [[nodiscard]] Result<void> EndAccess(const Buffer& buffer, SharedBufferMemoryEndAccessState& state) const override;
     [[nodiscard]] Result<void> GetProperties(SharedBufferMemoryProperties& properties) const override;
     [[nodiscard]] bool IsDeviceLost() const override;
     void SetLabel(std::string_view label) override;
@@ -376,13 +342,9 @@ public:
     explicit WgpuSharedTextureMemoryImpl(WGPUSharedTextureMemory handle) noexcept
         : handle_(handle) {}
 
-    [[nodiscard]] Result<void> BeginAccess(
-        const Texture& texture,
-        const SharedTextureMemoryBeginAccessDesc& desc) const override;
+    [[nodiscard]] Result<void> BeginAccess(const Texture& texture, const SharedTextureMemoryBeginAccessDesc& desc) const override;
     [[nodiscard]] Result<scope<Texture>> CreateTexture(const TextureDesc& desc) const override;
-    [[nodiscard]] Result<void> EndAccess(
-        const Texture& texture,
-        SharedTextureMemoryEndAccessState& state) const override;
+    [[nodiscard]] Result<void> EndAccess(const Texture& texture, SharedTextureMemoryEndAccessState& state) const override;
     [[nodiscard]] Result<void> GetProperties(SharedTextureMemoryProperties& properties) const override;
     [[nodiscard]] bool IsDeviceLost() const override;
     void SetLabel(std::string_view label) override;
@@ -394,7 +356,6 @@ private:
 
 [[nodiscard]] scope<RenderBundle> CreateRenderBundleObject(WGPURenderBundle handle);
 [[nodiscard]] scope<TexelBufferView> CreateTexelBufferViewObject(WGPUTexelBufferView handle);
-[[nodiscard]] scope<TextureView> CreateTextureViewObject(WGPUTextureView handle);
 
 void WgpuBindGroupImpl::SetLabel(const std::string_view label) {
     if (handle_) {
@@ -480,14 +441,12 @@ NativeHandles WgpuTextureViewImpl::GetNativeHandles() const noexcept {
     return handles;
 }
 
-scope<BindGroupLayout> WgpuComputePipelineImpl::GetBindGroupLayout(
-    const u32 group_index) const {
+scope<BindGroupLayout> WgpuComputePipelineImpl::GetBindGroupLayout(const u32 group_index) const {
     if (!handle_) {
         return nullptr;
     }
 
-    return CreateBindGroupLayoutObject(
-        wgpuComputePipelineGetBindGroupLayout(handle_.get(), group_index));
+    return CreateBindGroupLayoutObject(wgpuComputePipelineGetBindGroupLayout(handle_.get(), group_index));
 }
 
 void WgpuComputePipelineImpl::SetLabel(const std::string_view label) {
@@ -502,14 +461,12 @@ NativeHandles WgpuComputePipelineImpl::GetNativeHandles() const noexcept {
     return handles;
 }
 
-scope<BindGroupLayout> WgpuRenderPipelineImpl::GetBindGroupLayout(
-    const u32 group_index) const {
+scope<BindGroupLayout> WgpuRenderPipelineImpl::GetBindGroupLayout(const u32 group_index) const {
     if (!handle_) {
         return nullptr;
     }
 
-    return CreateBindGroupLayoutObject(
-        wgpuRenderPipelineGetBindGroupLayout(handle_.get(), group_index));
+    return CreateBindGroupLayoutObject(wgpuRenderPipelineGetBindGroupLayout(handle_.get(), group_index));
 }
 
 void WgpuRenderPipelineImpl::SetLabel(const std::string_view label) {
@@ -588,15 +545,13 @@ NativeHandles WgpuExternalTextureImpl::GetNativeHandles() const noexcept {
     return handles;
 }
 
-Result<scope<TexelBufferView>> WgpuBufferImpl::CreateTexelView(
-    const TexelBufferViewDesc& desc) const {
+Result<scope<TexelBufferView>> WgpuBufferImpl::CreateTexelView(const TexelBufferViewDesc& desc) const {
     if (!handle_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Buffer is invalid");
     }
 
     const detail::TexelBufferViewDescriptorStorage storage(desc);
-    return Ok(CreateTexelBufferViewObject(
-        wgpuBufferCreateTexelView(handle_.get(), &storage.native)));
+    return Ok(CreateTexelBufferViewObject(wgpuBufferCreateTexelView(handle_.get(), &storage.native)));
 }
 
 void WgpuBufferImpl::Destroy() {
@@ -645,12 +600,7 @@ BufferUsage WgpuBufferImpl::GetUsage() const {
     return FromWgpuBufferUsage(wgpuBufferGetUsage(handle_.get()));
 }
 
-Future WgpuBufferImpl::MapAsync(
-    const MapMode mode,
-    const size_t offset,
-    const size_t size,
-    const CallbackMode callback_mode,
-    MapAsyncCallback callback) const {
+Future WgpuBufferImpl::MapAsync(const MapMode mode, const size_t offset, const size_t size, const CallbackMode callback_mode, MapAsyncCallback callback) const {
     Future future{};
     if (!handle_) {
         future.message = "Buffer is invalid";
@@ -662,30 +612,29 @@ Future WgpuBufferImpl::MapAsync(
         return future;
     }
 
-    auto* callback_state = new MapAsyncCallbackState{.callback = std::move(callback)};
+    auto callback_state = createScope<MapAsyncCallbackState>(MapAsyncCallbackState{.callback = std::move(callback)});
 
     WGPUBufferMapCallbackInfo callback_info = WGPU_BUFFER_MAP_CALLBACK_INFO_INIT;
     callback_info.mode = ToWgpu(callback_mode);
     callback_info.callback = BufferMapAsyncThunk;
-    callback_info.userdata1 = callback_state;
+    callback_info.userdata1 = callback_state.get();
 
-    const WGPUFuture native_future =
-        wgpuBufferMapAsync(handle_.get(), ToWgpuMapMode(mode), offset, size, callback_info);
+    auto* transferred_state = callback_state.release();
+    const WGPUFuture native_future = wgpuBufferMapAsync(handle_.get(), ToWgpuMapMode(mode), offset, size, callback_info);
     future.id = native_future.id;
+    if (future.id == 0) {
+        callback_state.reset(transferred_state);
+        future.message = "Buffer map request failed to start";
+    }
     return future;
 }
 
-Result<void> WgpuBufferImpl::ReadMappedRange(
-    const size_t offset,
-    void* data,
-    const size_t size) const {
+Result<void> WgpuBufferImpl::ReadMappedRange(const size_t offset, void* data, const size_t size) const {
     if (!handle_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Buffer is invalid");
     }
 
-    return FromWgpuStatus(
-        wgpuBufferReadMappedRange(handle_.get(), offset, data, size),
-        "Failed to read mapped buffer range");
+    return FromWgpuStatus(wgpuBufferReadMappedRange(handle_.get(), offset, data, size), "Failed to read mapped buffer range");
 }
 
 void WgpuBufferImpl::SetLabel(const std::string_view label) {
@@ -700,17 +649,12 @@ void WgpuBufferImpl::Unmap() {
     }
 }
 
-Result<void> WgpuBufferImpl::WriteMappedRange(
-    const size_t offset,
-    const void* data,
-    const size_t size) {
+Result<void> WgpuBufferImpl::WriteMappedRange(const size_t offset, const void* data, const size_t size) {
     if (!handle_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Buffer is invalid");
     }
 
-    return FromWgpuStatus(
-        wgpuBufferWriteMappedRange(handle_.get(), offset, data, size),
-        "Failed to write mapped buffer range");
+    return FromWgpuStatus(wgpuBufferWriteMappedRange(handle_.get(), offset, data, size), "Failed to write mapped buffer range");
 }
 
 NativeHandles WgpuBufferImpl::GetNativeHandles() const noexcept {
@@ -840,44 +784,27 @@ NativeHandles WgpuTextureImpl::GetNativeHandles() const noexcept {
     return handles;
 }
 
-void WgpuRenderBundleEncoderImpl::Draw(
-    const u32 vertex_count,
-    const u32 instance_count,
-    const u32 first_vertex,
-    const u32 first_instance) {
+void WgpuRenderBundleEncoderImpl::Draw(const u32 vertex_count, const u32 instance_count, const u32 first_vertex, const u32 first_instance) {
     if (encoder_) {
-        wgpuRenderBundleEncoderDraw(
-            encoder_.get(), vertex_count, instance_count, first_vertex, first_instance);
+        wgpuRenderBundleEncoderDraw(encoder_.get(), vertex_count, instance_count, first_vertex, first_instance);
     }
 }
 
-void WgpuRenderBundleEncoderImpl::DrawIndexed(
-    const u32 index_count,
-    const u32 instance_count,
-    const u32 first_index,
-    const i32 base_vertex,
-    const u32 first_instance) {
+void WgpuRenderBundleEncoderImpl::DrawIndexed(const u32 index_count, const u32 instance_count, const u32 first_index, const i32 base_vertex, const u32 first_instance) {
     if (encoder_) {
-        wgpuRenderBundleEncoderDrawIndexed(
-            encoder_.get(), index_count, instance_count, first_index, base_vertex, first_instance);
+        wgpuRenderBundleEncoderDrawIndexed(encoder_.get(), index_count, instance_count, first_index, base_vertex, first_instance);
     }
 }
 
-void WgpuRenderBundleEncoderImpl::DrawIndexedIndirect(
-    const Buffer& indirect_buffer,
-    const u64 indirect_offset) {
+void WgpuRenderBundleEncoderImpl::DrawIndexedIndirect(const Buffer& indirect_buffer, const u64 indirect_offset) {
     if (encoder_) {
-        wgpuRenderBundleEncoderDrawIndexedIndirect(
-            encoder_.get(), detail::NativeBuffer(indirect_buffer), indirect_offset);
+        wgpuRenderBundleEncoderDrawIndexedIndirect(encoder_.get(), detail::NativeBuffer(indirect_buffer), indirect_offset);
     }
 }
 
-void WgpuRenderBundleEncoderImpl::DrawIndirect(
-    const Buffer& indirect_buffer,
-    const u64 indirect_offset) {
+void WgpuRenderBundleEncoderImpl::DrawIndirect(const Buffer& indirect_buffer, const u64 indirect_offset) {
     if (encoder_) {
-        wgpuRenderBundleEncoderDrawIndirect(
-            encoder_.get(), detail::NativeBuffer(indirect_buffer), indirect_offset);
+        wgpuRenderBundleEncoderDrawIndirect(encoder_.get(), detail::NativeBuffer(indirect_buffer), indirect_offset);
     }
 }
 
@@ -900,8 +827,7 @@ Result<scope<RenderBundle>> WgpuRenderBundleEncoderImpl::Finish(const RenderBund
 
 void WgpuRenderBundleEncoderImpl::InsertDebugMarker(const std::string_view marker_label) {
     if (encoder_) {
-        wgpuRenderBundleEncoderInsertDebugMarker(
-            encoder_.get(), detail::ToStringView(marker_label));
+        wgpuRenderBundleEncoderInsertDebugMarker(encoder_.get(), detail::ToStringView(marker_label));
     }
 }
 
@@ -917,39 +843,23 @@ void WgpuRenderBundleEncoderImpl::PushDebugGroup(const std::string_view group_la
     }
 }
 
-void WgpuRenderBundleEncoderImpl::SetBindGroup(
-    const u32 group_index,
-    const BindGroup* group,
-    const std::span<const u32> dynamic_offsets) {
+void WgpuRenderBundleEncoderImpl::SetBindGroup(const u32 group_index, const BindGroup* group, const std::span<const u32> dynamic_offsets) {
     if (!encoder_) {
         return;
     }
 
-    wgpuRenderBundleEncoderSetBindGroup(
-        encoder_.get(),
-        group_index,
-        detail::NativeBindGroup(group),
-        dynamic_offsets.size(),
-        dynamic_offsets.empty() ? nullptr : dynamic_offsets.data());
+    wgpuRenderBundleEncoderSetBindGroup(encoder_.get(), group_index, detail::NativeBindGroup(group), dynamic_offsets.size(), dynamic_offsets.empty() ? nullptr : dynamic_offsets.data());
 }
 
-void WgpuRenderBundleEncoderImpl::SetImmediates(
-    const u32 offset,
-    const void* data,
-    const size_t size) {
+void WgpuRenderBundleEncoderImpl::SetImmediates(const u32 offset, const void* data, const size_t size) {
     if (encoder_) {
         wgpuRenderBundleEncoderSetImmediates(encoder_.get(), offset, data, size);
     }
 }
 
-void WgpuRenderBundleEncoderImpl::SetIndexBuffer(
-    const Buffer& buffer,
-    const IndexFormat format,
-    const u64 offset,
-    const u64 size) {
+void WgpuRenderBundleEncoderImpl::SetIndexBuffer(const Buffer& buffer, const IndexFormat format, const u64 offset, const u64 size) {
     if (encoder_) {
-        wgpuRenderBundleEncoderSetIndexBuffer(
-            encoder_.get(), detail::NativeBuffer(buffer), ToWgpu(format), offset, size);
+        wgpuRenderBundleEncoderSetIndexBuffer(encoder_.get(), detail::NativeBuffer(buffer), ToWgpu(format), offset, size);
     }
 }
 
@@ -961,30 +871,19 @@ void WgpuRenderBundleEncoderImpl::SetLabel(const std::string_view label) {
 
 void WgpuRenderBundleEncoderImpl::SetPipeline(const RenderPipeline& pipeline) {
     if (encoder_) {
-        wgpuRenderBundleEncoderSetPipeline(
-            encoder_.get(), detail::NativeRenderPipeline(pipeline));
+        wgpuRenderBundleEncoderSetPipeline(encoder_.get(), detail::NativeRenderPipeline(pipeline));
     }
 }
 
 void WgpuRenderBundleEncoderImpl::SetResourceTable(const ResourceTable* table) {
     if (encoder_) {
-        wgpuRenderBundleEncoderSetResourceTable(
-            encoder_.get(), detail::NativeResourceTable(table));
+        wgpuRenderBundleEncoderSetResourceTable(encoder_.get(), detail::NativeResourceTable(table));
     }
 }
 
-void WgpuRenderBundleEncoderImpl::SetVertexBuffer(
-    const u32 slot,
-    const Buffer* buffer,
-    const u64 offset,
-    const u64 size) {
+void WgpuRenderBundleEncoderImpl::SetVertexBuffer(const u32 slot, const Buffer* buffer, const u64 offset, const u64 size) {
     if (encoder_) {
-        wgpuRenderBundleEncoderSetVertexBuffer(
-            encoder_.get(),
-            slot,
-            buffer == nullptr ? nullptr : detail::NativeBuffer(*buffer),
-            offset,
-            size);
+        wgpuRenderBundleEncoderSetVertexBuffer(encoder_.get(), slot, buffer == nullptr ? nullptr : detail::NativeBuffer(*buffer), offset, size);
     }
 }
 
@@ -1022,9 +921,7 @@ Result<void> WgpuResourceTableImpl::RemoveBinding(const u32 slot) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Resource table is invalid");
     }
 
-    return FromWgpuStatus(
-        wgpuResourceTableRemoveBinding(handle_.get(), slot),
-        "Failed to remove resource table binding");
+    return FromWgpuStatus(wgpuResourceTableRemoveBinding(handle_.get(), slot), "Failed to remove resource table binding");
 }
 
 void WgpuResourceTableImpl::SetLabel(const std::string_view label) {
@@ -1033,17 +930,13 @@ void WgpuResourceTableImpl::SetLabel(const std::string_view label) {
     }
 }
 
-Result<void> WgpuResourceTableImpl::Update(
-    const u32 slot,
-    const BindingResourceDesc& resource) {
+Result<void> WgpuResourceTableImpl::Update(const u32 slot, const BindingResourceDesc& resource) {
     if (!handle_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Resource table is invalid");
     }
 
     const WGPUBindingResource native_resource = detail::ToWgpu(resource);
-    return FromWgpuStatus(
-        wgpuResourceTableUpdate(handle_.get(), slot, &native_resource),
-        "Failed to update resource table binding");
+    return FromWgpuStatus(wgpuResourceTableUpdate(handle_.get(), slot, &native_resource), "Failed to update resource table binding");
 }
 
 NativeHandles WgpuResourceTableImpl::GetNativeHandles() const noexcept {
@@ -1052,9 +945,7 @@ NativeHandles WgpuResourceTableImpl::GetNativeHandles() const noexcept {
     return handles;
 }
 
-Future WgpuShaderModuleImpl::GetCompilationInfo(
-    const CallbackMode callback_mode,
-    ShaderModuleCompilationInfoCallback callback) const {
+Future WgpuShaderModuleImpl::GetCompilationInfo(const CallbackMode callback_mode, ShaderModuleCompilationInfoCallback callback) const {
     Future future{};
     if (!handle_) {
         future.message = "Shader module is invalid";
@@ -1066,16 +957,20 @@ Future WgpuShaderModuleImpl::GetCompilationInfo(
         return future;
     }
 
-    auto* callback_state = new CompilationInfoCallbackState{.callback = std::move(callback)};
+    auto callback_state = createScope<CompilationInfoCallbackState>(CompilationInfoCallbackState{.callback = std::move(callback)});
 
     WGPUCompilationInfoCallbackInfo callback_info = WGPU_COMPILATION_INFO_CALLBACK_INFO_INIT;
     callback_info.mode = ToWgpu(callback_mode);
     callback_info.callback = ShaderModuleCompilationInfoThunk;
-    callback_info.userdata1 = callback_state;
+    callback_info.userdata1 = callback_state.get();
 
-    const WGPUFuture native_future =
-        wgpuShaderModuleGetCompilationInfo(handle_.get(), callback_info);
+    auto* transferred_state = callback_state.release();
+    const WGPUFuture native_future = wgpuShaderModuleGetCompilationInfo(handle_.get(), callback_info);
     future.id = native_future.id;
+    if (future.id == 0) {
+        callback_state.reset(transferred_state);
+        future.message = "Compilation info request failed to start";
+    }
     return future;
 }
 
@@ -1091,20 +986,15 @@ NativeHandles WgpuShaderModuleImpl::GetNativeHandles() const noexcept {
     return handles;
 }
 
-Result<void> WgpuSharedBufferMemoryImpl::BeginAccess(
-    const Buffer& buffer,
-    const SharedBufferMemoryBeginAccessDesc& desc) const {
+Result<void> WgpuSharedBufferMemoryImpl::BeginAccess(const Buffer& buffer, const SharedBufferMemoryBeginAccessDesc& desc) const {
     if (!handle_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Shared buffer memory is invalid");
     }
 
-    WGPUSharedBufferMemoryBeginAccessDescriptor native =
-        WGPU_SHARED_BUFFER_MEMORY_BEGIN_ACCESS_DESCRIPTOR_INIT;
+    WGPUSharedBufferMemoryBeginAccessDescriptor native = WGPU_SHARED_BUFFER_MEMORY_BEGIN_ACCESS_DESCRIPTOR_INIT;
     native.nextInChain = static_cast<WGPUChainedStruct*>(desc.next_in_chain);
 
-    return FromWgpuStatus(
-        wgpuSharedBufferMemoryBeginAccess(handle_.get(), detail::NativeBuffer(buffer), &native),
-        "Failed to begin shared buffer memory access");
+    return FromWgpuStatus(wgpuSharedBufferMemoryBeginAccess(handle_.get(), detail::NativeBuffer(buffer), &native), "Failed to begin shared buffer memory access");
 }
 
 Result<scope<Buffer>> WgpuSharedBufferMemoryImpl::CreateBuffer(const BufferDesc& desc) const {
@@ -1125,9 +1015,7 @@ Result<scope<Buffer>> WgpuSharedBufferMemoryImpl::CreateBuffer(const BufferDesc&
     return Ok(CreateBufferObject(buffer));
 }
 
-Result<void> WgpuSharedBufferMemoryImpl::EndAccess(
-    const Buffer& buffer,
-    SharedBufferMemoryEndAccessState& state) const {
+Result<void> WgpuSharedBufferMemoryImpl::EndAccess(const Buffer& buffer, SharedBufferMemoryEndAccessState& state) const {
     if (!handle_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Shared buffer memory is invalid");
     }
@@ -1135,15 +1023,13 @@ Result<void> WgpuSharedBufferMemoryImpl::EndAccess(
     WGPUSharedBufferMemoryEndAccessState native = WGPU_SHARED_BUFFER_MEMORY_END_ACCESS_STATE_INIT;
     native.nextInChain = static_cast<WGPUChainedStruct*>(state.next_in_chain);
 
-    const WGPUStatus status = wgpuSharedBufferMemoryEndAccess(
-        handle_.get(), detail::NativeBuffer(buffer), &native);
+    const WGPUStatus status = wgpuSharedBufferMemoryEndAccess(handle_.get(), detail::NativeBuffer(buffer), &native);
     state.next_in_chain = native.nextInChain;
 
     return FromWgpuStatus(status, "Failed to end shared buffer memory access");
 }
 
-Result<void> WgpuSharedBufferMemoryImpl::GetProperties(
-    SharedBufferMemoryProperties& properties) const {
+Result<void> WgpuSharedBufferMemoryImpl::GetProperties(SharedBufferMemoryProperties& properties) const {
     if (!handle_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Shared buffer memory is invalid");
     }
@@ -1200,20 +1086,15 @@ NativeHandles WgpuSharedFenceImpl::GetNativeHandles() const noexcept {
     return handles;
 }
 
-Result<void> WgpuSharedTextureMemoryImpl::BeginAccess(
-    const Texture& texture,
-    const SharedTextureMemoryBeginAccessDesc& desc) const {
+Result<void> WgpuSharedTextureMemoryImpl::BeginAccess(const Texture& texture, const SharedTextureMemoryBeginAccessDesc& desc) const {
     if (!handle_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Shared texture memory is invalid");
     }
 
-    WGPUSharedTextureMemoryBeginAccessDescriptor native =
-        WGPU_SHARED_TEXTURE_MEMORY_BEGIN_ACCESS_DESCRIPTOR_INIT;
+    WGPUSharedTextureMemoryBeginAccessDescriptor native = WGPU_SHARED_TEXTURE_MEMORY_BEGIN_ACCESS_DESCRIPTOR_INIT;
     native.nextInChain = static_cast<WGPUChainedStruct*>(desc.next_in_chain);
 
-    return FromWgpuStatus(
-        wgpuSharedTextureMemoryBeginAccess(handle_.get(), NativeTexture(texture), &native),
-        "Failed to begin shared texture memory access");
+    return FromWgpuStatus(wgpuSharedTextureMemoryBeginAccess(handle_.get(), NativeTexture(texture), &native), "Failed to begin shared texture memory access");
 }
 
 Result<scope<Texture>> WgpuSharedTextureMemoryImpl::CreateTexture(const TextureDesc& desc) const {
@@ -1231,26 +1112,21 @@ Result<scope<Texture>> WgpuSharedTextureMemoryImpl::CreateTexture(const TextureD
     return Ok(CreateTextureObject(texture));
 }
 
-Result<void> WgpuSharedTextureMemoryImpl::EndAccess(
-    const Texture& texture,
-    SharedTextureMemoryEndAccessState& state) const {
+Result<void> WgpuSharedTextureMemoryImpl::EndAccess(const Texture& texture, SharedTextureMemoryEndAccessState& state) const {
     if (!handle_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Shared texture memory is invalid");
     }
 
-    WGPUSharedTextureMemoryEndAccessState native =
-        WGPU_SHARED_TEXTURE_MEMORY_END_ACCESS_STATE_INIT;
+    WGPUSharedTextureMemoryEndAccessState native = WGPU_SHARED_TEXTURE_MEMORY_END_ACCESS_STATE_INIT;
     native.nextInChain = static_cast<WGPUChainedStruct*>(state.next_in_chain);
 
-    const WGPUStatus status = wgpuSharedTextureMemoryEndAccess(
-        handle_.get(), NativeTexture(texture), &native);
+    const WGPUStatus status = wgpuSharedTextureMemoryEndAccess(handle_.get(), NativeTexture(texture), &native);
     state.next_in_chain = native.nextInChain;
 
     return FromWgpuStatus(status, "Failed to end shared texture memory access");
 }
 
-Result<void> WgpuSharedTextureMemoryImpl::GetProperties(
-    SharedTextureMemoryProperties& properties) const {
+Result<void> WgpuSharedTextureMemoryImpl::GetProperties(SharedTextureMemoryProperties& properties) const {
     if (!handle_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Shared texture memory is invalid");
     }

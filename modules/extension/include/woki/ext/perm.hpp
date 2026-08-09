@@ -2,10 +2,10 @@
 
 // IWYU pragma: private, include "woki/ext/ext.hpp"
 
-#include <woki/core.hpp>
-
 #include <array>
 #include <string_view>
+
+#include <woki/core.hpp>
 
 namespace woki::ext {
 

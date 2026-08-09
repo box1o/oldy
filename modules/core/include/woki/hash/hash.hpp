@@ -2,11 +2,11 @@
 
 // IWYU pragma: private, include "woki/core.hpp"
 
-#include "../types/types.hpp"
-
 #include <cstddef>
 #include <functional>
 #include <string_view>
+
+#include "../types/types.hpp"
 
 namespace woki {
 

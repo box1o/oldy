@@ -6,21 +6,14 @@
 
 namespace woki::rhi::wgpu {
 
-class WgpuInstanceImpl;
-
 class WgpuAdapterImpl final : public Adapter {
 public:
-    WgpuAdapterImpl(WgpuInstanceImpl& instance, WGPUAdapter adapter);
+    WgpuAdapterImpl(WGPUInstance instance, WGPUAdapter adapter);
     ~WgpuAdapterImpl() override;
 
-    [[nodiscard]] Result<scope<Device>> CreateDevice(const DeviceDesc& desc = {}) override;
-    [[nodiscard]] Result<scope<Device>> RequestDevice(const DeviceDesc& desc = {}) override;
-    [[nodiscard]] Future RequestDevice(
-        const DeviceDesc& desc,
-        CallbackMode callback_mode,
-        RequestDeviceCallback callback) override;
-
-    [[nodiscard]] Instance& GetInstance() const noexcept override;
+    [[nodiscard]] Result<ref<Device>> CreateDevice(const DeviceDesc& desc = {}) override;
+    [[nodiscard]] Result<ref<Device>> RequestDevice(const DeviceDesc& desc = {}) override;
+    [[nodiscard]] Future RequestDevice(const DeviceDesc& desc, CallbackMode callback_mode, RequestDeviceCallback callback) override;
 
     [[nodiscard]] AdapterInfo GetInfo() const override;
     [[nodiscard]] Result<void> GetInfo(AdapterInfo& info) const override;
@@ -28,8 +21,7 @@ public:
     void GetFeatures(SupportedFeatures& features) const override;
     [[nodiscard]] SupportedFeatures GetFeatures() const override;
 
-    [[nodiscard]] Result<void> GetFormatCapabilities(
-        TextureFormat format, DawnFormatCapabilities& capabilities) const override;
+    [[nodiscard]] Result<void> GetFormatCapabilities(TextureFormat format, DawnFormatCapabilities& capabilities) const override;
 
     [[nodiscard]] Limits GetLimits() const override;
     [[nodiscard]] Result<void> GetLimits(Limits& limits) const override;
@@ -41,7 +33,6 @@ public:
     [[nodiscard]] WGPUInstance GetNativeInstance() const noexcept;
 
 private:
-    WgpuInstanceImpl* instance_{nullptr};
     detail::InstanceHandle instance_handle_;
     detail::AdapterHandle adapter_;
     AdapterInfo info_;

@@ -1,12 +1,12 @@
 #pragma once
 
-#include "forward.hpp"
-#include "types.hpp"
-
-#include <optional>
 #include <span>
 #include <string>
 #include <vector>
+#include <optional>
+
+#include "types.hpp"
+#include "forward.hpp"
 
 namespace woki::rhi {
 
@@ -14,7 +14,7 @@ struct InstanceDesc final {
     void* next_in_chain{nullptr};
     std::vector<InstanceFeatureName> required_features{};
     std::optional<InstanceLimits> required_limits{};
-    bool enable_validation{true};
+    bool enable_validation{false};
     std::string label{"Instance"};
 };
 
@@ -127,8 +127,6 @@ struct QueueDesc final {
 };
 
 struct DeviceDesc final {
-    bool enable_validation{true};
-    bool enable_debug_labels{true};
     std::vector<FeatureName> required_features{};
     std::optional<Limits> required_limits{};
     QueueDesc default_queue{};

@@ -1,8 +1,7 @@
-#include "woki/config/config.hpp"
-
+#include <sstream>
 #include <yaml-cpp/yaml.h>
 
-#include <sstream>
+#include "woki/config/config.hpp"
 
 namespace woki {
 

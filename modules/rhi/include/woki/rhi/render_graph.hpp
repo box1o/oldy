@@ -1,14 +1,14 @@
 #pragma once
 
-#include "render_graph/bind_group_builder.hpp"
+#include <unordered_map>
+
+#include <woki/core.hpp>
+
 #include "render_graph/builder.hpp"
 #include "render_graph/context.hpp"
 #include "render_graph/internal.hpp"
 #include "render_graph/resources.hpp"
-
-#include <unordered_map>
-
-#include <woki/core.hpp>
+#include "render_graph/bind_group_builder.hpp"
 
 namespace woki::rhi {
 
@@ -20,32 +20,32 @@ public:
     RenderGraphFrame& operator=(const RenderGraphFrame&) = delete;
     ~RenderGraphFrame();
 
-    void Bind(PerFrameSlot slot, TextureView* view);
+    void Bind(PerFrameSlot slot, ref<TextureView> view);
     [[nodiscard]] Result<void> Execute();
 
 private:
     friend class RenderGraph;
 
-    RenderGraphFrame(RenderGraph& graph, Device& device, u32 width, u32 height);
+    RenderGraphFrame(ref<RenderGraph> graph, u32 width, u32 height);
 
-    RenderGraph* graph_{nullptr};
-    Device* device_{nullptr};
+    ref<RenderGraph> graph_{};
     u32 width_{0};
     u32 height_{0};
 
     scope<CommandEncoder> encoder_{};
-    std::unordered_map<u32, TextureView*> per_frame_views_{};
+    std::unordered_map<u32, ref<TextureView>> per_frame_views_{};
 };
 
-class RenderGraph final {
-public:
-    [[nodiscard]] static Result<scope<RenderGraph>> Create(
-        Device& device,
-        render_graph::detail::GraphBlueprint blueprint,
-        u32 width,
-        u32 height);
+class RenderGraph final : public ref_from_this<RenderGraph> {
+private:
+    struct ConstructionKey final {};
 
-    [[nodiscard]] RenderGraphFrame BeginFrame(Device& device, u32 width, u32 height);
+public:
+    RenderGraph(ConstructionKey, ref<Device> device, render_graph::detail::GraphBlueprint blueprint, u32 width, u32 height);
+
+    [[nodiscard]] static Result<ref<RenderGraph>> Create(ref<Device> device, render_graph::detail::GraphBlueprint blueprint, u32 width, u32 height);
+
+    [[nodiscard]] RenderGraphFrame BeginFrame(u32 width, u32 height);
     [[nodiscard]] Result<void> RebuildForResize(u32 width, u32 height);
 
 private:
@@ -56,11 +56,8 @@ private:
         render_graph::detail::ResourceRecord blueprint{};
         scope<Texture> texture{};
         scope<TextureView> view{};
-        TextureView* per_frame_view{nullptr};
         u32 pool_index{kInvalidGraphResource};
     };
-
-    RenderGraph(Device& device, render_graph::detail::GraphBlueprint blueprint, u32 width, u32 height);
 
     [[nodiscard]] Result<void> AllocateRuntimeResources(u32 width, u32 height);
     void ReleaseTransientPool();
@@ -68,19 +65,10 @@ private:
     [[nodiscard]] Texture* ResolveTexture(u32 resource_id);
     [[nodiscard]] TextureView* ResolveView(u32 resource_id);
     [[nodiscard]] TextureView* ResolveSampleView(u32 resource_id, SampleMode mode);
-    [[nodiscard]] Result<void> ExecuteRenderPass(
-        u32 pass_index,
-        CommandEncoder& encoder,
-        u32 width,
-        u32 height,
-        const std::unordered_map<u32, TextureView*>& per_frame_views);
-    [[nodiscard]] Result<void> ExecuteCopyPass(
-        u32 pass_index,
-        CommandEncoder& encoder,
-        u32 width,
-        u32 height);
+    [[nodiscard]] Result<void> ExecuteRenderPass(u32 pass_index, CommandEncoder& encoder, u32 width, u32 height, const std::unordered_map<u32, ref<TextureView>>& per_frame_views);
+    [[nodiscard]] Result<void> ExecuteCopyPass(u32 pass_index, CommandEncoder& encoder, u32 width, u32 height);
 
-    Device* device_{nullptr};
+    ref<Device> device_{};
     render_graph::detail::GraphBlueprint blueprint_{};
     u32 width_{0};
     u32 height_{0};

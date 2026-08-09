@@ -1,17 +1,16 @@
 #pragma once
 
-#include "context.hpp"
-#include "internal.hpp"
-#include "resources.hpp"
-
-#include <woki/rhi/forward.hpp>
-
 #include <functional>
 #include <string_view>
 #include <type_traits>
 
-#include <woki/assert/assert.hpp>
 #include <woki/core.hpp>
+#include <woki/rhi/forward.hpp>
+#include <woki/assert/assert.hpp>
+
+#include "context.hpp"
+#include "internal.hpp"
+#include "resources.hpp"
 
 namespace woki::rhi {
 
@@ -30,14 +29,14 @@ public:
     PassBuilder& Sample(Resource resource, SampleMode mode = SampleMode::ColorTexture);
     PassBuilder& Copy(Resource src, Resource dst);
 
-    template<typename Fn>
+    template <typename Fn>
     PassBuilder& Execute(Fn&& callback);
 
 private:
     friend class RenderGraphBuilder;
-    PassBuilder(RenderGraphBuilder& owner, u32 pass_index);
+    PassBuilder(ref<render_graph::detail::GraphBlueprint> blueprint, u32 pass_index);
 
-    RenderGraphBuilder* owner_{nullptr};
+    ref<render_graph::detail::GraphBlueprint> blueprint_{};
     u32 pass_index_{kInvalidGraphResource};
 };
 
@@ -49,31 +48,32 @@ public:
 
 private:
     friend class RenderGraphBuilder;
-    explicit FramebufferBuilder(RenderGraphBuilder& owner, u32 framebuffer_index);
+    explicit FramebufferBuilder(ref<render_graph::detail::GraphBlueprint> blueprint, u32 framebuffer_index);
 
-    RenderGraphBuilder* owner_{nullptr};
+    ref<render_graph::detail::GraphBlueprint> blueprint_{};
     u32 framebuffer_index_{kInvalidGraphResource};
 };
 
 class RenderGraphBuilder final {
 public:
-    explicit RenderGraphBuilder(Device& device);
+    explicit RenderGraphBuilder(ref<Device> device);
 
     [[nodiscard]] PerFrameSlot PerFrame();
     [[nodiscard]] Resource Transient(TransientDesc desc);
-    [[nodiscard]] Resource Use(Texture& texture);
+    [[nodiscard]] Resource Use(ref<Texture> texture);
 
     [[nodiscard]] FramebufferBuilder Framebuffer();
     [[nodiscard]] PassBuilder AddPass(std::string_view debug_name);
 
-    void SetPassData(std::string_view pass_name, void* user_data);
-
-    template<typename T>
-    void SetPassData(const std::string_view pass_name, T& user_data) {
-        SetPassData(pass_name, static_cast<void*>(&user_data));
+    template <typename T>
+    void SetPassData(const std::string_view pass_name, T user_data) {
+        const auto it = blueprint_->pass_name_to_index.find(std::string(pass_name));
+        if (it != blueprint_->pass_name_to_index.end()) {
+            blueprint_->passes[it->second].user_data = createRef<T>(std::move(user_data));
+        }
     }
 
-    [[nodiscard]] Result<scope<RenderGraph>> Compile(u32 width, u32 height);
+    [[nodiscard]] Result<ref<RenderGraph>> Compile(u32 width, u32 height);
 
 private:
     friend class PassBuilder;
@@ -84,25 +84,21 @@ private:
     [[nodiscard]] u32 AllocateFramebuffer();
     [[nodiscard]] u32 AllocatePass(std::string_view debug_name);
 
-    Device* device_{nullptr};
-    render_graph::detail::GraphBlueprint blueprint_{};
+    ref<Device> device_{};
+    ref<render_graph::detail::GraphBlueprint> blueprint_{createRef<render_graph::detail::GraphBlueprint>()};
 };
 
-template<typename Fn>
+template <typename Fn>
 PassBuilder& PassBuilder::Execute(Fn&& callback) {
-    WOKI_ASSERT(owner_ != nullptr);
-    render_graph::detail::PassRecord& pass = owner_->blueprint_.passes[pass_index_];
+    WOKI_ASSERT(blueprint_ != nullptr);
+    render_graph::detail::PassRecord& pass = blueprint_->passes[pass_index_];
 
-    if constexpr (std::is_invocable_v<Fn, CopyPassContext&>
-                  && !std::is_invocable_v<Fn, RenderPassContext&>) {
-        pass.copy_execute =
-            [fn = std::forward<Fn>(callback)](CopyPassContext& ctx) mutable { fn(ctx); };
+    if constexpr (std::is_invocable_v<Fn, CopyPassContext&> && !std::is_invocable_v<Fn, RenderPassContext&>) {
+        pass.copy_execute = [fn = std::forward<Fn>(callback)](CopyPassContext& ctx) mutable { fn(ctx); };
     } else if constexpr (std::is_invocable_v<Fn, RenderPassContext&>) {
-        pass.render_execute =
-            [fn = std::forward<Fn>(callback)](RenderPassContext& ctx) mutable { fn(ctx); };
+        pass.render_execute = [fn = std::forward<Fn>(callback)](RenderPassContext& ctx) mutable { fn(ctx); };
     } else {
-        static_assert(sizeof(Fn) == 0,
-            "Pass callback must be callable as void(RenderPassContext&) or void(CopyPassContext&)");
+        static_assert(sizeof(Fn) == 0, "Pass callback must be callable as void(RenderPassContext&) or void(CopyPassContext&)");
     }
     return *this;
 }

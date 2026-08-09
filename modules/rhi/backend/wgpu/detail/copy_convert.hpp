@@ -1,10 +1,10 @@
 #pragma once
 
+#include <webgpu/webgpu.h>
+
 #include <woki/rhi/descriptors.hpp>
 
 #include "../wgpu_enums.hpp"
-
-#include <webgpu/webgpu.h>
 
 namespace woki::rhi::wgpu::detail::copy {
 
@@ -50,8 +50,7 @@ using namespace woki::rhi::wgpu::convert;
     return native;
 }
 
-[[nodiscard]] inline WGPUCopyTextureForBrowserOptions ToWgpu(
-    const CopyTextureForBrowserOptions& options) noexcept {
+[[nodiscard]] inline WGPUCopyTextureForBrowserOptions ToWgpu(const CopyTextureForBrowserOptions& options) noexcept {
     WGPUCopyTextureForBrowserOptions native = WGPU_COPY_TEXTURE_FOR_BROWSER_OPTIONS_INIT;
     native.nextInChain = static_cast<WGPUChainedStruct*>(options.next_in_chain);
     native.flipY = options.flip_y;

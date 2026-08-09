@@ -17,8 +17,7 @@ public:
     WgpuSurfaceImpl(WGPUInstance instance, WGPUSurface surface);
     ~WgpuSurfaceImpl() override;
 
-    [[nodiscard]] Result<void> GetCapabilities(
-        const Adapter& adapter, SurfaceCapabilities& capabilities) const override;
+    [[nodiscard]] Result<void> GetCapabilities(const Adapter& adapter, SurfaceCapabilities& capabilities) const override;
     void GetCurrentTexture(SurfaceTexture& surface_texture) override;
     [[nodiscard]] NativeHandles GetNativeHandles() const noexcept override;
     [[nodiscard]] Result<void> Configure(const SurfaceConfiguration& config) override;
@@ -34,9 +33,10 @@ private:
 
     detail::InstanceHandle instance_;
     detail::SurfaceHandle surface_;
-    SurfaceConfiguration current_config_{};
+    detail::DeviceHandle configured_device_;
     detail::TextureHandle current_texture_;
     detail::TextureViewHandle current_view_;
+    bool configured_{false};
 };
 
 [[nodiscard]] WGPUSurface CreateNativeSurface(WGPUInstance instance, Window& window);

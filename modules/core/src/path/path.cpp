@@ -1,17 +1,17 @@
-#include "woki/path/path.hpp"
-
-#include <cstdlib>
-#include <filesystem>
-#include <optional>
 #include <string>
+#include <cstdlib>
+#include <optional>
+#include <filesystem>
+
+#include "woki/path/path.hpp"
 
 #if defined(_WIN32)
 #include <windows.h>
 #elif defined(__APPLE__)
-#include <mach-o/dyld.h>
 #include <unistd.h>
+#include <mach-o/dyld.h>
 #elif defined(__linux__)
-#include <limits.h>
+#include <climits>
 #include <unistd.h>
 #endif
 
