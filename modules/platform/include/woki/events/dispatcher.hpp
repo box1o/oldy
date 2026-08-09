@@ -22,18 +22,22 @@ public:
             return false;
         }
 
-        const auto& typed_event = static_cast<const T&>(event_);
-        if constexpr (std::same_as<std::invoke_result_t<Fn, const T&>, bool>) {
-            event_.handled = std::invoke(std::forward<Fn>(fn), typed_event);
+        const auto* typed_event = dynamic_cast<const T*>(&event_);
+        if (typed_event == nullptr) {
+            return false;
+        }
+
+        if constexpr (std::same_as<std::remove_cvref_t<std::invoke_result_t<Fn, const T&>>, bool>) {
+            event_.handled = std::invoke(std::forward<Fn>(fn), *typed_event);
         } else {
-            std::invoke(std::forward<Fn>(fn), typed_event);
+            std::invoke(std::forward<Fn>(fn), *typed_event);
         }
 
         return true;
     }
 
 private:
-    E& event_;
+    Event& event_;
 };
 
 } // namespace woki::events

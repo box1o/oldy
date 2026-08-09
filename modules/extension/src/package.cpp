@@ -1,4 +1,6 @@
 #include <set>
+#include <atomic>
+#include <chrono>
 #include <string>
 #include <fstream>
 #include <filesystem>
@@ -20,6 +22,13 @@ namespace fs = std::filesystem;
 inline constexpr std::uintmax_t kMaxSingleFileBytes = 64u * 1024u * 1024u;
 inline constexpr std::uintmax_t kMaxTotalPackageBytes = 256u * 1024u * 1024u;
 inline constexpr std::uintmax_t kMaxWasmBytes = 32u * 1024u * 1024u;
+inline constexpr std::size_t kMaxPackageEntries = 10'000u;
+
+[[nodiscard]] fs::path UniqueStagingRoot(const Roots& roots, std::string_view name) {
+    static std::atomic_uint64_t sequence{0};
+    const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
+    return roots.cache / "staging" / (std::string(name) + "." + std::to_string(stamp) + "." + std::to_string(sequence.fetch_add(1)) + ".installing");
+}
 
 [[nodiscard]] Result<fs::path> Normalize(const fs::path& path) {
     std::error_code error;
@@ -73,11 +82,15 @@ inline constexpr std::uintmax_t kMaxWasmBytes = 32u * 1024u * 1024u;
 
 [[nodiscard]] Result<void> CopyPackageTree(const fs::path& source_root, const fs::path& destination_root, const Manifest& manifest) {
     std::uintmax_t total_bytes = 0;
+    std::size_t entry_count = 0;
     std::error_code error;
 
     for (const fs::directory_entry& entry : fs::recursive_directory_iterator(source_root, fs::directory_options::none, error)) {
         if (error) {
             return Err(ErrorCode::FileReadError, error.message());
+        }
+        if (++entry_count > kMaxPackageEntries) {
+            return Err(ErrorCode::ValidationOutOfRange, "Package exceeds 10000 entry limit.");
         }
 
         auto valid = ValidateSourceEntry(entry, source_root, manifest, &total_bytes);
@@ -123,6 +136,25 @@ inline constexpr std::uintmax_t kMaxWasmBytes = 32u * 1024u * 1024u;
         return Err(ErrorCode::ValidationOutOfRange, "Extension wasm module exceeds 32 MiB limit.");
     }
     return Ok();
+}
+
+[[nodiscard]] bool ContainsSymlink(const fs::path& root, const fs::path& path) {
+    const fs::path relative = path.lexically_relative(root);
+    if (!IsSafeRelativePath(relative)) {
+        return true;
+    }
+    fs::path current = root;
+    std::error_code error;
+    if (fs::is_symlink(fs::symlink_status(current, error))) {
+        return true;
+    }
+    for (const fs::path& part : relative) {
+        current /= part;
+        if (fs::is_symlink(fs::symlink_status(current, error))) {
+            return true;
+        }
+    }
+    return false;
 }
 
 #ifndef __EMSCRIPTEN__
@@ -177,6 +209,7 @@ inline constexpr std::uintmax_t kMaxWasmBytes = 32u * 1024u * 1024u;
 
     std::set<std::string> entries;
     std::uintmax_t total_bytes = 0;
+    std::uintmax_t extracted_bytes = 0;
     struct archive_entry* entry = nullptr;
 
     while (true) {
@@ -196,6 +229,11 @@ inline constexpr std::uintmax_t kMaxWasmBytes = 32u * 1024u * 1024u;
             archive_read_close(reader);
             archive_read_free(reader);
             return Err(ErrorCode::ParseInvalidFormat, "Archive entry is missing a path");
+        }
+        if (entries.size() >= kMaxPackageEntries) {
+            archive_read_close(reader);
+            archive_read_free(reader);
+            return Err(ErrorCode::ValidationOutOfRange, "Archive exceeds 10000 entry limit.");
         }
 
         auto relative = SanitizeArchiveEntryPath(pathname);
@@ -277,6 +315,7 @@ inline constexpr std::uintmax_t kMaxWasmBytes = 32u * 1024u * 1024u;
         const void* buffer = nullptr;
         std::size_t buffer_size = 0;
         la_int64_t offset = 0;
+        std::uintmax_t file_bytes = 0;
         while (true) {
             const int block_status = archive_read_data_block(reader, &buffer, &buffer_size, &offset);
             if (block_status == ARCHIVE_EOF) {
@@ -289,7 +328,23 @@ inline constexpr std::uintmax_t kMaxWasmBytes = 32u * 1024u * 1024u;
                 return Err(ErrorCode::FileReadError, "Failed to read archive entry '" + relative->string() + "': " + message);
             }
 
-            (void)offset;
+            if (offset < 0 || static_cast<std::uintmax_t>(offset) > kMaxSingleFileBytes || buffer_size > kMaxSingleFileBytes - static_cast<std::uintmax_t>(offset)) {
+                archive_read_close(reader);
+                archive_read_free(reader);
+                return Err(ErrorCode::ValidationOutOfRange, "Extracted archive file exceeds 64 MiB limit: " + relative->string());
+            }
+            const std::uintmax_t block_end = static_cast<std::uintmax_t>(offset) + buffer_size;
+            if (block_end > file_bytes) {
+                const std::uintmax_t growth = block_end - file_bytes;
+                if (growth > kMaxTotalPackageBytes - extracted_bytes) {
+                    archive_read_close(reader);
+                    archive_read_free(reader);
+                    return Err(ErrorCode::ValidationOutOfRange, "Archive exceeds 256 MiB unpacked size limit.");
+                }
+                extracted_bytes += growth;
+                file_bytes = block_end;
+            }
+            output.seekp(static_cast<std::streamoff>(offset));
             output.write(static_cast<const char*>(buffer), static_cast<std::streamsize>(buffer_size));
             if (!output.good()) {
                 archive_read_close(reader);
@@ -312,6 +367,9 @@ Result<PackageLayout> ResolvePackageLayout(const Manifest& manifest, const fs::p
     auto valid = ValidateManifest(manifest);
     if (!valid) {
         return Err(valid.error());
+    }
+    if (extensions_root.empty() || data_root.empty() || cache_root.empty()) {
+        return Err(ErrorCode::InvalidArgument, "Extension package roots must not be empty.");
     }
 
     PackageLayout layout;
@@ -342,6 +400,9 @@ Result<PackageLayout> ResolvePackageLayout(const Manifest& manifest, const fs::p
 
 Result<void> ValidatePackageLayout(const PackageLayout& layout) {
     std::error_code error;
+    if (ContainsSymlink(layout.install_root, layout.manifest) || ContainsSymlink(layout.install_root, layout.wasm)) {
+        return Err(ErrorCode::FileAccessDenied, "Extension package paths must not be symbolic links.");
+    }
     if (!fs::is_directory(layout.install_root, error)) {
         return Err(ErrorCode::FileNotFound, "Extension install directory is missing: " + layout.install_root.string() + ". Install or extract the package before scanning.");
     }
@@ -358,6 +419,9 @@ Result<void> ValidatePackageLayout(const PackageLayout& layout) {
 
 Result<PackageLayout> InstallUnpackedPackage(const fs::path& source_root, const Roots& roots) {
     std::error_code error;
+    if (fs::is_symlink(fs::symlink_status(source_root, error))) {
+        return Err(ErrorCode::FileAccessDenied, "Unpacked extension package source must not be a symbolic link: " + source_root.string());
+    }
     if (!fs::is_directory(source_root, error)) {
         return Err(ErrorCode::FileNotFound, "Unpacked extension package source is not a directory: " + source_root.string());
     }
@@ -389,11 +453,7 @@ Result<PackageLayout> InstallUnpackedPackage(const fs::path& source_root, const 
         return Err(valid_source.error());
     }
 
-    const fs::path staging_root = roots.cache / "staging" / (manifest->id + ".installing");
-    fs::remove_all(staging_root, error);
-    if (error) {
-        return Err(ErrorCode::FileWriteError, error.message());
-    }
+    const fs::path staging_root = UniqueStagingRoot(roots, manifest->id);
     fs::create_directories(staging_root.parent_path(), error);
     if (error) {
         return Err(ErrorCode::FileWriteError, error.message());
@@ -419,6 +479,7 @@ Result<PackageLayout> InstallUnpackedPackage(const fs::path& source_root, const 
 
     auto valid_installed = ValidatePackageLayout(*layout);
     if (!valid_installed) {
+        fs::remove_all(layout->install_root, error);
         return Err(valid_installed.error());
     }
 
@@ -428,11 +489,7 @@ Result<PackageLayout> InstallUnpackedPackage(const fs::path& source_root, const 
 Result<PackageLayout> InstallArchive(const fs::path& archive_path, const Roots& roots) {
 #ifndef __EMSCRIPTEN__
     std::error_code error;
-    const fs::path staging_root = roots.cache / "staging" / "archive.installing";
-    fs::remove_all(staging_root, error);
-    if (error) {
-        return Err(ErrorCode::FileWriteError, error.message());
-    }
+    const fs::path staging_root = UniqueStagingRoot(roots, "archive");
     fs::create_directories(staging_root, error);
     if (error) {
         return Err(ErrorCode::FileWriteError, error.message());
@@ -501,6 +558,7 @@ Result<PackageLayout> InstallArchive(const fs::path& archive_path, const Roots& 
 
     auto valid_installed = ValidatePackageLayout(*layout);
     if (!valid_installed) {
+        fs::remove_all(layout->install_root, error);
         return Err(valid_installed.error());
     }
 

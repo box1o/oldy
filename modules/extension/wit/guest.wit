@@ -1,3 +1,5 @@
+package woki:extension@1.0.0;
+
 interface lifecycle {
   api-version: func() -> u32;
   init: func() -> s32;

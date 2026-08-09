@@ -24,11 +24,15 @@ template <arithmetic T>
 
 template <arithmetic T>
 [[nodiscard]] constexpr T sign(T value) noexcept {
-    if (value > T{0})
-        return T{1};
-    if (value < T{0})
-        return T{-1};
-    return T{0};
+    if constexpr (unsigned_arithmetic<T>) {
+        return value == T{0} ? T{0} : T{1};
+    } else {
+        if (value > T{0})
+            return T{1};
+        if (value < T{0})
+            return T{-1};
+        return T{0};
+    }
 }
 
 template <arithmetic T>

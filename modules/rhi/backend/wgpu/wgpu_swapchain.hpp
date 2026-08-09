@@ -21,7 +21,9 @@ public:
 
     void Resize(u32 width, u32 height) override;
     [[nodiscard]] Result<Frame> AcquireNextFrame() override;
+    void Discard() noexcept override;
     [[nodiscard]] Result<void> Present() override;
+    [[nodiscard]] bool IsConfigured() const noexcept;
 
 private:
     [[nodiscard]] Result<void> Configure();
@@ -38,6 +40,7 @@ private:
     detail::TextureHandle depth_texture_;
     scope<TextureView> depth_view_;
     bool configured_{false};
+    bool acquired_{false};
 };
 
 [[nodiscard]] Result<scope<Swapchain>> CreateSwapchainObject(ref<WgpuDeviceImpl> device, ref<Surface> surface, SwapchainDesc desc);

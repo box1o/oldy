@@ -1,3 +1,4 @@
+#include <new>
 #include <sstream>
 #include <yaml-cpp/yaml.h>
 
@@ -105,12 +106,18 @@ void Config::Merge(const Config& other) {
 Result<void> Config::LoadYaml(const std::filesystem::path& path) {
     try {
         const YAML::Node root = YAML::LoadFile(path.string());
-        FlattenYamlNode(root, {}, *this);
+        Config loaded;
+        FlattenYamlNode(root, {}, loaded);
+        Config merged = *this;
+        merged.Merge(loaded);
+        values_.swap(merged.values_);
         return Ok();
     } catch (const YAML::BadFile& exception) {
         return Err(ErrorCode::FileNotFound, exception.what());
     } catch (const YAML::Exception& exception) {
         return Err(ErrorCode::ParseInvalidFormat, exception.what());
+    } catch (const std::bad_alloc&) {
+        return Err(ErrorCode::FailedToAcquireResource, "Insufficient memory to load YAML config");
     }
 }
 

@@ -167,7 +167,7 @@ public:
     // Rotate a vector by this quaternion
     [[nodiscard]] vec<3, T> rotate(const vec<3, T>& v) const noexcept {
         quat p(v.x, v.y, v.z, T{});
-        quat result = (*this) * p * conjugate();
+        quat result = (*this) * p * inverse();
         return vec<3, T>(result.x, result.y, result.z);
     }
 

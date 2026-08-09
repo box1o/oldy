@@ -26,6 +26,7 @@ public:
     bool can_fit(std::size_t bytes, std::size_t alignment) const;
 
     void reset();
+    bool rewind(std::size_t offset, std::size_t expected_offset) noexcept;
 
 private:
     static bool is_power_of_two(std::size_t value) noexcept;
@@ -46,7 +47,7 @@ private:
 class Arena {
 public:
     explicit Arena(u64 size = 8ull * 1024ull * 1024ull);
-    ~Arena();
+    ~Arena() noexcept;
 
     Arena(const Arena&) = delete;
     Arena& operator=(const Arena&) = delete;
@@ -55,6 +56,7 @@ public:
     Arena& operator=(Arena&&) = delete;
 
     template <typename T, typename... Args>
+    requires std::is_nothrow_destructible_v<T>
     [[nodiscard]] T* create(Args&&... args) {
         static_assert(!std::is_void_v<T>, "Arena::create<T> does not support void");
         static_assert(!std::is_array_v<T>, "Arena::create<T> does not support arrays");
@@ -63,12 +65,20 @@ public:
             destructors_.reserve(destructors_.size() + 1);
         }
 
+        const std::size_t previous_offset = resource_.used();
         void* memory = resource_.allocate(sizeof(T), alignof(T));
+        const std::size_t allocated_offset = resource_.used();
 
-        T* object = std::construct_at(static_cast<T*>(memory), std::forward<Args>(args)...);
+        T* object = nullptr;
+        try {
+            object = std::construct_at(static_cast<T*>(memory), std::forward<Args>(args)...);
+        } catch (...) {
+            resource_.rewind(previous_offset, allocated_offset);
+            throw;
+        }
 
         if constexpr (!std::is_trivially_destructible_v<T>) {
-            destructors_.push_back({object, [](void* ptr) { std::destroy_at(static_cast<T*>(ptr)); }});
+            destructors_.push_back({object, [](void* ptr) noexcept { std::destroy_at(static_cast<T*>(ptr)); }});
         }
 
         return object;
@@ -118,18 +128,19 @@ public:
         return can_fit(sizeof(T) * count, alignof(T));
     }
 
-    void clear();
+    void clear() noexcept;
     void verify() const;
 
 private:
     struct Destructor {
         void* ptr = nullptr;
-        void (*destroy)(void*) = nullptr;
+        void (*destroy)(void*) noexcept = nullptr;
     };
 
     std::vector<std::byte> buffer_;
     detail::BumpResource resource_;
     std::vector<Destructor> destructors_;
+    bool clearing_ = false;
 };
 
 } // namespace woki

@@ -59,7 +59,7 @@ Result<ref<Device>> WgpuAdapterImpl::CreateDevice(const DeviceDesc& desc) {
 #ifdef __EMSCRIPTEN__
     return RequestDevice(desc);
 #else
-    auto storage = detail::BuildDeviceDescriptor(desc);
+    detail::DeviceDescriptorStorage storage(desc);
     WGPUDevice device = wgpuAdapterCreateDevice(adapter_.get(), &storage.native_desc);
     if (device == nullptr) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Failed to create device '" + desc.label + "'");
@@ -86,7 +86,7 @@ Result<ref<Device>> WgpuAdapterImpl::RequestDevice(const DeviceDesc& desc) {
         std::string message{};
     } state;
 
-    auto storage = detail::BuildDeviceDescriptor(desc);
+    detail::DeviceDescriptorStorage storage(desc);
 
     WGPURequestDeviceCallbackInfo callback_info = WGPU_REQUEST_DEVICE_CALLBACK_INFO_INIT;
 #ifdef __EMSCRIPTEN__
@@ -142,7 +142,7 @@ Future WgpuAdapterImpl::RequestDevice(const DeviceDesc& desc, CallbackMode callb
         return future;
     }
 
-    auto storage = createScope<detail::DeviceDescriptorStorage>(detail::BuildDeviceDescriptor(desc));
+    auto storage = createScope<detail::DeviceDescriptorStorage>(desc);
     auto device_lost_callback = storage->device_lost_callback;
     auto uncaptured_error_callback = storage->uncaptured_error_callback;
     auto retained_instance = instance_handle_;
@@ -188,8 +188,7 @@ AdapterInfo WgpuAdapterImpl::GetInfo() const {
 }
 
 Result<void> WgpuAdapterImpl::GetInfo(AdapterInfo& info) const {
-    info = detail::QueryAdapterInfo(adapter_.get());
-    return Ok();
+    return detail::FillAdapterInfo(adapter_.get(), info);
 }
 
 void WgpuAdapterImpl::GetFeatures(SupportedFeatures& features) const {

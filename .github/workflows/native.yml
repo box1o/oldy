@@ -127,7 +127,7 @@ jobs:
           if [[ "${{ runner.os }}" == "Windows" ]]; then
             cmake --install build --prefix "$package"
           else
-            cp -R build/bin/. "$package/"
+            cmake --install build --prefix "$package"
           fi
           cp extensions/kitty/manifest.yaml "$package/extensions/kitty/"
           cp extensions/kitty/extension.wasm "$package/extensions/kitty/"

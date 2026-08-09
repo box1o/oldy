@@ -217,17 +217,7 @@ public:
     [[nodiscard]] mat inverse() const noexcept
     requires floating_point<T>
     {
-        const T d = det();
-        if (abs(d) <= epsilon<T>) {
-            return identity();
-        }
-
-        const T inv_det = T{1} / d;
-        return mat(layout::rowm, (m11 * m22 - m12 * m21) * inv_det, (m02 * m21 - m01 * m22) * inv_det, (m01 * m12 - m02 * m11) * inv_det,
-
-            (m12 * m20 - m10 * m22) * inv_det, (m00 * m22 - m02 * m20) * inv_det, (m02 * m10 - m00 * m12) * inv_det,
-
-            (m10 * m21 - m11 * m20) * inv_det, (m01 * m20 - m00 * m21) * inv_det, (m00 * m11 - m01 * m10) * inv_det);
+        return detail::InvertMatrix(*this);
     }
 };
 

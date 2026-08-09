@@ -3,6 +3,11 @@ mergeInto(LibraryManager.library, {
   $WokiExt: {
     // Keep in sync with modules/extension/sdk/woki_limits.h and sdk/perm_bits.h
     maxLogLen: 4096,
+    maxConfigKeyLen: 128,
+    maxConfigValueLen: 64 * 1024,
+    maxPathLen: 4096,
+    maxEventLen: 64 * 1024,
+    maxFileLen: 16 * 1024 * 1024,
     instances: new Map(),
     lastError: '',
     ok: 0,
@@ -35,7 +40,7 @@ mergeInto(LibraryManager.library, {
         throw new Error('guest module does not export memory');
       }
       const view = new Uint8Array(memory.buffer);
-      if (ptr + len > view.length) {
+      if (ptr > view.length || len > view.length - ptr) {
         throw new Error('guest memory access is out of bounds');
       }
       return view.subarray(ptr, ptr + len);
@@ -101,10 +106,16 @@ mergeInto(LibraryManager.library, {
       }
     },
     safePath(root, rel) {
-      if (!rel || rel.startsWith('/') || rel.split('/').includes('..')) {
+      if (!rel || rel.length > this.maxPathLen || rel.startsWith('/') || rel.includes('\\') || rel.includes('\0')) {
         return null;
       }
+      const parts = rel.split('/');
+      if (parts.some((part) => !part || part === '.' || part === '..')) return null;
       return root.replace(/\/+$/, '') + '/' + rel;
+    },
+    safeConfigKey(key) {
+      return key.length > 0 && key.length <= this.maxConfigKeyLen
+        && key !== '.' && key !== '..' && /^[A-Za-z0-9_.-]+$/.test(key);
     },
     imports(record) {
       const host = {};
@@ -113,7 +124,8 @@ mergeInto(LibraryManager.library, {
           return this.denied;
         }
         try {
-          const message = this.text(record, ptr, len > this.maxLogLen ? this.maxLogLen : len);
+          if (len > this.maxLogLen) return this.noSpace;
+          const message = this.text(record, ptr, len);
           const prefix = `[${record.id}]`;
           if (level === 3) console.error(prefix, message);
           else if (level === 2) console.warn(prefix, message);
@@ -129,7 +141,7 @@ mergeInto(LibraryManager.library, {
           this.ensureDir(record.dataPath);
           return this.writeText(record, outPtr, outCap, record.dataPath);
         } catch (error) {
-          return this.setError(error.message);
+          return this.invalid;
         }
       };
       host.host_path_cache = (outPtr, outCap) => {
@@ -138,22 +150,28 @@ mergeInto(LibraryManager.library, {
           this.ensureDir(record.cachePath);
           return this.writeText(record, outPtr, outCap, record.cachePath);
         } catch (error) {
-          return this.setError(error.message);
+          return this.invalid;
         }
       };
       const readFile = (path, outPtr, inoutLenPtr) => {
         if (!this.has(record, this.storage)) return this.denied;
         const fullPath = this.safePath(record.dataPath, path);
         if (!fullPath) return this.invalid;
+        let data;
         try {
-          const data = FS.readFile(fullPath);
+          data = FS.readFile(fullPath);
+        } catch (error) {
+          return this.notFound;
+        }
+        if (data.length > this.maxFileLen) return this.noSpace;
+        try {
           const cap = this.readU32(record, inoutLenPtr);
           this.writeU32(record, inoutLenPtr, data.length);
           if (cap < data.length) return this.noSpace;
           this.bytes(record, outPtr, cap).set(data, 0);
           return this.ok;
         } catch (error) {
-          return this.notFound;
+          return this.invalid;
         }
       };
       host.host_file_read = (pathPtr, outPtr, inoutLenPtr) => {
@@ -172,18 +190,25 @@ mergeInto(LibraryManager.library, {
       };
       const writeFile = (path, dataPtr, dataLen, append) => {
         if (!this.has(record, this.storage)) return this.denied;
+        if (dataLen > this.maxFileLen) return this.noSpace;
         const fullPath = this.safePath(record.dataPath, path);
         if (!fullPath) return this.invalid;
+        let bytes;
+        try {
+          bytes = this.bytes(record, dataPtr, dataLen);
+        } catch (error) {
+          return this.invalid;
+        }
         try {
           const parent = fullPath.substring(0, fullPath.lastIndexOf('/'));
           this.ensureDir(parent);
-          const bytes = this.bytes(record, dataPtr, dataLen);
           if (append) {
             let old = new Uint8Array();
             try {
               old = FS.readFile(fullPath);
             } catch (_) {
             }
+            if (old.length > this.maxFileLen - bytes.length) return this.noSpace;
             const merged = new Uint8Array(old.length + bytes.length);
             merged.set(old, 0);
             merged.set(bytes, old.length);
@@ -226,21 +251,37 @@ mergeInto(LibraryManager.library, {
       };
       host.host_config_get = (keyPtr, outPtr, outCap) => {
         if (!this.has(record, this.config)) return this.denied;
+        let key;
+        try { key = this.cstr(record, keyPtr); } catch (error) { return this.invalid; }
+        if (!this.safeConfigKey(key)) return this.invalid;
+        const path = this.safePath(record.dataPath + '/config', key);
+        if (!path) return this.invalid;
+        let data;
+        try { data = FS.readFile(path); } catch (error) { return this.notFound; }
+        if (data.length > this.maxConfigValueLen) return this.noSpace;
         try {
-          const path = this.safePath(record.dataPath + '/config', this.cstr(record, keyPtr));
-          if (!path) return this.invalid;
-          return this.writeText(record, outPtr, outCap, new TextDecoder().decode(FS.readFile(path)));
+          return this.writeText(record, outPtr, outCap, new TextDecoder().decode(data));
         } catch (error) {
-          return this.notFound;
+          return this.invalid;
         }
       };
       host.host_config_set = (keyPtr, valuePtr, valueLen) => {
         if (!this.has(record, this.config)) return this.denied;
+        if (valueLen > this.maxConfigValueLen) return this.noSpace;
+        let key;
+        let value;
         try {
-          const path = this.safePath(record.dataPath + '/config', this.cstr(record, keyPtr));
-          if (!path) return this.invalid;
+          key = this.cstr(record, keyPtr);
+          value = this.bytes(record, valuePtr, valueLen);
+        } catch (error) {
+          return this.invalid;
+        }
+        if (!this.safeConfigKey(key)) return this.invalid;
+        const path = this.safePath(record.dataPath + '/config', key);
+        if (!path) return this.invalid;
+        try {
           this.ensureDir(path.substring(0, path.lastIndexOf('/')));
-          FS.writeFile(path, this.bytes(record, valuePtr, valueLen));
+          FS.writeFile(path, value);
           return this.ok;
         } catch (error) {
           return this.setError(error.message);
@@ -249,6 +290,7 @@ mergeInto(LibraryManager.library, {
       host.host_event_subscribe = (_eventType) => this.has(record, this.events) ? this.ok : this.denied;
       host.host_event_emit = (_eventType, payloadPtr, payloadLen) => {
         if (!this.has(record, this.events)) return this.denied;
+        if (payloadLen > this.maxEventLen) return this.noSpace;
         try {
           this.bytes(record, payloadPtr, payloadLen);
           return this.ok;
@@ -264,6 +306,9 @@ mergeInto(LibraryManager.library, {
   woki_web_ext_load: function(idPtr, wasmPathPtr, dataPathPtr, cachePathPtr, permissions) {
     const id = UTF8ToString(idPtr);
     try {
+      if (WokiExt.instances.has(id)) {
+        return WokiExt.setError(`extension ${id} is already loaded`);
+      }
       const record = {
         id,
         dataPath: UTF8ToString(dataPathPtr),
@@ -322,9 +367,11 @@ mergeInto(LibraryManager.library, {
   woki_web_ext_event: function(idPtr, eventType, payloadPtr, payloadLen) {
     const id = UTF8ToString(idPtr);
     const record = WokiExt.instances.get(id);
+    let guestPtr = 0;
     try {
+      if (!record) return WokiExt.setError(`extension ${id} is not loaded`);
+      if (payloadLen > WokiExt.maxEventLen) return WokiExt.setError('event payload exceeds 64 KiB limit');
       const exports = record.instance.exports;
-      let guestPtr = 0;
       if (payloadLen > 0) {
         if (!exports.ext_alloc) {
           return WokiExt.setError('missing ext_alloc for event payload delivery');
@@ -336,12 +383,13 @@ mergeInto(LibraryManager.library, {
         WokiExt.bytes(record, guestPtr, payloadLen).set(HEAPU8.subarray(payloadPtr, payloadPtr + payloadLen));
       }
       exports.ext_on_event(eventType, guestPtr, payloadLen);
-      if (guestPtr !== 0 && exports.ext_free) {
-        exports.ext_free(guestPtr, payloadLen);
-      }
       return 0;
     } catch (error) {
       return WokiExt.setError(error.message);
+    } finally {
+      if (guestPtr !== 0 && record && record.instance.exports.ext_free) {
+        try { record.instance.exports.ext_free(guestPtr, payloadLen); } catch (_) {}
+      }
     }
   },
 
@@ -349,7 +397,12 @@ mergeInto(LibraryManager.library, {
   woki_web_ext_command: function(idPtr, commandIdPtr, payloadPtr, payloadLen) {
     const id = UTF8ToString(idPtr);
     const record = WokiExt.instances.get(id);
+    let commandGuestPtr = 0;
+    let commandLength = 0;
+    let payloadGuestPtr = 0;
     try {
+      if (!record) return WokiExt.setError(`extension ${id} is not loaded`);
+      if (payloadLen > WokiExt.maxEventLen) return WokiExt.setError('command payload exceeds 64 KiB limit');
       const exports = record.instance.exports;
       if (!exports.ext_on_command) {
         return WokiExt.setError(`extension ${id} does not export ext_on_command`);
@@ -359,17 +412,19 @@ mergeInto(LibraryManager.library, {
       }
 
       const commandBytes = new TextEncoder().encode(UTF8ToString(commandIdPtr));
-      const commandGuestPtr = exports.ext_alloc(commandBytes.length);
+      if (commandBytes.length === 0 || commandBytes.length > WokiExt.maxPathLen) {
+        return WokiExt.setError('command id exceeds ABI size limit');
+      }
+      commandLength = commandBytes.length;
+      commandGuestPtr = exports.ext_alloc(commandLength);
       if (commandGuestPtr === 0) {
         return WokiExt.setError('ext_alloc returned null for command id');
       }
       WokiExt.bytes(record, commandGuestPtr, commandBytes.length).set(commandBytes);
 
-      let payloadGuestPtr = 0;
       if (payloadLen > 0) {
         payloadGuestPtr = exports.ext_alloc(payloadLen);
         if (payloadGuestPtr === 0) {
-          if (exports.ext_free) exports.ext_free(commandGuestPtr, commandBytes.length);
           return WokiExt.setError('ext_alloc returned null for command payload');
         }
         WokiExt.bytes(record, payloadGuestPtr, payloadLen)
@@ -379,15 +434,16 @@ mergeInto(LibraryManager.library, {
       const result = exports.ext_on_command(
         commandGuestPtr, commandBytes.length, payloadGuestPtr, payloadLen);
 
-      if (payloadGuestPtr !== 0 && exports.ext_free) {
-        exports.ext_free(payloadGuestPtr, payloadLen);
-      }
-      if (exports.ext_free) {
-        exports.ext_free(commandGuestPtr, commandBytes.length);
-      }
       return result;
     } catch (error) {
       return WokiExt.setError(error.message);
+    } finally {
+      if (record && record.instance.exports.ext_free) {
+        try {
+          if (payloadGuestPtr !== 0) record.instance.exports.ext_free(payloadGuestPtr, payloadLen);
+          if (commandGuestPtr !== 0) record.instance.exports.ext_free(commandGuestPtr, commandLength);
+        } catch (_) {}
+      }
     }
   },
 
@@ -401,6 +457,11 @@ mergeInto(LibraryManager.library, {
     } catch (_) {
     }
     WokiExt.instances.delete(id);
+  },
+
+  woki_web_ext_discard__deps: ['$WokiExt', '$UTF8ToString'],
+  woki_web_ext_discard: function(idPtr) {
+    WokiExt.instances.delete(UTF8ToString(idPtr));
   },
 
   woki_web_ext_last_error__deps: ['$WokiExt', '$stringToNewUTF8'],

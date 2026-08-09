@@ -26,6 +26,7 @@ public:
 
     virtual void Resize(u32 width, u32 height) = 0;
     [[nodiscard]] virtual Result<Frame> AcquireNextFrame() = 0;
+    virtual void Discard() noexcept = 0;
     [[nodiscard]] virtual Result<void> Present() = 0;
 
 protected:

@@ -12,15 +12,15 @@ namespace woki::rhi::wgpu::detail {
 
 using namespace woki::rhi::wgpu::convert;
 
-[[nodiscard]] inline AdapterInfo QueryAdapterInfo(WGPUAdapter adapter) {
-    AdapterInfo info{};
+[[nodiscard]] inline Result<void> FillAdapterInfo(WGPUAdapter adapter, AdapterInfo& info) {
     if (adapter == nullptr) {
-        return info;
+        return Err(ErrorCode::GraphicsResourceCreationFailed, "Adapter is invalid");
     }
 
     WGPUAdapterInfo native_info = WGPU_ADAPTER_INFO_INIT;
     if (wgpuAdapterGetInfo(adapter, &native_info) != WGPUStatus_Success) {
-        return info;
+        wgpuAdapterInfoFreeMembers(native_info);
+        return Err(ErrorCode::GraphicsResourceCreationFailed, "Failed to query adapter info");
     }
 
     info.vendor = StringFromView(native_info.vendor);
@@ -35,6 +35,12 @@ using namespace woki::rhi::wgpu::convert;
     info.subgroup_max_size = native_info.subgroupMaxSize;
 
     wgpuAdapterInfoFreeMembers(native_info);
+    return Ok();
+}
+
+[[nodiscard]] inline AdapterInfo QueryAdapterInfo(WGPUAdapter adapter) {
+    AdapterInfo info{};
+    (void)FillAdapterInfo(adapter, info);
     return info;
 }
 

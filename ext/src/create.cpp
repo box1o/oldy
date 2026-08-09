@@ -1,12 +1,12 @@
-#include "wokiext/cli.hpp"
-
-#include <algorithm>
 #include <cctype>
-#include <filesystem>
+#include <string>
 #include <fstream>
 #include <iostream>
+#include <algorithm>
 #include <stdexcept>
-#include <string>
+#include <filesystem>
+
+#include "wokiext/cli.hpp"
 
 namespace wokiext {
 
@@ -35,7 +35,9 @@ namespace fs = std::filesystem;
     return out.empty() ? "extension" : out;
 }
 
-[[nodiscard]] std::string ToId(std::string_view name) { return "woki." + Slug(name, '.'); }
+[[nodiscard]] std::string ToId(std::string_view name) {
+    return "woki." + Slug(name, '.');
+}
 
 void WriteFile(const fs::path& path, std::string_view contents) {
     fs::create_directories(path.parent_path());
@@ -48,8 +50,8 @@ void WriteFile(const fs::path& path, std::string_view contents) {
 
 [[nodiscard]] std::string Manifest(std::string_view id, std::string_view name) {
     return "id: " + std::string(id) + R"yaml(
-name: )yaml" +
-           std::string(name) + R"yaml(
+name: )yaml"
+           + std::string(name) + R"yaml(
 version: 0.1.0
 apiVersion: 1
 runtime:
@@ -61,23 +63,21 @@ permissions:
 
 [[nodiscard]] std::string PluginSource(std::string_view lang) {
     const bool cpp = lang == "cpp";
-    const std::string init_message =
-        cpp ? "    static constexpr char kMessage[] = \"hello from wokiext\";\n"
-            : "    static const char kMessage[] = \"hello from wokiext\";\n";
+    const std::string init_message = cpp ? "    static constexpr char kMessage[] = \"hello from wokiext\";\n" : "    static const char kMessage[] = \"hello from wokiext\";\n";
     const std::string extern_open = cpp ? "extern \"C\" {\n\n" : "";
     const std::string extern_close = cpp ? "\n} // extern \"C\"\n" : "";
 
     return std::string("#include \"version.h\"\n#include \"ext.h\"\n#include \"host_imports.h\"\n"
-                       "#include \"guest_alloc.h\"\n\n") +
-           extern_open +
+                       "#include \"guest_alloc.h\"\n\n")
+           + extern_open +
            R"(
 WOKI_EXPORT("ext_api_version")
 uint32_t ext_api_version(void) { return WOKI_EXT_API_VERSION; }
 
 WOKI_EXPORT("ext_init")
 int32_t ext_init(void) {
-)" +
-           init_message +
+)" + init_message
+           +
            R"(    return host_log(WOKI_EXT_LOG_INFO, kMessage, sizeof(kMessage) - 1);
 }
 
@@ -101,8 +101,7 @@ int32_t ext_on_command(const char* command_id, uint32_t command_len,
 
 WOKI_EXPORT("ext_on_unload")
 void ext_on_unload(void) {}
-)" +
-           extern_close;
+)" + extern_close;
 }
 
 [[nodiscard]] std::string ExtensionCMake(std::string_view lang) {
@@ -110,19 +109,21 @@ void ext_on_unload(void) {}
     const std::string source = cpp ? "src/plugin.cpp" : "src/plugin.c";
 
     return "cmake_minimum_required(VERSION 3.25)\n"
-           "project(woki_extension LANGUAGES " +
-           std::string(cpp ? "CXX" : "C") +
+           "\n"
+           "if(NOT WOKI_CMAKE_DIR)\n"
+           "    message(FATAL_ERROR \"Configure with wokiext build or set WOKI_CMAKE_DIR\")\n"
+           "endif()\n"
+           "\n"
+           "include(\"${WOKI_CMAKE_DIR}/ExtensionProject.cmake\")\n"
+           "project(woki_extension LANGUAGES "
+           + std::string(cpp ? "CXX" : "C") +
            R"()
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-if(NOT DEFINED WOKI_REPO_ROOT)
-    get_filename_component(WOKI_REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
-endif()
-
-include("${WOKI_REPO_ROOT}/cmake/ExtensionWasm.cmake")
-add_wokiext()" +
-           source + R"()
+include("${WOKI_CMAKE_DIR}/ExtensionWasm.cmake")
+add_wokiext()"
+           + source + R"()
 )";
 }
 
@@ -156,8 +157,7 @@ Status Create(const CreateOptions& options) {
 
     WriteFile(root / "manifest.yaml", Manifest(id, options.name));
     WriteFile(root / "CMakeLists.txt", ExtensionCMake(options.lang));
-    WriteFile(root / "src" / (options.lang == "cpp" ? "plugin.cpp" : "plugin.c"),
-        PluginSource(options.lang));
+    WriteFile(root / "src" / (options.lang == "cpp" ? "plugin.cpp" : "plugin.c"), PluginSource(options.lang));
 
     std::cout << "Created extension project: " << root << '\n';
     return Status::Ok;

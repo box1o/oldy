@@ -1,7 +1,7 @@
 BUILD_DIR ?= build
 BUILD_TYPE ?= Release
 PREFIX ?= /usr/local
-NUM_JOBS ?= $(shell nproc)
+NUM_JOBS ?= $(shell getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 1)
 
 .DEFAULT_GOAL := build
 .PHONY: configure build install clean test

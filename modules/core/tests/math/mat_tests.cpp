@@ -38,6 +38,35 @@ TEST_CASE("mat2 inverse exact values") {
     REQUIRE(prod(1, 0) == Approx(0.0f).margin(1e-6f));
 }
 
+TEST_CASE("matrix inverse accepts small invertible values") {
+    constexpr float small = 1e-30f;
+    constexpr float reciprocal = 1e30f;
+
+    mat<2, 2, float> mat2_value(layout::rowm, small, 0.0f, 0.0f, small);
+    const auto mat2_inverse = mat2_value.inverse();
+    REQUIRE(mat2_inverse(0, 0) == Approx(reciprocal));
+    REQUIRE(mat2_inverse(1, 1) == Approx(reciprocal));
+
+    mat<3, 3, float> mat3_value = mat<3, 3, float>::identity() * small;
+    REQUIRE(mat3_value.inverse()(2, 2) == Approx(reciprocal));
+
+    mat<4, 4, float> mat4_value = mat<4, 4, float>::identity() * small;
+    REQUIRE(mat4_value.inverse()(3, 3) == Approx(reciprocal));
+
+    mat<5, 5, float> generic = mat<5, 5, float>::identity();
+    generic(0, 0) = small;
+    const auto generic_inverse = generic.inverse();
+    REQUIRE(generic_inverse(0, 0) == Approx(reciprocal));
+}
+
+TEST_CASE("generic singular inverse returns a consistent sentinel") {
+    mat<5, 5, float> matrix = mat<5, 5, float>::identity();
+    matrix(0, 0) = 2.0f;
+    matrix(4, 4) = 0.0f;
+
+    REQUIRE(matrix.inverse() == mat<5, 5, float>::identity());
+}
+
 TEST_CASE("mat2 col and row access") {
     mat<2, 2, float> m(layout::rowm, 1.0f, 2.0f, 3.0f, 4.0f);
     auto col0 = m.col(0);

@@ -1,9 +1,9 @@
-#include "wokiext/cli.hpp"
+#include <iostream>
+#include <filesystem>
 
 #include <woki/ext/ext.hpp>
 
-#include <filesystem>
-#include <iostream>
+#include "wokiext/cli.hpp"
 
 namespace wokiext {
 
@@ -17,8 +17,7 @@ namespace fs = std::filesystem;
         return woki::Err(manifest.error());
     }
 
-    auto layout = woki::ext::ResolvePackageLayout(
-        *manifest, root.parent_path(), root / ".data", root / ".cache");
+    auto layout = woki::ext::ResolvePackageLayout(*manifest, root.parent_path(), root / ".data", root / ".cache");
     if (!layout) {
         return woki::Err(layout.error());
     }

@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <utility>
+#include <stdexcept>
 #include <memory_resource>
 #include <catch2/catch_test_macros.hpp>
 
@@ -44,6 +45,41 @@ struct Ordered {
 
 struct alignas(64) CacheLineAligned {
     std::array<std::byte, 64> storage{};
+};
+
+struct ThrowingConstructor {
+    ThrowingConstructor() {
+        throw std::runtime_error("construction failed");
+    }
+};
+
+struct ReentrantThrowingConstructor {
+    explicit ReentrantThrowingConstructor(woki::Arena& arena) {
+        (void)arena.create<Counted>("nested");
+        throw std::runtime_error("construction failed");
+    }
+};
+
+struct ThrowingDestructor {
+    ~ThrowingDestructor() noexcept(false) {
+        throw std::runtime_error("destruction failed");
+    }
+};
+
+template <typename T>
+concept ArenaCreatable = requires(woki::Arena& arena) { arena.create<T>(); };
+
+static_assert(!ArenaCreatable<ThrowingDestructor>);
+
+struct ReentrantDestructor {
+    explicit ReentrantDestructor(woki::Arena& arena)
+        : arena(&arena) {}
+
+    ~ReentrantDestructor() {
+        arena->clear();
+    }
+
+    woki::Arena* arena;
 };
 
 } // namespace
@@ -102,6 +138,47 @@ TEST_CASE("Arena creates objects and destroys them on clear") {
     REQUIRE(arena.used() == 0);
     REQUIRE(arena.empty());
     REQUIRE(arena.peak() > 0);
+}
+
+TEST_CASE("Arena reclaims storage when object construction throws") {
+    woki::Arena arena{64};
+    const auto used_before = arena.used();
+
+    REQUIRE_THROWS_AS(arena.create<ThrowingConstructor>(), std::runtime_error);
+    REQUIRE(arena.used() == used_before);
+    REQUIRE(arena.empty());
+
+    auto* bytes = arena.allocate<std::byte>(arena.capacity());
+    REQUIRE(bytes != nullptr);
+    REQUIRE(arena.used() == arena.capacity());
+}
+
+TEST_CASE("Arena does not rewind over reentrant construction") {
+    Counted::alive = 0;
+    Counted::destroyed = 0;
+    woki::Arena arena{256};
+
+    REQUIRE_THROWS_AS(arena.create<ReentrantThrowingConstructor>(arena), std::runtime_error);
+    REQUIRE(Counted::alive == 1);
+    REQUIRE(arena.used() > 0);
+
+    arena.clear();
+    REQUIRE(Counted::alive == 0);
+    REQUIRE(Counted::destroyed == 1);
+    REQUIRE(arena.empty());
+}
+
+TEST_CASE("Arena clear tolerates reentrant clear from a destructor") {
+    Counted::alive = 0;
+    Counted::destroyed = 0;
+    woki::Arena arena{256};
+    (void)arena.create<Counted>("first");
+    (void)arena.create<ReentrantDestructor>(arena);
+
+    arena.clear();
+    REQUIRE(Counted::alive == 0);
+    REQUIRE(Counted::destroyed == 1);
+    REQUIRE(arena.empty());
 }
 
 TEST_CASE("Arena destroys objects in reverse construction order") {

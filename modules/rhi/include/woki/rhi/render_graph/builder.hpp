@@ -94,9 +94,23 @@ PassBuilder& PassBuilder::Execute(Fn&& callback) {
     render_graph::detail::PassRecord& pass = blueprint_->passes[pass_index_];
 
     if constexpr (std::is_invocable_v<Fn, CopyPassContext&> && !std::is_invocable_v<Fn, RenderPassContext&>) {
-        pass.copy_execute = [fn = std::forward<Fn>(callback)](CopyPassContext& ctx) mutable { fn(ctx); };
+        pass.copy_execute = [fn = std::forward<Fn>(callback)](CopyPassContext& ctx) mutable -> Result<void> {
+            if constexpr (std::is_same_v<std::invoke_result_t<Fn&, CopyPassContext&>, Result<void>>) {
+                return fn(ctx);
+            } else {
+                fn(ctx);
+                return Ok();
+            }
+        };
     } else if constexpr (std::is_invocable_v<Fn, RenderPassContext&>) {
-        pass.render_execute = [fn = std::forward<Fn>(callback)](RenderPassContext& ctx) mutable { fn(ctx); };
+        pass.render_execute = [fn = std::forward<Fn>(callback)](RenderPassContext& ctx) mutable -> Result<void> {
+            if constexpr (std::is_same_v<std::invoke_result_t<Fn&, RenderPassContext&>, Result<void>>) {
+                return fn(ctx);
+            } else {
+                fn(ctx);
+                return Ok();
+            }
+        };
     } else {
         static_assert(sizeof(Fn) == 0, "Pass callback must be callable as void(RenderPassContext&) or void(CopyPassContext&)");
     }

@@ -11,11 +11,44 @@
 #include <array>
 #include <mutex>
 #include <vector>
+#include <exception>
 
 namespace woki {
 namespace {
 
 constexpr u32 kMouseButtonCount = 8;
+
+#ifdef __EMSCRIPTEN__
+Window* emscripten_resize_window = nullptr;
+#endif
+
+template <typename CallbackMap, typename... Args>
+void InvokeCallbacks(const CallbackMap& source, Args&&... args) noexcept {
+    try {
+        std::vector<typename CallbackMap::mapped_type> callbacks;
+        callbacks.reserve(source.size());
+        for (const auto& [id, callback] : source) {
+            (void)id;
+            if (callback) {
+                callbacks.push_back(callback);
+            }
+        }
+
+        for (const auto& callback : callbacks) {
+            try {
+                callback(args...);
+            } catch (const std::exception& error) {
+                slog::Error("Window callback failed: {}", error.what());
+            } catch (...) {
+                slog::Error("Window callback failed with an unknown exception");
+            }
+        }
+    } catch (const std::exception& error) {
+        slog::Error("Failed to prepare window callbacks: {}", error.what());
+    } catch (...) {
+        slog::Error("Failed to prepare window callbacks with an unknown exception");
+    }
+}
 
 class GlfwRuntime final {
 public:
@@ -147,6 +180,13 @@ Window::Window(ConstructionKey)
     : impl_(createScope<Impl>()) {}
 
 Window::~Window() {
+#ifdef __EMSCRIPTEN__
+    if (emscripten_resize_window == this) {
+        emscripten_resize_window = nullptr;
+        emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, nullptr, false, nullptr);
+    }
+#endif
+
     if (impl_ != nullptr) {
         impl_->Destroy();
     }
@@ -385,18 +425,7 @@ void Window::HandleResize(u32 width, u32 height) noexcept {
     EmitEvent<events::WindowResizeEvent>(width_, height_);
     EmitEvent<events::ViewportResizeEvent>(width_, height_);
 
-    std::vector<ResizeCallback> callbacks;
-    callbacks.reserve(resize_callbacks_.size());
-    for (const auto& [id, callback] : resize_callbacks_) {
-        (void)id;
-        if (callback) {
-            callbacks.push_back(callback);
-        }
-    }
-
-    for (const auto& callback : callbacks) {
-        callback(width_, height_);
-    }
+    InvokeCallbacks(resize_callbacks_, width_, height_);
 }
 
 void Window::HandleContentScaleChanged(f32 xscale, f32 yscale) noexcept {
@@ -459,8 +488,8 @@ void Window::HandleWindowCloseRequested() noexcept {
 
 #ifdef __EMSCRIPTEN__
 void Window::SetupEmscriptenResize() noexcept {
-    auto callback = [](int, const EmscriptenUiEvent*, void* user_data) -> EM_BOOL {
-        auto* observer = static_cast<Window*>(user_data);
+    auto callback = [](int, const EmscriptenUiEvent*, void*) -> EM_BOOL {
+        auto* observer = emscripten_resize_window;
         auto self = observer != nullptr ? observer->weak_from_this().lock() : nullptr;
         if (self == nullptr) {
             return EM_FALSE;
@@ -483,7 +512,13 @@ void Window::SetupEmscriptenResize() noexcept {
         return EM_TRUE;
     };
 
-    emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, this, false, callback);
+    const auto result = emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, nullptr, false, callback);
+    if (result != EMSCRIPTEN_RESULT_SUCCESS) {
+        slog::Error("Failed to register browser resize callback: {}", result);
+        return;
+    }
+
+    emscripten_resize_window = this;
     UpdateWindowMetrics();
 }
 #endif
@@ -531,21 +566,9 @@ void Window::Close() noexcept {
     impl_->Destroy();
 }
 
-void Window::EmitEvent(events::Event& event) {
+void Window::EmitEvent(events::Event& event) noexcept {
     event.timestamp = Clock::Seconds();
-
-    std::vector<EventCallback> callbacks;
-    callbacks.reserve(event_callbacks_.size());
-    for (const auto& [id, callback] : event_callbacks_) {
-        (void)id;
-        if (callback) {
-            callbacks.push_back(callback);
-        }
-    }
-
-    for (const auto& callback : callbacks) {
-        callback(event);
-    }
+    InvokeCallbacks(event_callbacks_, event);
 }
 
 void Window::SetCursorMode(CursorMode mode) noexcept {

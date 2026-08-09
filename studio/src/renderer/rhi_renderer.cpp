@@ -1132,6 +1132,16 @@ bool RhiRenderer::RenderFrame(const f64 delta_ms) {
         return false;
     }
 
+    if (render_graph_ == nullptr) {
+        return false;
+    }
+
+    auto graph_frame = render_graph_->BeginFrame(width_, height_);
+    if (!graph_frame) {
+        slog::Warn("RenderGraph frame creation failed: {}", graph_frame.error().Message());
+        return false;
+    }
+
     auto frame = swapchain_->AcquireNextFrame();
     if (!frame) {
         slog::Warn("Failed to acquire swapchain frame: {}", frame.error().Message());
@@ -1139,15 +1149,11 @@ bool RhiRenderer::RenderFrame(const f64 delta_ms) {
         return false;
     }
 
-    if (render_graph_ == nullptr) {
-        return false;
-    }
+    graph_frame->Bind(backbuffer_, frame->ColorViewRef());
 
-    rhi::RenderGraphFrame graph_frame = render_graph_->BeginFrame(width_, height_);
-    graph_frame.Bind(backbuffer_, frame->ColorViewRef());
-
-    if (auto execute = graph_frame.Execute(); !execute) {
+    if (auto execute = graph_frame->Execute(); !execute) {
         slog::Warn("RenderGraph execute failed: {}", execute.error().Message());
+        swapchain_->Discard();
         return false;
     }
 

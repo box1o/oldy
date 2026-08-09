@@ -220,10 +220,10 @@ struct RenderPassDepthStencilAttachmentDesc final {
     StoreOp depth_store_op{StoreOp::Store};
     f32 depth_clear_value{1.0f};
     bool depth_read_only{false};
-    LoadOp stencil_load_op{LoadOp::Clear};
-    StoreOp stencil_store_op{StoreOp::Store};
+    LoadOp stencil_load_op{LoadOp::Undefined};
+    StoreOp stencil_store_op{StoreOp::Undefined};
     u32 stencil_clear_value{0};
-    bool stencil_read_only{false};
+    bool stencil_read_only{true};
 };
 
 struct RenderPassDescTyped final {

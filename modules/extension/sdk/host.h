@@ -21,6 +21,9 @@ int32_t host_file_write(const char* rel_path, const uint8_t* data, uint32_t len)
 int32_t host_file_append(const char* rel_path, const uint8_t* data, uint32_t len);
 
 // Length-prefixed path variants are also available from the host as host_file_*_n.
+int32_t host_file_read_n(const char* rel_path, uint32_t rel_path_len, uint8_t* out, uint32_t* inout_len);
+int32_t host_file_write_n(const char* rel_path, uint32_t rel_path_len, const uint8_t* data, uint32_t len);
+int32_t host_file_append_n(const char* rel_path, uint32_t rel_path_len, const uint8_t* data, uint32_t len);
 
 int32_t host_config_get(const char* key, char* out, uint32_t out_cap);
 int32_t host_config_set(const char* key, const char* value, uint32_t len);

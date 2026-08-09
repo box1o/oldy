@@ -16,7 +16,15 @@ namespace {
 
 void MarkFailed(Record& record, const Error& error) {
     record.state = State::Failed;
+    record.tier = RuntimeTier::None;
     record.error = std::string(error.Message());
+}
+
+void CleanupFailure(RuntimeBackend* backend, Record& record, const Error& error) {
+    if (backend != nullptr && record.tier != RuntimeTier::None) {
+        backend->Unload(record);
+    }
+    MarkFailed(record, error);
 }
 
 } // namespace
@@ -80,7 +88,7 @@ Result<void> Runtime::Initialize(Record& record) {
 
     auto initialized = backend_->Initialize(record);
     if (!initialized) {
-        MarkFailed(record, initialized.error());
+        CleanupFailure(backend_, record, initialized.error());
         return Err(initialized.error());
     }
 
@@ -94,6 +102,10 @@ void Runtime::Tick(Record& record, f64 delta_ms) {
         return;
     }
     backend_->Tick(record, delta_ms);
+    if (record.state == State::Failed) {
+        const Error error(ErrorCode::InvalidState, record.error);
+        CleanupFailure(backend_, record, error);
+    }
 }
 
 void Runtime::DispatchEvent(Record& record, u32 event_type, std::span<const u8> payload) {
@@ -101,6 +113,10 @@ void Runtime::DispatchEvent(Record& record, u32 event_type, std::span<const u8> 
         return;
     }
     backend_->DispatchEvent(record, event_type, payload);
+    if (record.state == State::Failed) {
+        const Error error(ErrorCode::InvalidState, record.error);
+        CleanupFailure(backend_, record, error);
+    }
 }
 
 Result<void> Runtime::DispatchCommand(Record& record, std::string_view command_id, std::span<const u8> payload) {
@@ -116,19 +132,23 @@ Result<void> Runtime::DispatchCommand(Record& record, std::string_view command_i
 
     auto dispatched = backend_->DispatchCommand(record, command_id, payload);
     if (!dispatched) {
-        MarkFailed(record, dispatched.error());
+        if (dispatched.error().Code() == ErrorCode::ValidationOutOfRange) {
+            return Err(dispatched.error());
+        }
+        CleanupFailure(backend_, record, dispatched.error());
         return Err(dispatched.error());
     }
     return Ok();
 }
 
 void Runtime::Unload(Record& record) {
-    if (record.state != State::Active || backend_ == nullptr) {
+    if (backend_ == nullptr || record.tier == RuntimeTier::None || (record.state != State::Loaded && record.state != State::Initialized && record.state != State::Active && record.state != State::Failed)) {
         return;
     }
 
     record.state = State::Unloading;
     backend_->Unload(record);
+    record.tier = RuntimeTier::None;
     record.state = State::Unloaded;
 }
 

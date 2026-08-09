@@ -66,8 +66,8 @@ struct PassRecord final {
     std::optional<DepthOutput> depth{};
     std::vector<SampleInput> samples{};
     std::vector<CopyOperation> copies{};
-    std::function<void(RenderPassContext&)> render_execute{};
-    std::function<void(CopyPassContext&)> copy_execute{};
+    std::function<Result<void>(RenderPassContext&)> render_execute{};
+    std::function<Result<void>(CopyPassContext&)> copy_execute{};
     ref<void> user_data{};
 };
 

@@ -58,6 +58,8 @@ void WgpuSwapchainImpl::Resize(const u32 width, const u32 height) {
         return;
     }
 
+    ReleaseCurrentTexture();
+
     width_ = width;
     height_ = height;
     desc_.width = width;
@@ -77,7 +79,9 @@ Result<Frame> WgpuSwapchainImpl::AcquireNextFrame() {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Swapchain is invalid");
     }
 
-    ReleaseCurrentTexture();
+    if (acquired_) {
+        return Err(ErrorCode::GraphicsResourceCreationFailed, "A swapchain frame is already acquired");
+    }
 
     WGPUSurfaceTexture surface_texture = WGPU_SURFACE_TEXTURE_INIT;
     wgpuSurfaceGetCurrentTexture(surface_->GetNativeSurface(), &surface_texture);
@@ -98,6 +102,7 @@ Result<Frame> WgpuSwapchainImpl::AcquireNextFrame() {
 
     auto color_view = CreateTextureViewObject(current_view.release());
     if (!color_view) {
+        ReleaseCurrentTexture();
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Failed to wrap surface texture view");
     }
 
@@ -108,11 +113,21 @@ Result<Frame> WgpuSwapchainImpl::AcquireNextFrame() {
         frame_depth_view = CreateTextureViewObject(retained_view.release());
     }
 
+    if (desc_.enable_depth && !frame_depth_view) {
+        ReleaseCurrentTexture();
+        return Err(ErrorCode::GraphicsResourceCreationFailed, "Swapchain depth view is unavailable");
+    }
+
+    acquired_ = true;
     return Ok(MakeFrame(ref<TextureView>(std::move(color_view)), std::move(frame_depth_view), width_, height_));
 }
 
+void WgpuSwapchainImpl::Discard() noexcept {
+    ReleaseCurrentTexture();
+}
+
 Result<void> WgpuSwapchainImpl::Present() {
-    if (!surface_ || !configured_) {
+    if (!surface_ || !configured_ || !acquired_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Swapchain surface is invalid");
     }
 
@@ -129,11 +144,17 @@ Result<void> WgpuSwapchainImpl::Present() {
 #endif
 }
 
+bool WgpuSwapchainImpl::IsConfigured() const noexcept {
+    return configured_ && (!desc_.enable_depth || depth_view_ != nullptr);
+}
+
 Result<void> WgpuSwapchainImpl::Configure() {
     if (!surface_ || !device_ || width_ == 0 || height_ == 0) {
         return Err(ErrorCode::GraphicsFramebufferIncomplete, "Swapchain configure prerequisites missing");
     }
 
+    configured_ = false;
+    ReleaseCurrentTexture();
     SurfaceConfiguration config{};
     config.device = device_.get();
     config.format = desc_.format;
@@ -169,7 +190,8 @@ Result<void> WgpuSwapchainImpl::CreateOrResizeDepth() {
     texture_desc.sampleCount = 1;
     texture_desc.format = ToWgpu(desc_.depth_format);
     texture_desc.usage = WGPUTextureUsage_RenderAttachment;
-    texture_desc.label = detail::ToStringView(desc_.label + "Depth");
+    const std::string depth_label = desc_.label + "Depth";
+    texture_desc.label = detail::ToStringView(depth_label);
 
     WGPUTexture native_texture = wgpuDeviceCreateTexture(native_device, &texture_desc);
     if (native_texture == nullptr) {
@@ -200,6 +222,7 @@ void WgpuSwapchainImpl::ReleaseDepthResources() noexcept {
 
 void WgpuSwapchainImpl::ReleaseCurrentTexture() noexcept {
     current_texture_.reset();
+    acquired_ = false;
 }
 
 Result<scope<Swapchain>> CreateSwapchainObject(ref<WgpuDeviceImpl> device, ref<Surface> surface, SwapchainDesc desc) {
@@ -212,7 +235,11 @@ Result<scope<Swapchain>> CreateSwapchainObject(ref<WgpuDeviceImpl> device, ref<S
         return Err(ErrorCode::GraphicsFramebufferIncomplete, "SwapchainDesc width and height must be non-zero (use Swapchain::Builder::Size)");
     }
 
-    return Ok(createScope<WgpuSwapchainImpl>(std::move(device), std::move(wgpu_surface), std::move(desc)));
+    auto swapchain = createScope<WgpuSwapchainImpl>(std::move(device), std::move(wgpu_surface), std::move(desc));
+    if (!swapchain->IsConfigured()) {
+        return Err(ErrorCode::GraphicsFramebufferIncomplete, "Failed to configure swapchain");
+    }
+    return Ok(std::move(swapchain));
 }
 
 } // namespace woki::rhi::wgpu

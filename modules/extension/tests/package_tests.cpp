@@ -52,6 +52,12 @@ TEST_CASE("Extension package layout resolves canonical roots") {
     REQUIRE(layout->cache_root == fs::weakly_canonical(root / "cache" / "woki" / "ext" / manifest.id));
 }
 
+TEST_CASE("Extension package layout rejects empty roots") {
+    auto layout = woki::ext::ResolvePackageLayout(MakeManifest(), {}, "data", "cache");
+    REQUIRE_FALSE(layout.has_value());
+    REQUIRE(layout.error().Code() == woki::ErrorCode::InvalidArgument);
+}
+
 TEST_CASE("Extension package layout validates existing manifest and wasm") {
     const fs::path root = MakeTempDir("valid_package");
     const woki::ext::Manifest manifest = MakeManifest();
@@ -80,6 +86,25 @@ TEST_CASE("Extension package layout rejects missing wasm") {
     REQUIRE(valid.error().Code() == woki::ErrorCode::FileNotFound);
     REQUIRE(valid.error().Message().contains("extension.wasm"));
     REQUIRE(valid.error().Message().contains("runtime.wasm"));
+}
+
+TEST_CASE("Extension package layout rejects a symlinked wasm module") {
+    const fs::path root = MakeTempDir("symlinked_wasm");
+    const woki::ext::Manifest manifest = MakeManifest();
+    auto layout = woki::ext::ResolvePackageLayout(manifest, root / "extensions", root / "ext-data", root / "cache");
+    REQUIRE(layout.has_value());
+    fs::create_directories(layout->install_root);
+    WriteFile(layout->manifest, "id: woki.hello\n");
+    WriteFile(root / "outside.wasm", "");
+    std::error_code error;
+    fs::create_symlink(root / "outside.wasm", layout->wasm, error);
+    if (error) {
+        SKIP("File symlinks are unavailable");
+    }
+
+    auto valid = woki::ext::ValidatePackageLayout(*layout);
+    REQUIRE_FALSE(valid.has_value());
+    REQUIRE(valid.error().Code() == woki::ErrorCode::FileAccessDenied);
 }
 
 TEST_CASE("Extension package installer installs an unpacked package through staging") {

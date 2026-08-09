@@ -31,6 +31,8 @@ static_assert(cabi::kInvalid == WOKI_EXT_INVALID);
     switch (error.Code()) {
         case ErrorCode::FileNotFound:
             return cabi::kNotFound;
+        case ErrorCode::FileAccessDenied:
+            return cabi::kDenied;
         case ErrorCode::ValidationOutOfRange:
             return cabi::kNoSpace;
         case ErrorCode::ValidationInvalidState:

@@ -45,78 +45,108 @@ namespace detail {
 inline void AppendEventPayload(std::string& output, const Event& event) {
     switch (event.GetEventType()) {
         case EventType::kWindowResized: {
-            const auto& typed_event = static_cast<const WindowResizeEvent&>(event);
-            output += " (" + std::to_string(typed_event.width) + "x" + std::to_string(typed_event.height) + ")";
+            const auto* typed_event = dynamic_cast<const WindowResizeEvent*>(&event);
+            if (typed_event != nullptr) {
+                output += " (" + std::to_string(typed_event->width) + "x" + std::to_string(typed_event->height) + ")";
+            }
             return;
         }
         case EventType::kWindowMoved: {
-            const auto& typed_event = static_cast<const WindowMovedEvent&>(event);
-            output += " (x=" + std::to_string(typed_event.x) + ", y=" + std::to_string(typed_event.y) + ")";
+            const auto* typed_event = dynamic_cast<const WindowMovedEvent*>(&event);
+            if (typed_event != nullptr) {
+                output += " (x=" + std::to_string(typed_event->x) + ", y=" + std::to_string(typed_event->y) + ")";
+            }
             return;
         }
         case EventType::kWindowScaleChanged: {
-            const auto& typed_event = static_cast<const WindowScaleChangedEvent&>(event);
-            output += " (x=" + std::to_string(typed_event.x) + ", y=" + std::to_string(typed_event.y) + ")";
+            const auto* typed_event = dynamic_cast<const WindowScaleChangedEvent*>(&event);
+            if (typed_event != nullptr) {
+                output += " (x=" + std::to_string(typed_event->x) + ", y=" + std::to_string(typed_event->y) + ")";
+            }
             return;
         }
         case EventType::kKeyPressed: {
-            const auto& typed_event = static_cast<const KeyPressedEvent&>(event);
-            output += " (key=" + std::to_string(static_cast<u16>(typed_event.key)) + ", repeat=" + std::to_string(typed_event.repeat_count) + ")";
+            const auto* typed_event = dynamic_cast<const KeyPressedEvent*>(&event);
+            if (typed_event != nullptr) {
+                output += " (key=" + std::to_string(static_cast<u16>(typed_event->key)) + ", repeat=" + std::to_string(typed_event->repeat_count) + ")";
+            }
             return;
         }
         case EventType::kKeyReleased: {
-            const auto& typed_event = static_cast<const KeyReleasedEvent&>(event);
-            output += " (key=" + std::to_string(static_cast<u16>(typed_event.key)) + ")";
+            const auto* typed_event = dynamic_cast<const KeyReleasedEvent*>(&event);
+            if (typed_event != nullptr) {
+                output += " (key=" + std::to_string(static_cast<u16>(typed_event->key)) + ")";
+            }
             return;
         }
         case EventType::kKeyTyped: {
-            const auto& typed_event = static_cast<const KeyTypedEvent&>(event);
-            output += " (character=" + std::to_string(typed_event.character) + ")";
+            const auto* typed_event = dynamic_cast<const KeyTypedEvent*>(&event);
+            if (typed_event != nullptr) {
+                output += " (character=" + std::to_string(typed_event->character) + ")";
+            }
             return;
         }
         case EventType::kMouseMoved: {
-            const auto& typed_event = static_cast<const MouseMovedEvent&>(event);
-            output += " (x=" + std::to_string(typed_event.x) + ", y=" + std::to_string(typed_event.y) + ", dx=" + std::to_string(typed_event.delta_x) + ", dy=" + std::to_string(typed_event.delta_y) + ")";
+            const auto* typed_event = dynamic_cast<const MouseMovedEvent*>(&event);
+            if (typed_event != nullptr) {
+                output += " (x=" + std::to_string(typed_event->x) + ", y=" + std::to_string(typed_event->y) + ", dx=" + std::to_string(typed_event->delta_x) + ", dy=" + std::to_string(typed_event->delta_y) + ")";
+            }
             return;
         }
         case EventType::kMouseScrolled: {
-            const auto& typed_event = static_cast<const MouseScrolledEvent&>(event);
-            output += " (x=" + std::to_string(typed_event.offset_x) + ", y=" + std::to_string(typed_event.offset_y) + ")";
+            const auto* typed_event = dynamic_cast<const MouseScrolledEvent*>(&event);
+            if (typed_event != nullptr) {
+                output += " (x=" + std::to_string(typed_event->offset_x) + ", y=" + std::to_string(typed_event->offset_y) + ")";
+            }
             return;
         }
         case EventType::kMouseButtonPressed: {
-            const auto& typed_event = static_cast<const MouseButtonPressedEvent&>(event);
-            output += " (button=" + std::to_string(static_cast<u8>(typed_event.button)) + ", x=" + std::to_string(typed_event.x) + ", y=" + std::to_string(typed_event.y) + ")";
+            const auto* typed_event = dynamic_cast<const MouseButtonPressedEvent*>(&event);
+            if (typed_event != nullptr) {
+                output += " (button=" + std::to_string(static_cast<u8>(typed_event->button)) + ", x=" + std::to_string(typed_event->x) + ", y=" + std::to_string(typed_event->y) + ")";
+            }
             return;
         }
         case EventType::kMouseButtonReleased: {
-            const auto& typed_event = static_cast<const MouseButtonReleasedEvent&>(event);
-            output += " (button=" + std::to_string(static_cast<u8>(typed_event.button)) + ", x=" + std::to_string(typed_event.x) + ", y=" + std::to_string(typed_event.y) + ")";
+            const auto* typed_event = dynamic_cast<const MouseButtonReleasedEvent*>(&event);
+            if (typed_event != nullptr) {
+                output += " (button=" + std::to_string(static_cast<u8>(typed_event->button)) + ", x=" + std::to_string(typed_event->x) + ", y=" + std::to_string(typed_event->y) + ")";
+            }
             return;
         }
         case EventType::kMouseButtonClicked: {
-            const auto& typed_event = static_cast<const MouseButtonClickedEvent&>(event);
-            output += " (button=" + std::to_string(static_cast<u8>(typed_event.button)) + ", x=" + std::to_string(typed_event.x) + ", y=" + std::to_string(typed_event.y) + ")";
+            const auto* typed_event = dynamic_cast<const MouseButtonClickedEvent*>(&event);
+            if (typed_event != nullptr) {
+                output += " (button=" + std::to_string(static_cast<u8>(typed_event->button)) + ", x=" + std::to_string(typed_event->x) + ", y=" + std::to_string(typed_event->y) + ")";
+            }
             return;
         }
         case EventType::kFrameBegin: {
-            const auto& typed_event = static_cast<const FrameBeginEvent&>(event);
-            output += " (dt=" + std::to_string(typed_event.delta_time) + ")";
+            const auto* typed_event = dynamic_cast<const FrameBeginEvent*>(&event);
+            if (typed_event != nullptr) {
+                output += " (dt=" + std::to_string(typed_event->delta_time) + ")";
+            }
             return;
         }
         case EventType::kViewportResized: {
-            const auto& typed_event = static_cast<const ViewportResizeEvent&>(event);
-            output += " (" + std::to_string(typed_event.width) + "x" + std::to_string(typed_event.height) + ")";
+            const auto* typed_event = dynamic_cast<const ViewportResizeEvent*>(&event);
+            if (typed_event != nullptr) {
+                output += " (" + std::to_string(typed_event->width) + "x" + std::to_string(typed_event->height) + ")";
+            }
             return;
         }
         case EventType::kAppTick: {
-            const auto& typed_event = static_cast<const AppTickEvent&>(event);
-            output += " (dt=" + std::to_string(typed_event.delta_time) + ")";
+            const auto* typed_event = dynamic_cast<const AppTickEvent*>(&event);
+            if (typed_event != nullptr) {
+                output += " (dt=" + std::to_string(typed_event->delta_time) + ")";
+            }
             return;
         }
         case EventType::kAppUpdate: {
-            const auto& typed_event = static_cast<const AppUpdateEvent&>(event);
-            output += " (dt=" + std::to_string(typed_event.delta_time) + ")";
+            const auto* typed_event = dynamic_cast<const AppUpdateEvent*>(&event);
+            if (typed_event != nullptr) {
+                output += " (dt=" + std::to_string(typed_event->delta_time) + ")";
+            }
             return;
         }
         default:
@@ -295,6 +325,21 @@ inline void AppendJsonKey(std::string& output, std::string_view key) {
     output.push_back(':');
 }
 
+template <typename T>
+void AppendMouseButtonJson(std::string& output, const Event& event) {
+    const auto* typed_event = dynamic_cast<const T*>(&event);
+    if (typed_event == nullptr) {
+        return;
+    }
+
+    AppendJsonKey(output, "button");
+    output += std::to_string(static_cast<u8>(typed_event->button));
+    AppendJsonKey(output, "x");
+    output += std::to_string(typed_event->x);
+    AppendJsonKey(output, "y");
+    output += std::to_string(typed_event->y);
+}
+
 } // namespace detail
 
 [[nodiscard]] inline std::string ToJson(const Event& event) {
@@ -304,31 +349,141 @@ inline void AppendJsonKey(std::string& output, std::string_view key) {
 
     switch (event.GetEventType()) {
         case EventType::kKeyPressed: {
-            const auto& typed_event = static_cast<const KeyPressedEvent&>(event);
+            const auto* typed_event = dynamic_cast<const KeyPressedEvent*>(&event);
+            if (typed_event == nullptr) {
+                break;
+            }
             detail::AppendJsonKey(output, "key");
-            output += std::to_string(static_cast<u16>(typed_event.key));
+            output += std::to_string(static_cast<u16>(typed_event->key));
             detail::AppendJsonKey(output, "repeat");
-            output += std::to_string(typed_event.repeat_count);
+            output += std::to_string(typed_event->repeat_count);
             break;
         }
         case EventType::kKeyReleased: {
-            const auto& typed_event = static_cast<const KeyReleasedEvent&>(event);
+            const auto* typed_event = dynamic_cast<const KeyReleasedEvent*>(&event);
+            if (typed_event == nullptr) {
+                break;
+            }
             detail::AppendJsonKey(output, "key");
-            output += std::to_string(static_cast<u16>(typed_event.key));
+            output += std::to_string(static_cast<u16>(typed_event->key));
             break;
         }
         case EventType::kKeyTyped: {
-            const auto& typed_event = static_cast<const KeyTypedEvent&>(event);
+            const auto* typed_event = dynamic_cast<const KeyTypedEvent*>(&event);
+            if (typed_event == nullptr) {
+                break;
+            }
             detail::AppendJsonKey(output, "character");
-            output += std::to_string(typed_event.character);
+            output += std::to_string(typed_event->character);
             break;
         }
         case EventType::kWindowResized: {
-            const auto& typed_event = static_cast<const WindowResizeEvent&>(event);
+            const auto* typed_event = dynamic_cast<const WindowResizeEvent*>(&event);
+            if (typed_event == nullptr) {
+                break;
+            }
             detail::AppendJsonKey(output, "width");
-            output += std::to_string(typed_event.width);
+            output += std::to_string(typed_event->width);
             detail::AppendJsonKey(output, "height");
-            output += std::to_string(typed_event.height);
+            output += std::to_string(typed_event->height);
+            break;
+        }
+        case EventType::kWindowMoved: {
+            const auto* typed_event = dynamic_cast<const WindowMovedEvent*>(&event);
+            if (typed_event == nullptr) {
+                break;
+            }
+            detail::AppendJsonKey(output, "x");
+            output += std::to_string(typed_event->x);
+            detail::AppendJsonKey(output, "y");
+            output += std::to_string(typed_event->y);
+            break;
+        }
+        case EventType::kWindowScaleChanged: {
+            const auto* typed_event = dynamic_cast<const WindowScaleChangedEvent*>(&event);
+            if (typed_event == nullptr) {
+                break;
+            }
+            detail::AppendJsonKey(output, "x");
+            output += std::to_string(typed_event->x);
+            detail::AppendJsonKey(output, "y");
+            output += std::to_string(typed_event->y);
+            break;
+        }
+        case EventType::kMouseMoved: {
+            const auto* typed_event = dynamic_cast<const MouseMovedEvent*>(&event);
+            if (typed_event == nullptr) {
+                break;
+            }
+            detail::AppendJsonKey(output, "x");
+            output += std::to_string(typed_event->x);
+            detail::AppendJsonKey(output, "y");
+            output += std::to_string(typed_event->y);
+            detail::AppendJsonKey(output, "deltaX");
+            output += std::to_string(typed_event->delta_x);
+            detail::AppendJsonKey(output, "deltaY");
+            output += std::to_string(typed_event->delta_y);
+            break;
+        }
+        case EventType::kMouseScrolled: {
+            const auto* typed_event = dynamic_cast<const MouseScrolledEvent*>(&event);
+            if (typed_event == nullptr) {
+                break;
+            }
+            detail::AppendJsonKey(output, "offsetX");
+            output += std::to_string(typed_event->offset_x);
+            detail::AppendJsonKey(output, "offsetY");
+            output += std::to_string(typed_event->offset_y);
+            break;
+        }
+        case EventType::kMouseButtonPressed: {
+            detail::AppendMouseButtonJson<MouseButtonPressedEvent>(output, event);
+            break;
+        }
+        case EventType::kMouseButtonReleased: {
+            detail::AppendMouseButtonJson<MouseButtonReleasedEvent>(output, event);
+            break;
+        }
+        case EventType::kMouseButtonClicked: {
+            detail::AppendMouseButtonJson<MouseButtonClickedEvent>(output, event);
+            break;
+        }
+        case EventType::kFrameBegin: {
+            const auto* typed_event = dynamic_cast<const FrameBeginEvent*>(&event);
+            if (typed_event == nullptr) {
+                break;
+            }
+            detail::AppendJsonKey(output, "deltaTime");
+            output += std::to_string(typed_event->delta_time);
+            break;
+        }
+        case EventType::kViewportResized: {
+            const auto* typed_event = dynamic_cast<const ViewportResizeEvent*>(&event);
+            if (typed_event == nullptr) {
+                break;
+            }
+            detail::AppendJsonKey(output, "width");
+            output += std::to_string(typed_event->width);
+            detail::AppendJsonKey(output, "height");
+            output += std::to_string(typed_event->height);
+            break;
+        }
+        case EventType::kAppTick: {
+            const auto* typed_event = dynamic_cast<const AppTickEvent*>(&event);
+            if (typed_event == nullptr) {
+                break;
+            }
+            detail::AppendJsonKey(output, "deltaTime");
+            output += std::to_string(typed_event->delta_time);
+            break;
+        }
+        case EventType::kAppUpdate: {
+            const auto* typed_event = dynamic_cast<const AppUpdateEvent*>(&event);
+            if (typed_event == nullptr) {
+                break;
+            }
+            detail::AppendJsonKey(output, "deltaTime");
+            output += std::to_string(typed_event->delta_time);
             break;
         }
         default:

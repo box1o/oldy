@@ -9,12 +9,18 @@ namespace {
 class FakeBackend final : public woki::ext::RuntimeBackend {
 public:
     [[nodiscard]] woki::Result<void> Load(woki::ext::Record& record) override {
+        if (fail_load) {
+            return woki::Err(woki::ErrorCode::InvalidState, "backend load failed");
+        }
         record.tier = woki::ext::RuntimeTier::Wasm;
         loaded = true;
         return woki::Ok();
     }
 
     [[nodiscard]] woki::Result<void> Initialize(woki::ext::Record&) override {
+        if (fail_initialize) {
+            return woki::Err(woki::ErrorCode::InvalidState, "backend initialize failed");
+        }
         initialized = true;
         return woki::Ok();
     }
@@ -31,16 +37,24 @@ public:
     [[nodiscard]] woki::Result<void> DispatchCommand(woki::ext::Record&, std::string_view command_id, std::span<const woki::u8> payload) override {
         last_command_id = command_id;
         last_command_payload_size = payload.size();
+        if (fail_command) {
+            return woki::Err(woki::ErrorCode::InvalidState, "backend command failed");
+        }
         return woki::Ok();
     }
 
     void Unload(woki::ext::Record&) override {
         unloaded = true;
+        ++unload_calls;
     }
 
     bool loaded{false};
     bool initialized{false};
     bool unloaded{false};
+    bool fail_load{false};
+    bool fail_initialize{false};
+    bool fail_command{false};
+    int unload_calls{0};
     int ticks{0};
     woki::f64 last_delta_ms{0.0};
     woki::u32 last_event_type{0};
@@ -125,4 +139,59 @@ TEST_CASE("Extension runtime can swap backends") {
     auto second_record = MakeRecord();
     REQUIRE(runtime.Load(second_record).has_value());
     REQUIRE(second_ptr->loaded);
+}
+
+TEST_CASE("Extension runtime records backend load failures") {
+    FakeBackend backend;
+    backend.fail_load = true;
+    woki::ext::Runtime runtime(&backend);
+    auto record = MakeRecord();
+
+    auto loaded = runtime.Load(record);
+    REQUIRE_FALSE(loaded.has_value());
+    REQUIRE(record.state == woki::ext::State::Failed);
+    REQUIRE(record.error == "backend load failed");
+    REQUIRE_FALSE(backend.loaded);
+    REQUIRE(backend.unload_calls == 0);
+}
+
+TEST_CASE("Extension runtime records backend initialization failures") {
+    FakeBackend backend;
+    woki::ext::Runtime runtime(&backend);
+    auto record = MakeRecord();
+    REQUIRE(runtime.Load(record).has_value());
+    backend.fail_initialize = true;
+
+    auto initialized = runtime.Initialize(record);
+    REQUIRE_FALSE(initialized.has_value());
+    REQUIRE(record.state == woki::ext::State::Failed);
+    REQUIRE(record.error == "backend initialize failed");
+    REQUIRE_FALSE(backend.initialized);
+    REQUIRE(backend.unloaded);
+    REQUIRE(backend.unload_calls == 1);
+    REQUIRE(record.tier == woki::ext::RuntimeTier::None);
+
+    runtime.Unload(record);
+    REQUIRE(backend.unload_calls == 1);
+}
+
+TEST_CASE("Extension runtime records command failures and stops active dispatch") {
+    FakeBackend backend;
+    woki::ext::Runtime runtime(&backend);
+    auto record = MakeRecord();
+    REQUIRE(runtime.Load(record).has_value());
+    REQUIRE(runtime.Initialize(record).has_value());
+    backend.fail_command = true;
+
+    auto commanded = runtime.DispatchCommand(record, "woki.hello.say", {});
+    REQUIRE_FALSE(commanded.has_value());
+    REQUIRE(record.state == woki::ext::State::Failed);
+    REQUIRE(record.error == "backend command failed");
+    REQUIRE(backend.unloaded);
+    REQUIRE(record.tier == woki::ext::RuntimeTier::None);
+
+    runtime.Tick(record, 1.0);
+    runtime.DispatchEvent(record, 42, {});
+    REQUIRE(backend.ticks == 0);
+    REQUIRE(backend.last_event_type == 0);
 }

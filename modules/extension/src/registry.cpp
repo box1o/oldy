@@ -20,7 +20,7 @@ namespace fs = std::filesystem;
 
 [[nodiscard]] bool IsCandidatePackageDir(const fs::directory_entry& entry) {
     std::error_code error;
-    return entry.is_directory(error) && fs::is_regular_file(entry.path() / "manifest.yaml", error);
+    return !entry.is_symlink(error) && entry.is_directory(error) && !fs::is_symlink(entry.path() / "manifest.yaml", error) && fs::is_regular_file(entry.path() / "manifest.yaml", error);
 }
 
 [[nodiscard]] Record FailedRecord(std::string id, const fs::path& root, const Error& error) {

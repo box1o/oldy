@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <utility>
+#include <concepts>
 #include <expected>
 #include <type_traits>
 #include <source_location>

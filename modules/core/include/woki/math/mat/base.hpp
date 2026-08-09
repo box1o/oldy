@@ -305,54 +305,7 @@ template <std::size_t N, arithmetic T>
 
 template <std::size_t N, floating_point T>
 [[nodiscard]] inline mat<N, N, T> inverse(const mat<N, N, T>& m) noexcept {
-    mat<N, N, T> a(m);
-    mat<N, N, T> inv = mat<N, N, T>::identity();
-
-    for (std::size_t i = 0; i < N; ++i) {
-        std::size_t pivot = i;
-        T maxv = abs(a(i, i));
-        for (std::size_t r = i + 1; r < N; ++r) {
-            const T v = abs(a(r, i));
-            if (v > maxv) {
-                maxv = v;
-                pivot = r;
-            }
-        }
-
-        if (maxv <= epsilon<T>) {
-            return inv;
-        }
-
-        if (pivot != i) {
-            for (std::size_t c = 0; c < N; ++c) {
-                const T tmp_a = a(i, c);
-                a(i, c) = a(pivot, c);
-                a(pivot, c) = tmp_a;
-
-                const T tmp_inv = inv(i, c);
-                inv(i, c) = inv(pivot, c);
-                inv(pivot, c) = tmp_inv;
-            }
-        }
-
-        const T piv = a(i, i);
-        for (std::size_t c = 0; c < N; ++c) {
-            a(i, c) /= piv;
-            inv(i, c) /= piv;
-        }
-
-        for (std::size_t r = 0; r < N; ++r) {
-            if (r == i)
-                continue;
-            const T f = a(r, i);
-            for (std::size_t c = 0; c < N; ++c) {
-                a(r, c) -= f * a(i, c);
-                inv(r, c) -= f * inv(i, c);
-            }
-        }
-    }
-
-    return inv;
+    return detail::InvertMatrix(m);
 }
 
 } // namespace woki::math

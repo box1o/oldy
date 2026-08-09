@@ -1,10 +1,6 @@
 # Include before project() in isolated extension guest CMakeLists.txt.
 # Forces a wasm-capable clang/clang++ (not AppleClang or MSVC).
 
-if(NOT DEFINED WOKI_REPO_ROOT)
-    get_filename_component(WOKI_REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
-endif()
-
 # Guest modules target wasm32, not the host OS (avoids -arch on Apple, MSVC defaults, etc.).
 set(CMAKE_SYSTEM_NAME Generic CACHE STRING "Wasm guest system" FORCE)
 set(CMAKE_SYSTEM_PROCESSOR wasm32 CACHE STRING "Wasm guest processor" FORCE)

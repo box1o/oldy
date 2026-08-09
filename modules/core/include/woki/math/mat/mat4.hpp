@@ -264,32 +264,7 @@ public:
     [[nodiscard]] mat inverse() const noexcept
     requires floating_point<T>
     {
-        const T a0 = m00 * m11 - m01 * m10;
-        const T a1 = m00 * m12 - m02 * m10;
-        const T a2 = m00 * m13 - m03 * m10;
-        const T a3 = m01 * m12 - m02 * m11;
-        const T a4 = m01 * m13 - m03 * m11;
-        const T a5 = m02 * m13 - m03 * m12;
-        const T b0 = m20 * m31 - m21 * m30;
-        const T b1 = m20 * m32 - m22 * m30;
-        const T b2 = m20 * m33 - m23 * m30;
-        const T b3 = m21 * m32 - m22 * m31;
-        const T b4 = m21 * m33 - m23 * m31;
-        const T b5 = m22 * m33 - m23 * m32;
-
-        const T d = a0 * b5 - a1 * b4 + a2 * b3 + a3 * b2 - a4 * b1 + a5 * b0;
-        if (abs(d) <= epsilon<T>) {
-            return identity();
-        }
-
-        const T inv_det = T{1} / d;
-        return mat(layout::rowm, (m11 * b5 - m12 * b4 + m13 * b3) * inv_det, (-m01 * b5 + m02 * b4 - m03 * b3) * inv_det, (m31 * a5 - m32 * a4 + m33 * a3) * inv_det, (-m21 * a5 + m22 * a4 - m23 * a3) * inv_det,
-
-            (-m10 * b5 + m12 * b2 - m13 * b1) * inv_det, (m00 * b5 - m02 * b2 + m03 * b1) * inv_det, (-m30 * a5 + m32 * a2 - m33 * a1) * inv_det, (m20 * a5 - m22 * a2 + m23 * a1) * inv_det,
-
-            (m10 * b4 - m11 * b2 + m13 * b0) * inv_det, (-m00 * b4 + m01 * b2 - m03 * b0) * inv_det, (m30 * a4 - m31 * a2 + m33 * a0) * inv_det, (-m20 * a4 + m21 * a2 - m23 * a0) * inv_det,
-
-            (-m10 * b3 + m11 * b1 - m12 * b0) * inv_det, (m00 * b3 - m01 * b1 + m02 * b0) * inv_det, (-m30 * a3 + m31 * a1 - m32 * a0) * inv_det, (m20 * a3 - m21 * a1 + m22 * a0) * inv_det);
+        return detail::InvertMatrix(*this);
     }
 };
 
