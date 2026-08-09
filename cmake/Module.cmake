@@ -69,7 +69,11 @@ function(add_module_test name)
         )
     endif()
 
-    include("${catch2_SOURCE_DIR}/extras/Catch.cmake")
+    if(EXISTS "${CDEPS_ROOT}/catch2-src/extras/Catch.cmake")
+        include("${CDEPS_ROOT}/catch2-src/extras/Catch.cmake")
+    else()
+        include(Catch)
+    endif()
     catch_discover_tests(${name} EXTRA_ARGS --durations yes)
 
     if(TARGET woki_tests)
