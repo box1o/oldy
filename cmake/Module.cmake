@@ -69,7 +69,8 @@ function(add_module_test name)
         )
     endif()
 
-    add_test(NAME ${name} COMMAND ${name} --durations yes)
+    include(Catch)
+    catch_discover_tests(${name} EXTRA_ARGS --durations yes)
 
     if(TARGET woki_tests)
         add_dependencies(woki_tests ${name})
