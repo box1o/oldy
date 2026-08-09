@@ -77,6 +77,10 @@ target_include_directories(woki_rhi
         ${CMAKE_CURRENT_SOURCE_DIR}/backend
 )
 
+if(NOT EMSCRIPTEN)
+    target_link_libraries(woki_rhi PRIVATE glfw)
+endif()
+
 if(WOKI_WGPU_HAS_RESOURCE_TABLE_BINDING_NAMES)
     target_compile_definitions(woki_rhi PRIVATE WOKI_WGPU_HAS_RESOURCE_TABLE_BINDING_NAMES=1)
 endif()
