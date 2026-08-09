@@ -47,7 +47,7 @@ void LogWebCritical(const char* msg) {
 
 #else
 
-#include <atomic>
+#include <mutex>
 #include <memory>
 #include <vector>
 #include <spdlog/sinks/rotating_file_sink.h>
@@ -62,8 +62,14 @@ std::shared_ptr<spdlog::logger>& LoggerRef() {
     return logger;
 }
 
+std::mutex& LoggerMutex() {
+    static std::mutex mutex;
+    return mutex;
+}
+
 std::shared_ptr<spdlog::logger> Logger() noexcept {
-    return std::atomic_load_explicit(&LoggerRef(), std::memory_order_acquire);
+    const std::scoped_lock lock(LoggerMutex());
+    return LoggerRef();
 }
 
 } // namespace detail
@@ -104,7 +110,8 @@ void Configure(std::string name, Level level, const std::string& pattern, const 
     logger->set_pattern(pattern);
     logger->flush_on(spdlog::level::warn);
 
-    std::atomic_store_explicit(&detail::LoggerRef(), std::move(logger), std::memory_order_release);
+    const std::scoped_lock lock(detail::LoggerMutex());
+    detail::LoggerRef() = std::move(logger);
 }
 
 } // namespace slog

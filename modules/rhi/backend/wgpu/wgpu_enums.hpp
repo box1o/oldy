@@ -1038,7 +1038,11 @@ static_assert(static_cast<u64>(MapMode::Write) == WGPUMapMode_Write);
         case FeatureName::AdapterPropertiesWGPU:
             return WGPUFeatureName_AdapterPropertiesWGPU;
         case FeatureName::SharedBufferMemoryD3D12SharedMemoryFileMappingHandle:
+#ifdef WOKI_WGPU_HAS_D3D12_FILE_MAPPING_FEATURE
             return WGPUFeatureName_SharedBufferMemoryD3D12SharedMemoryFileMappingHandle;
+#else
+            return WGPUFeatureName_Force32;
+#endif
         case FeatureName::SharedTextureMemoryD3D12Resource:
             return WGPUFeatureName_SharedTextureMemoryD3D12Resource;
         case FeatureName::ChromiumExperimentalSamplingResourceTable:
@@ -1217,8 +1221,10 @@ static_assert(static_cast<u64>(MapMode::Write) == WGPUMapMode_Write);
             return FeatureName::DawnDeviceAllocatorControl;
         case WGPUFeatureName_AdapterPropertiesWGPU:
             return FeatureName::AdapterPropertiesWGPU;
+#ifdef WOKI_WGPU_HAS_D3D12_FILE_MAPPING_FEATURE
         case WGPUFeatureName_SharedBufferMemoryD3D12SharedMemoryFileMappingHandle:
             return FeatureName::SharedBufferMemoryD3D12SharedMemoryFileMappingHandle;
+#endif
         case WGPUFeatureName_SharedTextureMemoryD3D12Resource:
             return FeatureName::SharedTextureMemoryD3D12Resource;
         case WGPUFeatureName_ChromiumExperimentalSamplingResourceTable:

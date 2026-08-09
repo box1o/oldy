@@ -34,8 +34,12 @@ TEST_CASE("WebGPU device descriptor storage owns its native pointer targets") {
 }
 
 TEST_CASE("WebGPU feature conversion maps D3D12 file mapping handles") {
+#ifdef WOKI_WGPU_HAS_D3D12_FILE_MAPPING_FEATURE
     REQUIRE(woki::rhi::wgpu::convert::ToWgpu(FeatureName::SharedBufferMemoryD3D12SharedMemoryFileMappingHandle) == WGPUFeatureName_SharedBufferMemoryD3D12SharedMemoryFileMappingHandle);
     REQUIRE(woki::rhi::wgpu::convert::FromWgpu(WGPUFeatureName_SharedBufferMemoryD3D12SharedMemoryFileMappingHandle) == FeatureName::SharedBufferMemoryD3D12SharedMemoryFileMappingHandle);
+#else
+    REQUIRE(woki::rhi::wgpu::convert::ToWgpu(FeatureName::SharedBufferMemoryD3D12SharedMemoryFileMappingHandle) == WGPUFeatureName_Force32);
+#endif
 }
 
 TEST_CASE("Unknown WebGPU completion statuses do not report success") {
