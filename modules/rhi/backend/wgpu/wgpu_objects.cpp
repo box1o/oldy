@@ -913,7 +913,11 @@ u32 WgpuResourceTableImpl::InsertBinding(const BindingResourceDesc& resource) {
     }
 
     const WGPUBindingResource native_resource = detail::ToWgpu(resource);
+#if defined(WOKI_WGPU_HAS_RESOURCE_TABLE_BINDING_NAMES)
     return wgpuResourceTableInsertBinding(handle_.get(), &native_resource);
+#else
+    return wgpuResourceTableInsert(handle_.get(), &native_resource);
+#endif
 }
 
 Result<void> WgpuResourceTableImpl::RemoveBinding(const u32 slot) {
@@ -921,7 +925,12 @@ Result<void> WgpuResourceTableImpl::RemoveBinding(const u32 slot) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Resource table is invalid");
     }
 
-    return FromWgpuStatus(wgpuResourceTableRemoveBinding(handle_.get(), slot), "Failed to remove resource table binding");
+#if defined(WOKI_WGPU_HAS_RESOURCE_TABLE_BINDING_NAMES)
+    const auto status = wgpuResourceTableRemoveBinding(handle_.get(), slot);
+#else
+    const auto status = wgpuResourceTableRemove(handle_.get(), slot);
+#endif
+    return FromWgpuStatus(status, "Failed to remove resource table binding");
 }
 
 void WgpuResourceTableImpl::SetLabel(const std::string_view label) {

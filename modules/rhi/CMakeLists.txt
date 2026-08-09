@@ -43,9 +43,26 @@ else()
     find_package(Dawn CONFIG QUIET)
 
     if(TARGET dawn::webgpu_dawn)
-        list(APPEND RHI_DEPS dawn::webgpu_dawn)
+        set(WGPU_TARGET dawn::webgpu_dawn)
     elseif(TARGET webgpu_dawn)
-        list(APPEND RHI_DEPS webgpu_dawn)
+        set(WGPU_TARGET webgpu_dawn)
+    endif()
+
+    if(WGPU_TARGET)
+        list(APPEND RHI_DEPS ${WGPU_TARGET})
+
+        include(CheckCXXSourceCompiles)
+        set(CMAKE_REQUIRED_LIBRARIES ${WGPU_TARGET})
+        check_cxx_source_compiles(
+            "#include <webgpu/webgpu.h>
+            int main() {
+                auto function = &wgpuResourceTableInsertBinding;
+                (void)function;
+                return 0;
+            }"
+            WOKI_WGPU_HAS_RESOURCE_TABLE_BINDING_NAMES
+        )
+        unset(CMAKE_REQUIRED_LIBRARIES)
     endif()
 endif()
 
@@ -59,6 +76,10 @@ target_include_directories(woki_rhi
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/backend
 )
+
+if(WOKI_WGPU_HAS_RESOURCE_TABLE_BINDING_NAMES)
+    target_compile_definitions(woki_rhi PRIVATE WOKI_WGPU_HAS_RESOURCE_TABLE_BINDING_NAMES=1)
+endif()
 
 if(EMSCRIPTEN)
     target_compile_options(woki_rhi PUBLIC
