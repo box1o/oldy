@@ -74,7 +74,14 @@ function(add_module_test name)
     else()
         include(Catch)
     endif()
-    catch_discover_tests(${name} EXTRA_ARGS --durations yes)
+    if(WIN32 AND EXISTS "${CDEPS_ROOT}/wasmtime-c-api/lib/wasmtime.dll")
+        catch_discover_tests(${name}
+            EXTRA_ARGS --durations yes
+            DL_PATHS "${CDEPS_ROOT}/wasmtime-c-api/lib"
+        )
+    else()
+        catch_discover_tests(${name} EXTRA_ARGS --durations yes)
+    endif()
 
     if(TARGET woki_tests)
         add_dependencies(woki_tests ${name})
