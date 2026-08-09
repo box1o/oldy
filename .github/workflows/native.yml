@@ -54,7 +54,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Restore vcpkg binary cache
+        if: runner.os == 'Windows'
+        uses: actions/cache@v5
+        with:
+          path: ${{ runner.temp }}/vcpkg-binaries
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('scripts/ci/native-deps-windows.ps1') }}
+          restore-keys: vcpkg-${{ runner.os }}-
+
       - name: Install dependencies
+        env:
+          VCPKG_DEFAULT_BINARY_CACHE: ${{ runner.temp }}/vcpkg-binaries
         shell: bash
         run: |
           if [[ "${{ runner.os }}" == "Windows" ]]; then
@@ -114,7 +124,17 @@ jobs:
         run: |
           package="dist/${{ matrix.artifact }}"
           mkdir -p "$package/extensions/kitty"
-          cp -R build/bin/. "$package/"
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            executable="$(find build -type f -iname 'studio.exe' -print -quit)"
+            if [[ -z "$executable" ]]; then
+              echo "studio.exe was not found in the build directory" >&2
+              exit 1
+            fi
+            cp "$executable" "$package/studio.exe"
+            cp -R config "$package/config"
+          else
+            cp -R build/bin/. "$package/"
+          fi
           cp extensions/kitty/manifest.yaml "$package/extensions/kitty/"
           cp extensions/kitty/extension.wasm "$package/extensions/kitty/"
 
