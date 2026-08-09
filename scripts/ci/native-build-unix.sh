@@ -32,7 +32,7 @@ fi
 
 cmake "${common_flags[@]}"
 
-cmake --build build --target woki_tests woki_extensions studio -j"$(sysctl -n hw.ncpu 2>/dev/null || nproc)"
+cmake --build build --target woki_tests woki_extensions wokiext studio -j"$(sysctl -n hw.ncpu 2>/dev/null || nproc)"
 
 if [[ "$(uname -s)" == "Darwin" && -n "${WOKI_LLVM_PREFIX:-}" ]]; then
   export DYLD_LIBRARY_PATH="${WOKI_LLVM_PREFIX}/lib:${DYLD_LIBRARY_PATH:-}"
