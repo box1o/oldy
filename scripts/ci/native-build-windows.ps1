@@ -5,7 +5,7 @@ cmake -B build -S . `
   -DCMAKE_BUILD_TYPE=Release `
   '-DCMAKE_POLICY_VERSION_MINIMUM=3.5' `
   -DBUILD_TESTING=ON `
-  -DCMAKE_PREFIX_PATH="$env:DAWN_PREFIX" `
+  -DCMAKE_PREFIX_PATH="$env:DAWN_PREFIX;$env:VCPKG_ROOT/installed/x64-windows" `
   -DDawn_DIR="$env:Dawn_DIR" `
   -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
   -DVCPKG_TARGET_TRIPLET=x64-windows
