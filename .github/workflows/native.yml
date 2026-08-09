@@ -1,0 +1,128 @@
+name: Native
+
+on:
+  workflow_call:
+    inputs:
+      package:
+        description: Prepare release artifacts
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+env:
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
+  DAWN_RELEASE_REPO: google/dawn
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            runner: ubuntu-latest
+            compiler_c: gcc
+            compiler_cxx: g++
+            cache_compiler: true
+            dawn_archive: ubuntu-latest-Release.tar.gz
+            dependencies: scripts/ci/native-deps-linux.sh
+            artifact: woki-linux-x64
+          - name: macOS
+            runner: macos-latest
+            compiler_c: /usr/bin/clang
+            compiler_cxx: /usr/bin/clang++
+            cache_compiler: true
+            dawn_archive: macos-latest-Release.tar.gz
+            dependencies: scripts/ci/native-deps-macos.sh
+            artifact: woki-macos-arm64
+          - name: Windows
+            runner: windows-latest
+            compiler_c: cl
+            compiler_cxx: cl
+            cache_compiler: false
+            dawn_archive: windows-latest-Release.tar.gz
+            dependencies: scripts/ci/native-deps-windows.ps1
+            artifact: woki-windows-x64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            pwsh -File "${{ matrix.dependencies }}"
+          else
+            bash "${{ matrix.dependencies }}"
+          fi
+
+      - name: Enable MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Restore compiler cache
+        if: matrix.cache_compiler
+        uses: actions/cache@v5
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: compiler-${{ runner.os }}-${{ hashFiles('3rdparty/CMakeLists.txt', 'cmake/**', 'modules/**', 'studio/**') }}
+          restore-keys: compiler-${{ runner.os }}-
+
+      - name: Restore dependency cache
+        uses: actions/cache@v5
+        with:
+          path: 3rdparty/.deps
+          key: dependencies-${{ runner.os }}-${{ hashFiles('3rdparty/CMakeLists.txt', 'cmake/Dependencies.cmake') }}
+          restore-keys: dependencies-${{ runner.os }}-
+
+      - name: Install Dawn
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            pwsh -File scripts/ci/download-dawn.ps1 -AssetSuffix "${{ matrix.dawn_archive }}"
+          else
+            bash scripts/ci/download-dawn.sh "${{ matrix.dawn_archive }}"
+          fi
+
+      - name: Build and test
+        shell: bash
+        run: |
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            pwsh -File scripts/ci/native-build-windows.ps1
+          else
+            cache="$([[ "${{ matrix.cache_compiler }}" == "true" ]] && echo ON || echo OFF)"
+            bash scripts/ci/native-build-unix.sh \
+              "${{ matrix.compiler_c }}" \
+              "${{ matrix.compiler_cxx }}" \
+              "$cache"
+          fi
+
+      - name: Prepare package
+        if: inputs.package
+        shell: bash
+        run: |
+          package="dist/${{ matrix.artifact }}"
+          mkdir -p "$package/extensions/kitty"
+          cp -R build/bin/. "$package/"
+          cp extensions/kitty/manifest.yaml "$package/extensions/kitty/"
+          cp extensions/kitty/extension.wasm "$package/extensions/kitty/"
+
+      - name: Upload package
+        if: inputs.package
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/${{ matrix.artifact }}
+          if-no-files-found: error
+          retention-days: 7
