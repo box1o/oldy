@@ -12,11 +12,17 @@ if ($env:VCPKG_DEFAULT_BINARY_CACHE) {
     New-Item -ItemType Directory -Force -Path $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
 }
 
+$vcpkgInstalled = Join-Path $env:RUNNER_TEMP 'vcpkg-installed'
 & (Join-Path $vcpkgRoot 'vcpkg.exe') install `
   freetype:x64-windows `
-  libarchive:x64-windows
+  libarchive:x64-windows `
+  "--x-install-root=$vcpkgInstalled"
+if ($LASTEXITCODE -ne 0) {
+    throw "vcpkg installation failed with exit code $LASTEXITCODE"
+}
 
 "VCPKG_ROOT=$vcpkgRoot" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+"VCPKG_INSTALLED_DIR=$vcpkgInstalled" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
 $llvmBin = 'C:\Program Files\LLVM\bin'
 if (-not (Test-Path (Join-Path $llvmBin 'clang++.exe'))) {
