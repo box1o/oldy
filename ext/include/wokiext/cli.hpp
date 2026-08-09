@@ -1,8 +1,8 @@
 #pragma once
 
-#include <filesystem>
 #include <span>
 #include <string>
+#include <filesystem>
 #include <string_view>
 
 namespace wokiext {
@@ -22,6 +22,7 @@ struct CreateOptions {
 
 struct BuildOptions {
     std::filesystem::path path;
+    std::filesystem::path executable;
     std::string config{"Release"};
 };
 

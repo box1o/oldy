@@ -18,7 +18,7 @@ namespace {
 namespace fs = std::filesystem;
 
 [[nodiscard]] bool IsSafeConfigKey(std::string_view key) {
-    if (key.empty() || key.size() > limits::kMaxConfigKeyBytes) {
+    if (key.empty() || key == "." || key == ".." || key.size() > limits::kMaxConfigKeyBytes) {
         return false;
     }
     return std::ranges::all_of(key, [](char ch) { return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '-' || ch == '.'; });
@@ -39,6 +39,25 @@ namespace fs = std::filesystem;
         return Ok();
     }
     return EnsureDirectory(parent);
+}
+
+[[nodiscard]] Result<void> RejectSymlinks(const fs::path& root, const fs::path& relative_path) {
+    fs::path current = root;
+    for (auto part = relative_path.begin();;) {
+        std::error_code error;
+        const fs::file_status status = fs::symlink_status(current, error);
+        if (!error && fs::is_symlink(status)) {
+            return Err(ErrorCode::FileAccessDenied, "Extension storage path must not traverse symbolic links.");
+        }
+        if (error && error != std::errc::no_such_file_or_directory) {
+            return Err(ErrorCode::FileReadError, error.message());
+        }
+        if (part == relative_path.end()) {
+            break;
+        }
+        current /= *part++;
+    }
+    return Ok();
 }
 
 } // namespace
@@ -76,6 +95,10 @@ Result<fs::path> HostApi::DataPath() const {
     if (!allowed) {
         return Err(allowed.error());
     }
+    auto created = EnsureDirectory(record_->package.data_root);
+    if (!created) {
+        return Err(created.error());
+    }
     return Ok(record_->package.data_root);
 }
 
@@ -83,6 +106,10 @@ Result<fs::path> HostApi::CachePath() const {
     auto allowed = Require(Permission::Paths);
     if (!allowed) {
         return Err(allowed.error());
+    }
+    auto created = EnsureDirectory(record_->package.cache_root);
+    if (!created) {
+        return Err(created.error());
     }
     return Ok(record_->package.cache_root);
 }
@@ -149,6 +176,15 @@ Result<void> HostApi::AppendFile(const fs::path& relative_path, std::span<const 
     auto file = ResolveDataFile(relative_path);
     if (!file) {
         return Err(file.error());
+    }
+
+    std::error_code size_error;
+    const std::uintmax_t existing_size = fs::exists(*file, size_error) ? fs::file_size(*file, size_error) : 0;
+    if (size_error) {
+        return Err(ErrorCode::FileReadError, size_error.message());
+    }
+    if (existing_size > limits::kMaxFileBytes || data.size() > limits::kMaxFileBytes - existing_size) {
+        return Err(ErrorCode::ValidationOutOfRange, "Extension file append would exceed 16 MiB limit.");
     }
 
     auto parent = EnsureParentDirectory(*file);
@@ -224,7 +260,7 @@ Result<void> HostApi::Require(Permission permission) const {
         return Err(ErrorCode::InvalidState, "HostApi has no active extension record.");
     }
     if (!HasPermission(record_->manifest, permission)) {
-        return Err(ErrorCode::ValidationInvalidState, "Extension '" + record_->id + "' does not declare permission '" + std::string(ToString(permission)) + "'. Add it to manifest.yaml permissions.");
+        return Err(ErrorCode::FileAccessDenied, "Extension '" + record_->id + "' does not declare permission '" + std::string(ToString(permission)) + "'. Add it to manifest.yaml permissions.");
     }
     return Ok();
 }
@@ -235,7 +271,12 @@ Result<fs::path> HostApi::ResolveDataFile(const fs::path& relative_path) const {
         return Err(allowed.error());
     }
     if (!IsSafeRelativePath(relative_path)) {
-        return Err(ErrorCode::ValidationInvalidState, "Extension storage path must be relative and must not contain '..'.");
+        return Err(ErrorCode::InvalidArgument, "Extension storage path must be a portable relative path without '.', '..', or backslashes.");
+    }
+
+    auto safe = RejectSymlinks(record_->package.data_root, relative_path);
+    if (!safe) {
+        return Err(safe.error());
     }
 
     return Ok((record_->package.data_root / relative_path).lexically_normal());
@@ -247,7 +288,12 @@ Result<fs::path> HostApi::ResolveConfigFile(std::string_view key) const {
         return Err(allowed.error());
     }
     if (!IsSafeConfigKey(key)) {
-        return Err(ErrorCode::ValidationInvalidState, "Extension config key must use only letters, digits, '.', '_' or '-'.");
+        return Err(ErrorCode::InvalidArgument, "Extension config key must use only letters, digits, '.', '_' or '-'.");
+    }
+
+    auto safe = RejectSymlinks(record_->package.data_root, fs::path("config") / std::string(key));
+    if (!safe) {
+        return Err(safe.error());
     }
 
     return Ok((record_->package.data_root / "config" / std::string(key)).lexically_normal());

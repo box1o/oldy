@@ -14,8 +14,8 @@ namespace woki::rhi {
 
 class RenderGraphFrame final {
 public:
-    RenderGraphFrame(RenderGraphFrame&&) noexcept = default;
-    RenderGraphFrame& operator=(RenderGraphFrame&&) noexcept = default;
+    RenderGraphFrame(RenderGraphFrame&& other) noexcept;
+    RenderGraphFrame& operator=(RenderGraphFrame&& other) noexcept;
     RenderGraphFrame(const RenderGraphFrame&) = delete;
     RenderGraphFrame& operator=(const RenderGraphFrame&) = delete;
     ~RenderGraphFrame();
@@ -27,6 +27,7 @@ private:
     friend class RenderGraph;
 
     RenderGraphFrame(ref<RenderGraph> graph, u32 width, u32 height);
+    void ReleaseFrame() noexcept;
 
     ref<RenderGraph> graph_{};
     u32 width_{0};
@@ -34,6 +35,7 @@ private:
 
     scope<CommandEncoder> encoder_{};
     std::unordered_map<u32, ref<TextureView>> per_frame_views_{};
+    bool executed_{false};
 };
 
 class RenderGraph final : public ref_from_this<RenderGraph> {
@@ -45,7 +47,7 @@ public:
 
     [[nodiscard]] static Result<ref<RenderGraph>> Create(ref<Device> device, render_graph::detail::GraphBlueprint blueprint, u32 width, u32 height);
 
-    [[nodiscard]] RenderGraphFrame BeginFrame(u32 width, u32 height);
+    [[nodiscard]] Result<RenderGraphFrame> BeginFrame(u32 width, u32 height);
     [[nodiscard]] Result<void> RebuildForResize(u32 width, u32 height);
 
 private:
@@ -56,6 +58,7 @@ private:
         render_graph::detail::ResourceRecord blueprint{};
         scope<Texture> texture{};
         scope<TextureView> view{};
+        scope<TextureView> depth_sample_view{};
         u32 pool_index{kInvalidGraphResource};
     };
 
@@ -74,6 +77,7 @@ private:
     u32 height_{0};
     std::vector<RuntimeResource> runtime_resources_{};
     std::vector<render_graph::detail::PooledTransientTexture> transient_pool_{};
+    u32 active_frame_count_{0};
 };
 
 } // namespace woki::rhi

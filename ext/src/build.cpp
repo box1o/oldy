@@ -1,26 +1,177 @@
+#include <cerrno>
+#include <cstdio>
+#include <string>
+#include <vector>
+#include <cstdlib>
+#include <cstring>
+#include <iostream>
+#include <optional>
+#include <filesystem>
+#include <string_view>
+#include <system_error>
+
 #include "wokiext/cli.hpp"
 
-#include <cstdlib>
-#include <filesystem>
-#include <iostream>
-#include <string>
+#ifdef _WIN32
+#include <process.h>
+#else
+#include <unistd.h>
+#include <sys/wait.h>
+#endif
+
+#include "tool_paths.hpp"
 
 namespace wokiext {
 
 namespace {
 
-[[nodiscard]] std::string Quote(const std::filesystem::path& path) {
-    std::string text = path.string();
-    std::string out = "'";
-    for (const char ch : text) {
-        if (ch == '\'') {
-            out += "'\\''";
+[[nodiscard]] std::optional<std::string> Environment(const char* name) {
+#ifdef _WIN32
+    char* value = nullptr;
+    std::size_t size = 0;
+    if (_dupenv_s(&value, &size, name) != 0 || value == nullptr) {
+        return std::nullopt;
+    }
+    std::string result(value);
+    std::free(value);
+    return result;
+#else
+    const char* value = std::getenv(name);
+    if (value == nullptr) {
+        return std::nullopt;
+    }
+    return std::string(value);
+#endif
+}
+
+[[nodiscard]] bool RunProcess(std::vector<std::string> arguments) {
+    std::vector<char*> argv;
+    argv.reserve(arguments.size() + 1);
+    for (std::string& argument : arguments) {
+        argv.push_back(argument.data());
+    }
+    argv.push_back(nullptr);
+
+#ifdef _WIN32
+    const intptr_t status = _spawnvp(_P_WAIT, argv.front(), argv.data());
+    if (status == -1) {
+        std::cerr << "Failed to start " << arguments.front() << ": " << std::error_code(errno, std::generic_category()).message() << '\n';
+        return false;
+    }
+    if (status != 0) {
+        std::cerr << arguments.front() << " exited with code " << status << '\n';
+        return false;
+    }
+#else
+    const pid_t child = fork();
+    if (child == -1) {
+        std::cerr << "Failed to start " << arguments.front() << ": " << std::strerror(errno) << '\n';
+        return false;
+    }
+    if (child == 0) {
+        execvp(argv.front(), argv.data());
+        std::fprintf(stderr, "Failed to execute %s: %s\n", argv.front(), std::strerror(errno));
+        _exit(127);
+    }
+
+    int status = 0;
+    while (waitpid(child, &status, 0) == -1) {
+        if (errno == EINTR) {
+            continue;
+        }
+        std::cerr << "Failed to wait for " << arguments.front() << ": " << std::strerror(errno) << '\n';
+        return false;
+    }
+    if (WIFSIGNALED(status)) {
+        std::cerr << arguments.front() << " terminated by signal " << WTERMSIG(status) << '\n';
+        return false;
+    }
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+        if (WIFEXITED(status)) {
+            std::cerr << arguments.front() << " exited with code " << WEXITSTATUS(status) << '\n';
         } else {
-            out.push_back(ch);
+            std::cerr << arguments.front() << " terminated unexpectedly\n";
+        }
+        return false;
+    }
+#endif
+
+    return true;
+}
+
+[[nodiscard]] std::filesystem::path ExecutablePath(const std::filesystem::path& executable) {
+    if (executable.has_parent_path()) {
+        return std::filesystem::absolute(executable).lexically_normal();
+    }
+
+    const auto path_environment = Environment("PATH");
+    if (!path_environment) {
+        return {};
+    }
+#ifdef _WIN32
+    constexpr char kPathSeparator = ';';
+#else
+    constexpr char kPathSeparator = ':';
+#endif
+    std::string_view paths{*path_environment};
+    while (!paths.empty()) {
+        const std::size_t separator = paths.find(kPathSeparator);
+        const std::filesystem::path candidate = std::filesystem::path(paths.substr(0, separator)) / executable;
+        if (std::filesystem::is_regular_file(candidate)) {
+            return std::filesystem::absolute(candidate).lexically_normal();
+        }
+        if (separator == std::string_view::npos) {
+            break;
+        }
+        paths.remove_prefix(separator + 1);
+    }
+    return {};
+}
+
+[[nodiscard]] std::filesystem::path CMakeModuleDir(const std::filesystem::path& executable) {
+    if (const auto configured = Environment("WOKI_CMAKE_DIR")) {
+        const std::filesystem::path candidate{*configured};
+        if (std::filesystem::is_regular_file(candidate / "ExtensionProject.cmake") && std::filesystem::is_regular_file(candidate / "ExtensionWasm.cmake")) {
+            return std::filesystem::absolute(candidate).lexically_normal();
         }
     }
-    out.push_back('\'');
-    return out;
+
+    const std::filesystem::path executable_path = ExecutablePath(executable);
+    if (!executable_path.empty()) {
+        const std::filesystem::path installed = (executable_path.parent_path() / kInstallCMakeDirFromBin).lexically_normal();
+        if (std::filesystem::is_regular_file(installed / "ExtensionProject.cmake") && std::filesystem::is_regular_file(installed / "ExtensionWasm.cmake")) {
+            return installed;
+        }
+    }
+
+    const std::filesystem::path source{kSourceCMakeDir};
+    if (std::filesystem::is_regular_file(source / "ExtensionProject.cmake") && std::filesystem::is_regular_file(source / "ExtensionWasm.cmake")) {
+        return source.lexically_normal();
+    }
+    return {};
+}
+
+[[nodiscard]] std::filesystem::path SdkDir(const std::filesystem::path& executable) {
+    if (const auto configured = Environment("WOKI_SDK_DIR")) {
+        const std::filesystem::path candidate{*configured};
+        if (std::filesystem::is_regular_file(candidate / "ext.h")) {
+            return std::filesystem::absolute(candidate).lexically_normal();
+        }
+    }
+
+    const std::filesystem::path executable_path = ExecutablePath(executable);
+    if (!executable_path.empty()) {
+        const std::filesystem::path installed = (executable_path.parent_path() / kInstallSdkDirFromBin).lexically_normal();
+        if (std::filesystem::is_regular_file(installed / "ext.h")) {
+            return installed;
+        }
+    }
+
+    const std::filesystem::path source{kSourceSdkDir};
+    if (std::filesystem::is_regular_file(source / "ext.h")) {
+        return source.lexically_normal();
+    }
+    return {};
 }
 
 } // namespace
@@ -34,26 +185,32 @@ Status Build(const BuildOptions& options) {
         return Status::Error;
     }
 
-    const std::string configure = "cmake -B " + Quote(build_dir) + " -S " + Quote(root) +
-                                  " -DCMAKE_BUILD_TYPE=" + options.config +
-                                  " -DCMAKE_EXPORT_COMPILE_COMMANDS=ON";
-    if (std::system(configure.c_str()) != 0) {
+    const std::filesystem::path cmake_module_dir = CMakeModuleDir(options.executable);
+    if (cmake_module_dir.empty()) {
+        std::cerr << "Cannot locate Woki extension CMake modules; set WOKI_CMAKE_DIR\n";
+        return Status::Error;
+    }
+    const std::filesystem::path sdk_dir = SdkDir(options.executable);
+    if (sdk_dir.empty()) {
+        std::cerr << "Cannot locate the Woki extension SDK; set WOKI_SDK_DIR\n";
+        return Status::Error;
+    }
+
+    if (!RunProcess({"cmake", "-B", build_dir.string(), "-S", root.string(), "-DCMAKE_BUILD_TYPE=" + options.config, "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON", "-DWOKI_CMAKE_DIR=" + cmake_module_dir.string(),
+            "-DWOKI_SDK_DIR=" + sdk_dir.string()})) {
         return Status::Error;
     }
 
     const std::filesystem::path compile_commands = build_dir / "compile_commands.json";
     if (std::filesystem::is_regular_file(compile_commands)) {
         std::error_code copy_error;
-        std::filesystem::copy_file(compile_commands, root / "compile_commands.json",
-            std::filesystem::copy_options::overwrite_existing, copy_error);
+        std::filesystem::copy_file(compile_commands, root / "compile_commands.json", std::filesystem::copy_options::overwrite_existing, copy_error);
         if (copy_error) {
-            std::cerr << "Warning: failed to export compile_commands.json: " << copy_error.message()
-                      << '\n';
+            std::cerr << "Warning: failed to export compile_commands.json: " << copy_error.message() << '\n';
         }
     }
 
-    const std::string build = "cmake --build " + Quote(build_dir);
-    if (std::system(build.c_str()) != 0) {
+    if (!RunProcess({"cmake", "--build", build_dir.string()})) {
         return Status::Error;
     }
 

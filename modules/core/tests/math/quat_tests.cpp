@@ -78,6 +78,18 @@ TEST_CASE("quat rotate vector") {
     REQUIRE(r.z == Approx(0.0f).margin(1e-4f));
 }
 
+TEST_CASE("quat rotation is independent of quaternion scale") {
+    const quat<float> unit(vec<3, float>(0.0f, 0.0f, 1.0f), half_pi<float>);
+    const quat<float> scaled = unit * 3.0f;
+    const vec<3, float> vector(1.0f, 0.0f, 0.0f);
+
+    const auto expected = unit.rotate(vector);
+    const auto actual = scaled.rotate(vector);
+    REQUIRE(actual.x == Approx(expected.x).margin(1e-5f));
+    REQUIRE(actual.y == Approx(expected.y).margin(1e-5f));
+    REQUIRE(actual.z == Approx(expected.z).margin(1e-5f));
+}
+
 TEST_CASE("quat toMat4 exact values") {
     // Ground truth: quat(axis=[1,0,0], angle=90deg) = [0.7071, 0, 0, 0.7071]
     // toMat4 gives:

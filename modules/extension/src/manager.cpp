@@ -1,4 +1,5 @@
 #include <string>
+#include <optional>
 #include <algorithm>
 #include <filesystem>
 
@@ -8,18 +9,19 @@ namespace woki::ext {
 
 namespace {
 
-void LoadOne(Runtime& runtime, Record& record) {
+[[nodiscard]] Result<void> LoadOne(Runtime& runtime, Record& record) {
     if (record.state != State::PermissionChecked) {
-        return;
+        return Ok();
     }
 
     auto loaded = runtime.Load(record);
     if (!loaded) {
-        return;
+        return Err(loaded.error());
     }
     if (auto initialized = runtime.Initialize(record); !initialized) {
-        slog::Warn("Extension '{}' failed to initialize: {}", record.id, initialized.error().Message());
+        return Err(initialized.error());
     }
+    return Ok();
 }
 
 } // namespace
@@ -31,14 +33,17 @@ Manager::Manager(scope<RuntimeBackend> backend) noexcept
     : runtime_(std::move(backend)) {}
 
 void Manager::SetBackend(RuntimeBackend* backend) noexcept {
+    UnloadAll();
     runtime_.SetBackend(backend);
 }
 
 void Manager::SetBackend(scope<RuntimeBackend> backend) noexcept {
+    UnloadAll();
     runtime_.SetBackend(std::move(backend));
 }
 
 void Manager::SetRoots(Roots roots) {
+    UnloadAll();
     roots_ = std::move(roots);
     registry_.SetRoots(roots_);
 }
@@ -93,12 +98,13 @@ Result<PackageLayout> Manager::InstallUnpacked(const std::filesystem::path& sour
 }
 
 Result<void> Manager::Scan() {
+    UnloadAll();
+    commands_.Clear();
     auto scanned = registry_.Scan();
     if (!scanned) {
         return Err(scanned.error());
     }
 
-    commands_.Clear();
     for (const Record& record : registry_.Records()) {
         if (record.state != State::Failed) {
             commands_.Register(record.id, record.manifest.commands);
@@ -108,12 +114,13 @@ Result<void> Manager::Scan() {
 }
 
 Result<void> Manager::ScanSource(const std::filesystem::path& source_root) {
+    UnloadAll();
+    commands_.Clear();
     auto scanned = registry_.ScanSource(source_root);
     if (!scanned) {
         return Err(scanned.error());
     }
 
-    commands_.Clear();
     for (const Record& record : registry_.Records()) {
         if (record.state != State::Failed) {
             commands_.Register(record.id, record.manifest.commands);
@@ -139,8 +146,22 @@ Result<void> Manager::Load(std::string_view id) {
 }
 
 Result<void> Manager::LoadAll() {
+    std::string failures;
+    std::optional<ErrorCode> error_code;
     for (Record& record : registry_.Records()) {
-        LoadOne(runtime_, record);
+        auto loaded = LoadOne(runtime_, record);
+        if (!loaded) {
+            if (!failures.empty()) {
+                failures += "; ";
+            }
+            failures += record.id + ": " + std::string(loaded.error().Message());
+            if (!error_code) {
+                error_code = loaded.error().Code();
+            }
+        }
+    }
+    if (error_code) {
+        return Err(*error_code, "One or more extensions failed to load: " + failures);
     }
     return Ok();
 }

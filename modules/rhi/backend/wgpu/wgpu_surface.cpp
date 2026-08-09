@@ -62,6 +62,7 @@ Result<void> WgpuSurfaceImpl::GetCapabilities(const Adapter& adapter, SurfaceCap
 
     WGPUSurfaceCapabilities native_capabilities = WGPU_SURFACE_CAPABILITIES_INIT;
     if (wgpuSurfaceGetCapabilities(surface_.get(), wgpu_adapter->GetNativeAdapter(), &native_capabilities) != WGPUStatus_Success) {
+        wgpuSurfaceCapabilitiesFreeMembers(native_capabilities);
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Failed to query surface capabilities");
     }
 
@@ -90,12 +91,15 @@ Result<void> WgpuSurfaceImpl::GetCapabilities(const Adapter& adapter, SurfaceCap
 
 void WgpuSurfaceImpl::GetCurrentTexture(SurfaceTexture& surface_texture) {
     surface_texture = SurfaceTexture{};
-    if (!surface_) {
+    if (!surface_ || !configured_) {
         surface_texture.status = SurfaceGetCurrentTextureStatus::Error;
         return;
     }
 
-    ReleaseCurrentTexture();
+    if (acquired_) {
+        surface_texture.status = SurfaceGetCurrentTextureStatus::Error;
+        return;
+    }
 
     WGPUSurfaceTexture native_texture = WGPU_SURFACE_TEXTURE_INIT;
     wgpuSurfaceGetCurrentTexture(surface_.get(), &native_texture);
@@ -103,6 +107,15 @@ void WgpuSurfaceImpl::GetCurrentTexture(SurfaceTexture& surface_texture) {
     surface_texture.suboptimal = native_texture.status == WGPUSurfaceGetCurrentTextureStatus_SuccessSuboptimal;
 
     if (native_texture.texture == nullptr) {
+        if (native_texture.status == WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal || native_texture.status == WGPUSurfaceGetCurrentTextureStatus_SuccessSuboptimal) {
+            surface_texture.status = SurfaceGetCurrentTextureStatus::Error;
+            surface_texture.suboptimal = false;
+        }
+        return;
+    }
+
+    if (native_texture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal && native_texture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessSuboptimal) {
+        wgpuTextureRelease(native_texture.texture);
         return;
     }
 
@@ -117,6 +130,7 @@ void WgpuSurfaceImpl::GetCurrentTexture(SurfaceTexture& surface_texture) {
     surface_texture.handles.instance = instance_.get();
     surface_texture.handles.surface = surface_.get();
     surface_texture.handles.resource = current_view_.get();
+    acquired_ = true;
 }
 
 NativeHandles WgpuSurfaceImpl::GetNativeHandles() const noexcept {
@@ -160,6 +174,7 @@ Result<void> WgpuSurfaceImpl::Configure(const SurfaceConfiguration& config) {
 
     auto* native_device = static_cast<WGPUDevice>(handles.device);
     auto configured_device = detail::DeviceHandle::Retain(native_device);
+    ReleaseCurrentTexture();
     wgpuSurfaceConfigure(surface_.get(), &native_config);
 
     configured_device_ = std::move(configured_device);
@@ -179,11 +194,12 @@ Result<void> WgpuSurfaceImpl::Unconfigure() {
     ReleaseCurrentTexture();
     wgpuSurfaceUnconfigure(surface_.get());
     configured_ = false;
+    configured_device_.reset();
     return Ok();
 }
 
 Result<void> WgpuSurfaceImpl::Present() {
-    if (!surface_) {
+    if (!surface_ || !configured_ || !acquired_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Surface is invalid");
     }
 
@@ -217,6 +233,7 @@ WGPUTextureView WgpuSurfaceImpl::TakeCurrentTextureView() noexcept {
 void WgpuSurfaceImpl::ReleaseCurrentTexture() noexcept {
     current_view_.reset();
     current_texture_.reset();
+    acquired_ = false;
 }
 
 WGPUSurface CreateNativeSurface(WGPUInstance instance, Window& window) {

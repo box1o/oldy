@@ -5,14 +5,14 @@ WEB_BUILD_DIR  := build-web
 BUILD_TYPE     := Release
 WEB_PORT       ?= 8080
 WEB_TARGET     := studio
-NUM_JOBS       ?= $(shell nproc)
+NUM_JOBS       ?= $(shell getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 1)
 CONFIG         ?= config/conf/studio.yaml
 PREFIX         ?= /usr/local
 WOKI_EXTENSION_WITH_WASMTIME ?= ON
 WASMTIME_PROVIDER ?= prebuilt
 
 # Use Clang with libc++ to match the Dawn dependency
-CXX            := $(shell which clang++ 2>/dev/null || which c++ 2>/dev/null || echo c++)
+CXX            := $(shell command -v clang++ 2>/dev/null || command -v c++ 2>/dev/null || echo c++)
 ifeq ($(findstring clang,$(CXX)),clang)
 	CXXFLAGS       := -stdlib=libc++
 	LDFLAGS        := -stdlib=libc++

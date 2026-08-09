@@ -1,6 +1,5 @@
 #include <new>
 #include <limits>
-#include <ranges>
 #include <cassert>
 #include <cstdint>
 #include <algorithm>
@@ -29,6 +28,15 @@ bool BumpResource::can_fit(std::size_t bytes, std::size_t alignment) const {
 
 void BumpResource::reset() {
     offset_ = 0;
+}
+
+bool BumpResource::rewind(std::size_t offset, std::size_t expected_offset) noexcept {
+    if (offset_ != expected_offset || offset > expected_offset) {
+        return false;
+    }
+
+    offset_ = offset;
+    return true;
 }
 
 bool BumpResource::is_power_of_two(std::size_t value) noexcept {
@@ -89,7 +97,7 @@ Arena::Arena(u64 size)
     : buffer_(static_cast<std::size_t>(size)),
       resource_(buffer_.data(), buffer_.size()) {}
 
-Arena::~Arena() {
+Arena::~Arena() noexcept {
     clear();
 }
 
@@ -173,13 +181,20 @@ bool Arena::can_fit(u64 bytes, u64 alignment) const {
     return resource_.can_fit(static_cast<std::size_t>(bytes), static_cast<std::size_t>(alignment));
 }
 
-void Arena::clear() {
-    for (auto& destructor : std::views::reverse(destructors_)) {
+void Arena::clear() noexcept {
+    if (clearing_) {
+        return;
+    }
+
+    clearing_ = true;
+    while (!destructors_.empty()) {
+        const Destructor destructor = destructors_.back();
+        destructors_.pop_back();
         destructor.destroy(destructor.ptr);
     }
 
-    destructors_.clear();
     resource_.reset();
+    clearing_ = false;
 }
 
 void Arena::verify() const {

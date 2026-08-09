@@ -8,6 +8,7 @@
 #include <utility>
 #include <concepts>
 #include <iterator>
+#include <stdexcept>
 #include <typeindex>
 #include <functional>
 #include <type_traits>
@@ -50,7 +51,9 @@ public:
 
     template <typename... Args>
     T& Emplace(Entity entity, Args&&... args) {
-        WOKI_ASSERT_MSG(!Contains(entity), "Entity already owns component");
+        if (Contains(entity)) {
+            throw std::logic_error("Entity already owns component");
+        }
 
         const u32 index = entity.Index();
         EnsureSparse(index);
@@ -97,13 +100,17 @@ public:
 
     T& Get(Entity entity) {
         T* value = TryGet(entity);
-        WOKI_ASSERT_MSG(value != nullptr, "Entity does not own component");
+        if (value == nullptr) {
+            throw std::out_of_range("Entity does not own component");
+        }
         return *value;
     }
 
     const T& Get(Entity entity) const {
         const T* value = TryGet(entity);
-        WOKI_ASSERT_MSG(value != nullptr, "Entity does not own component");
+        if (value == nullptr) {
+            throw std::out_of_range("Entity does not own component");
+        }
         return *value;
     }
 
@@ -172,21 +179,38 @@ public:
     Registry& operator=(Registry&&) = delete;
 
     [[nodiscard]] Entity Create() {
-        u32 index = Entity::kInvalidIndex;
-
         if (!free_list_.empty()) {
-            index = free_list_.back();
+            const u32 index = free_list_.back();
+            const Entity entity(index, generations_[index]);
+            entities_.push_back(entity);
             free_list_.pop_back();
-        } else {
-            WOKI_ASSERT_MSG(generations_.size() < Entity::kInvalidIndex, "Entity index space exhausted");
-            index = static_cast<u32>(generations_.size());
-            generations_.push_back(0);
-            entity_positions_.push_back(kInvalidPosition);
+            entity_positions_[index] = static_cast<u32>(entities_.size() - 1);
+            return entity;
         }
 
-        const Entity entity(index, generations_[index]);
-        entity_positions_[index] = static_cast<u32>(entities_.size());
-        entities_.push_back(entity);
+        if (generations_.size() >= Entity::kInvalidIndex) {
+            throw std::length_error("Entity index space exhausted");
+        }
+
+        const u32 index = static_cast<u32>(generations_.size());
+        generations_.push_back(0);
+        try {
+            entity_positions_.push_back(kInvalidPosition);
+        } catch (...) {
+            generations_.pop_back();
+            throw;
+        }
+
+        const Entity entity(index, 0);
+        try {
+            entities_.push_back(entity);
+        } catch (...) {
+            entity_positions_.pop_back();
+            generations_.pop_back();
+            throw;
+        }
+
+        entity_positions_[index] = static_cast<u32>(entities_.size() - 1);
         return entity;
     }
 
@@ -194,6 +218,8 @@ public:
         if (!Valid(entity)) {
             return false;
         }
+
+        free_list_.reserve(free_list_.size() + 1);
 
         for (auto& [_, storage] : storages_) {
             (void)storage->Remove(entity);
@@ -223,15 +249,15 @@ public:
         return index < generations_.size() && entity_positions_[index] != kInvalidPosition && generations_[index] == entity.Generation();
     }
 
-    void Clear() noexcept {
+    void Clear() {
+        free_list_.reserve(generations_.size());
+
         for (auto& [_, storage] : storages_) {
             storage->Clear();
         }
 
         entities_.clear();
         free_list_.clear();
-        free_list_.reserve(generations_.size());
-
         for (std::size_t position = 0; position < generations_.size(); ++position) {
             const u32 index = static_cast<u32>(position);
             generations_[index] = detail::NextEntityGeneration(generations_[index]);
@@ -265,13 +291,17 @@ public:
 
     template <Component T, typename... Args>
     T& Emplace(Entity entity, Args&&... args) {
-        WOKI_ASSERT_MSG(Valid(entity), "Cannot add component to dead entity");
+        if (!Valid(entity)) {
+            throw std::invalid_argument("Cannot add component to dead entity");
+        }
         return EnsureStorage<T>().Emplace(entity, std::forward<Args>(args)...);
     }
 
     template <Component T, typename... Args>
     T& GetOrEmplace(Entity entity, Args&&... args) {
-        WOKI_ASSERT_MSG(Valid(entity), "Cannot access component on dead entity");
+        if (!Valid(entity)) {
+            throw std::invalid_argument("Cannot access component on dead entity");
+        }
 
         if (T* value = TryGet<T>(entity)) {
             return *value;
@@ -323,14 +353,18 @@ public:
     template <Component T>
     T& Get(Entity entity) {
         T* value = TryGet<T>(entity);
-        WOKI_ASSERT_MSG(value != nullptr, "Entity does not own component");
+        if (value == nullptr) {
+            throw std::out_of_range("Entity does not own component");
+        }
         return *value;
     }
 
     template <Component T>
     const T& Get(Entity entity) const {
         const T* value = TryGet<T>(entity);
-        WOKI_ASSERT_MSG(value != nullptr, "Entity does not own component");
+        if (value == nullptr) {
+            throw std::out_of_range("Entity does not own component");
+        }
         return *value;
     }
 
@@ -458,7 +492,7 @@ public:
         std::size_t index_ = 0;
     };
 
-    explicit BasicView(RegistryType& registry) noexcept
+    explicit BasicView(RegistryType& registry)
         : registry_(&registry) {
         SelectLeadStorage();
     }
@@ -484,7 +518,9 @@ public:
     }
 
     [[nodiscard]] auto Get(Entity entity) const {
-        WOKI_ASSERT_MSG(ContainsAll(entity), "Entity is not part of this view");
+        if (!ContainsAll(entity)) {
+            throw std::out_of_range("Entity is not part of this view");
+        }
         return std::forward_as_tuple(registry_->template Get<Components>(entity)...);
     }
 
@@ -505,7 +541,7 @@ private:
         return registry_->template FindStorage<T>();
     }
 
-    void SelectLeadStorage() noexcept {
+    void SelectLeadStorage() {
         const detail::IComponentStorage* lead = nullptr;
 
         auto select_candidate = [&](const detail::IComponentStorage* candidate) {

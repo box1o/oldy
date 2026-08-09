@@ -193,3 +193,64 @@ runtime:
     REQUIRE(manifest.error().Message().contains("permissions"));
     REQUIRE(manifest.error().Message().contains("- log"));
 }
+
+TEST_CASE("Extension manifest rejects fields excluded by the schema") {
+    const fs::path root = MakeTempDir("unknown_field");
+    const fs::path path = root / "manifest.yaml";
+    WriteFile(path, std::string(kValidManifest) + "unknown: true\n");
+
+    auto manifest = woki::ext::LoadManifest(path);
+    REQUIRE_FALSE(manifest.has_value());
+    REQUIRE(manifest.error().Code() == woki::ErrorCode::ParseUnexpectedToken);
+    REQUIRE(manifest.error().Message().contains("unknown"));
+}
+
+TEST_CASE("Extension manifest rejects duplicate permissions") {
+    const fs::path root = MakeTempDir("duplicate_permission");
+    const fs::path path = root / "manifest.yaml";
+    WriteFile(path, R"(
+id: woki.hello
+name: Hello
+version: 0.1.0
+apiVersion: 1
+runtime:
+  wasm: extension.wasm
+permissions:
+  - log
+  - log
+)");
+
+    auto manifest = woki::ext::LoadManifest(path);
+    REQUIRE_FALSE(manifest.has_value());
+    REQUIRE(manifest.error().Message().contains("duplicate permission"));
+}
+
+TEST_CASE("Extension manifest rejects runtime paths with dot components") {
+    auto manifest = woki::ext::Manifest{
+        .id = "woki.hello",
+        .name = "Hello",
+        .version = "0.1.0",
+        .wasm_path = "nested/./extension.wasm",
+        .permissions = {},
+        .commands = {},
+    };
+    REQUIRE_FALSE(woki::ext::ValidateManifest(manifest).has_value());
+}
+
+TEST_CASE("Extension manifest rejects backslashes from the YAML scalar") {
+    const fs::path root = MakeTempDir("yaml_backslash_path");
+    const fs::path path = root / "manifest.yaml";
+    WriteFile(path, R"(
+id: woki.hello
+name: Hello
+version: 0.1.0
+apiVersion: 1
+runtime:
+  wasm: 'nested\extension.wasm'
+permissions: []
+)");
+
+    auto manifest = woki::ext::LoadManifest(path);
+    REQUIRE_FALSE(manifest.has_value());
+    REQUIRE(manifest.error().Message().contains("backslashes"));
+}

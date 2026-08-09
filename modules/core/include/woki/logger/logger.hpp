@@ -2,8 +2,10 @@
 
 // IWYU pragma: private, include "woki/core.hpp"
 
+#include <memory>
 #include <string>
 #include <cstddef>
+#include <utility>
 #include <string_view>
 
 #ifdef __EMSCRIPTEN__
@@ -28,7 +30,7 @@ namespace detail {
 
 #ifndef __EMSCRIPTEN__
 using LoggerHandle = spdlog::logger;
-LoggerHandle* Logger() noexcept;
+std::shared_ptr<LoggerHandle> Logger() noexcept;
 #else
 void LogWebTrace(const char* msg);
 void LogWebDebug(const char* msg);
@@ -43,7 +45,7 @@ void LogWebCritical(const char* msg);
 template <typename... Args>
 inline void Trace(std::string_view fmt, Args&&... args) {
 #ifndef __EMSCRIPTEN__
-    if (auto* l = detail::Logger())
+    if (auto l = detail::Logger())
         l->trace(fmt::runtime(fmt), std::forward<Args>(args)...);
 #else
     auto msg = std::vformat(fmt, std::make_format_args(args...));
@@ -54,7 +56,7 @@ inline void Trace(std::string_view fmt, Args&&... args) {
 template <typename... Args>
 inline void Debug(std::string_view fmt, Args&&... args) {
 #ifndef __EMSCRIPTEN__
-    if (auto* l = detail::Logger())
+    if (auto l = detail::Logger())
         l->debug(fmt::runtime(fmt), std::forward<Args>(args)...);
 #else
     auto msg = std::vformat(fmt, std::make_format_args(args...));
@@ -65,7 +67,7 @@ inline void Debug(std::string_view fmt, Args&&... args) {
 template <typename... Args>
 inline void Info(std::string_view fmt, Args&&... args) {
 #ifndef __EMSCRIPTEN__
-    if (auto* l = detail::Logger())
+    if (auto l = detail::Logger())
         l->info(fmt::runtime(fmt), std::forward<Args>(args)...);
 #else
     auto msg = std::vformat(fmt, std::make_format_args(args...));
@@ -76,7 +78,7 @@ inline void Info(std::string_view fmt, Args&&... args) {
 template <typename... Args>
 inline void Warn(std::string_view fmt, Args&&... args) {
 #ifndef __EMSCRIPTEN__
-    if (auto* l = detail::Logger())
+    if (auto l = detail::Logger())
         l->warn(fmt::runtime(fmt), std::forward<Args>(args)...);
 #else
     auto msg = std::vformat(fmt, std::make_format_args(args...));
@@ -87,7 +89,7 @@ inline void Warn(std::string_view fmt, Args&&... args) {
 template <typename... Args>
 inline void Error(std::string_view fmt, Args&&... args) {
 #ifndef __EMSCRIPTEN__
-    if (auto* l = detail::Logger())
+    if (auto l = detail::Logger())
         l->error(fmt::runtime(fmt), std::forward<Args>(args)...);
 #else
     auto msg = std::vformat(fmt, std::make_format_args(args...));
@@ -98,7 +100,7 @@ inline void Error(std::string_view fmt, Args&&... args) {
 template <typename... Args>
 inline void Critical(std::string_view fmt, Args&&... args) {
 #ifndef __EMSCRIPTEN__
-    if (auto* l = detail::Logger())
+    if (auto l = detail::Logger())
         l->critical(fmt::runtime(fmt), std::forward<Args>(args)...);
 #else
     auto msg = std::vformat(fmt, std::make_format_args(args...));

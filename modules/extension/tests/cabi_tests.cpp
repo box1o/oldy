@@ -40,7 +40,16 @@ TEST_CASE("Extension C ABI host_log returns denied without permission") {
 
     const char message[] = "hello";
     const auto status = woki::ext::host::cabi::Log(record, 1, message, 5);
-    REQUIRE(status == -2);
+    REQUIRE(status == woki::ext::host::cabi::kDenied);
+}
+
+TEST_CASE("Extension C ABI preserves denied status for host permission failures") {
+    auto record = MakeRecord(MakeTempDir("path_denied_status"));
+    record.manifest.permissions.clear();
+    std::array<char, 32> output{};
+
+    const auto status = woki::ext::host::cabi::PathData(record, output.data(), static_cast<woki::u32>(output.size()));
+    REQUIRE(status == woki::ext::host::cabi::kDenied);
 }
 
 TEST_CASE("Extension C ABI path calls copy null terminated paths") {
@@ -81,7 +90,7 @@ TEST_CASE("Extension C ABI file paths reject traversal") {
     auto record = MakeRecord(MakeTempDir("traversal"));
     woki::u32 output_len = 0;
     auto status = woki::ext::host::cabi::FileRead(record, "../outside.bin", nullptr, &output_len);
-    REQUIRE(status == -2);
+    REQUIRE(status == woki::ext::host::cabi::kInvalid);
 }
 
 TEST_CASE("Extension C ABI file append keeps existing contents") {

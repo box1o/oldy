@@ -128,8 +128,8 @@ inline bool woki_test_compile_wasm(const std::string& source_path, const std::st
     fs::path obj_path{wasm_path};
     obj_path.replace_extension(".o");
 
-    const std::string compile = woki_test_wasm_compile_prefix() + "\"" + clang + "\"" + woki_test_wasm_toolchain_flags() + " --target=wasm32-unknown-unknown -nostdlib -fno-builtin -c \"" + source_path + "\" -o \"" + obj_path.string()
-                                + "\"";
+    const std::string compile = woki_test_wasm_compile_prefix() + "\"" + clang + "\"" + woki_test_wasm_toolchain_flags() + " --target=wasm32-unknown-unknown -nostdlib -fno-builtin -c \"" + source_path + "\" -o \""
+                                + obj_path.string() + "\"";
     if (std::system(compile.c_str()) != 0) {
         return false;
     }

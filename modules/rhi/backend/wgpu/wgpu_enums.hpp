@@ -33,6 +33,24 @@ static_assert(static_cast<u64>(TextureUsage::RenderAttachment) == WGPUTextureUsa
 static_assert(static_cast<u64>(TextureUsage::TransientAttachment) == WGPUTextureUsage_TransientAttachment);
 static_assert(static_cast<u64>(TextureUsage::StorageAttachment) == WGPUTextureUsage_StorageAttachment);
 
+static_assert(static_cast<u64>(ColorWriteMask::None) == WGPUColorWriteMask_None);
+static_assert(static_cast<u64>(ColorWriteMask::Red) == WGPUColorWriteMask_Red);
+static_assert(static_cast<u64>(ColorWriteMask::Green) == WGPUColorWriteMask_Green);
+static_assert(static_cast<u64>(ColorWriteMask::Blue) == WGPUColorWriteMask_Blue);
+static_assert(static_cast<u64>(ColorWriteMask::Alpha) == WGPUColorWriteMask_Alpha);
+static_assert(static_cast<u64>(ColorWriteMask::All) == WGPUColorWriteMask_All);
+
+static_assert(static_cast<u64>(HeapProperty::None) == WGPUHeapProperty_None);
+static_assert(static_cast<u64>(HeapProperty::DeviceLocal) == WGPUHeapProperty_DeviceLocal);
+static_assert(static_cast<u64>(HeapProperty::HostVisible) == WGPUHeapProperty_HostVisible);
+static_assert(static_cast<u64>(HeapProperty::HostCoherent) == WGPUHeapProperty_HostCoherent);
+static_assert(static_cast<u64>(HeapProperty::HostUncached) == WGPUHeapProperty_HostUncached);
+static_assert(static_cast<u64>(HeapProperty::HostCached) == WGPUHeapProperty_HostCached);
+
+static_assert(static_cast<u64>(MapMode::None) == WGPUMapMode_None);
+static_assert(static_cast<u64>(MapMode::Read) == WGPUMapMode_Read);
+static_assert(static_cast<u64>(MapMode::Write) == WGPUMapMode_Write);
+
 [[nodiscard]] inline WGPUAdapterType ToWgpu(AdapterType value) noexcept {
     switch (value) {
         case AdapterType::DiscreteGPU:
@@ -551,7 +569,7 @@ static_assert(static_cast<u64>(TextureUsage::StorageAttachment) == WGPUTextureUs
         case CompilationInfoRequestStatus::CallbackCancelled:
             return WGPUCompilationInfoRequestStatus_CallbackCancelled;
     }
-    return WGPUCompilationInfoRequestStatus_Success;
+    return WGPUCompilationInfoRequestStatus_CallbackCancelled;
 }
 
 [[nodiscard]] inline CompilationInfoRequestStatus FromWgpu(WGPUCompilationInfoRequestStatus value) noexcept {
@@ -561,7 +579,7 @@ static_assert(static_cast<u64>(TextureUsage::StorageAttachment) == WGPUTextureUs
         case WGPUCompilationInfoRequestStatus_CallbackCancelled:
             return CompilationInfoRequestStatus::CallbackCancelled;
         default:
-            return CompilationInfoRequestStatus::Success;
+            return CompilationInfoRequestStatus::CallbackCancelled;
     }
 }
 
@@ -675,7 +693,7 @@ static_assert(static_cast<u64>(TextureUsage::StorageAttachment) == WGPUTextureUs
         case CreatePipelineAsyncStatus::InternalError:
             return WGPUCreatePipelineAsyncStatus_InternalError;
     }
-    return WGPUCreatePipelineAsyncStatus_Success;
+    return WGPUCreatePipelineAsyncStatus_InternalError;
 }
 
 [[nodiscard]] inline CreatePipelineAsyncStatus FromWgpu(WGPUCreatePipelineAsyncStatus value) noexcept {
@@ -689,7 +707,7 @@ static_assert(static_cast<u64>(TextureUsage::StorageAttachment) == WGPUTextureUs
         case WGPUCreatePipelineAsyncStatus_InternalError:
             return CreatePipelineAsyncStatus::InternalError;
         default:
-            return CreatePipelineAsyncStatus::Success;
+            return CreatePipelineAsyncStatus::InternalError;
     }
 }
 
@@ -1020,7 +1038,11 @@ static_assert(static_cast<u64>(TextureUsage::StorageAttachment) == WGPUTextureUs
         case FeatureName::AdapterPropertiesWGPU:
             return WGPUFeatureName_AdapterPropertiesWGPU;
         case FeatureName::SharedBufferMemoryD3D12SharedMemoryFileMappingHandle:
-            return WGPUFeatureName_CoreFeaturesAndLimits;
+#ifdef WOKI_WGPU_HAS_D3D12_FILE_MAPPING_FEATURE
+            return WGPUFeatureName_SharedBufferMemoryD3D12SharedMemoryFileMappingHandle;
+#else
+            return WGPUFeatureName_Force32;
+#endif
         case FeatureName::SharedTextureMemoryD3D12Resource:
             return WGPUFeatureName_SharedTextureMemoryD3D12Resource;
         case FeatureName::ChromiumExperimentalSamplingResourceTable:
@@ -1199,6 +1221,10 @@ static_assert(static_cast<u64>(TextureUsage::StorageAttachment) == WGPUTextureUs
             return FeatureName::DawnDeviceAllocatorControl;
         case WGPUFeatureName_AdapterPropertiesWGPU:
             return FeatureName::AdapterPropertiesWGPU;
+#ifdef WOKI_WGPU_HAS_D3D12_FILE_MAPPING_FEATURE
+        case WGPUFeatureName_SharedBufferMemoryD3D12SharedMemoryFileMappingHandle:
+            return FeatureName::SharedBufferMemoryD3D12SharedMemoryFileMappingHandle;
+#endif
         case WGPUFeatureName_SharedTextureMemoryD3D12Resource:
             return FeatureName::SharedTextureMemoryD3D12Resource;
         case WGPUFeatureName_ChromiumExperimentalSamplingResourceTable:
@@ -1391,7 +1417,7 @@ static_assert(static_cast<u64>(TextureUsage::StorageAttachment) == WGPUTextureUs
         case MapAsyncStatus::Aborted:
             return WGPUMapAsyncStatus_Aborted;
     }
-    return WGPUMapAsyncStatus_Success;
+    return WGPUMapAsyncStatus_Error;
 }
 
 [[nodiscard]] inline MapAsyncStatus FromWgpu(WGPUMapAsyncStatus value) noexcept {
@@ -1405,7 +1431,7 @@ static_assert(static_cast<u64>(TextureUsage::StorageAttachment) == WGPUTextureUs
         case WGPUMapAsyncStatus_Aborted:
             return MapAsyncStatus::Aborted;
         default:
-            return MapAsyncStatus::Success;
+            return MapAsyncStatus::Error;
     }
 }
 
@@ -1443,7 +1469,7 @@ static_assert(static_cast<u64>(TextureUsage::StorageAttachment) == WGPUTextureUs
         case PopErrorScopeStatus::Error:
             return WGPUPopErrorScopeStatus_Error;
     }
-    return WGPUPopErrorScopeStatus_Success;
+    return WGPUPopErrorScopeStatus_Error;
 }
 
 [[nodiscard]] inline PopErrorScopeStatus FromWgpu(WGPUPopErrorScopeStatus value) noexcept {
@@ -1455,7 +1481,7 @@ static_assert(static_cast<u64>(TextureUsage::StorageAttachment) == WGPUTextureUs
         case WGPUPopErrorScopeStatus_Error:
             return PopErrorScopeStatus::Error;
         default:
-            return PopErrorScopeStatus::Success;
+            return PopErrorScopeStatus::Error;
     }
 }
 
@@ -1617,7 +1643,7 @@ static_assert(static_cast<u64>(TextureUsage::StorageAttachment) == WGPUTextureUs
         case QueueWorkDoneStatus::Error:
             return WGPUQueueWorkDoneStatus_Error;
     }
-    return WGPUQueueWorkDoneStatus_Success;
+    return WGPUQueueWorkDoneStatus_Error;
 }
 
 [[nodiscard]] inline QueueWorkDoneStatus FromWgpu(WGPUQueueWorkDoneStatus value) noexcept {
@@ -1629,7 +1655,7 @@ static_assert(static_cast<u64>(TextureUsage::StorageAttachment) == WGPUTextureUs
         case WGPUQueueWorkDoneStatus_Error:
             return QueueWorkDoneStatus::Error;
         default:
-            return QueueWorkDoneStatus::Success;
+            return QueueWorkDoneStatus::Error;
     }
 }
 
@@ -1644,7 +1670,7 @@ static_assert(static_cast<u64>(TextureUsage::StorageAttachment) == WGPUTextureUs
         case RequestAdapterStatus::Error:
             return WGPURequestAdapterStatus_Error;
     }
-    return WGPURequestAdapterStatus_Success;
+    return WGPURequestAdapterStatus_Error;
 }
 
 [[nodiscard]] inline RequestAdapterStatus FromWgpu(WGPURequestAdapterStatus value) noexcept {
@@ -1658,7 +1684,7 @@ static_assert(static_cast<u64>(TextureUsage::StorageAttachment) == WGPUTextureUs
         case WGPURequestAdapterStatus_Error:
             return RequestAdapterStatus::Error;
         default:
-            return RequestAdapterStatus::Success;
+            return RequestAdapterStatus::Error;
     }
 }
 
@@ -1671,7 +1697,7 @@ static_assert(static_cast<u64>(TextureUsage::StorageAttachment) == WGPUTextureUs
         case RequestDeviceStatus::Error:
             return WGPURequestDeviceStatus_Error;
     }
-    return WGPURequestDeviceStatus_Success;
+    return WGPURequestDeviceStatus_Error;
 }
 
 [[nodiscard]] inline RequestDeviceStatus FromWgpu(WGPURequestDeviceStatus value) noexcept {
@@ -1683,7 +1709,7 @@ static_assert(static_cast<u64>(TextureUsage::StorageAttachment) == WGPUTextureUs
         case WGPURequestDeviceStatus_Error:
             return RequestDeviceStatus::Error;
         default:
-            return RequestDeviceStatus::Success;
+            return RequestDeviceStatus::Error;
     }
 }
 
@@ -1764,7 +1790,7 @@ static_assert(static_cast<u64>(TextureUsage::StorageAttachment) == WGPUTextureUs
         case Status::Error:
             return WGPUStatus_Error;
     }
-    return WGPUStatus_Success;
+    return WGPUStatus_Error;
 }
 
 [[nodiscard]] inline Status FromWgpu(WGPUStatus value) noexcept {
@@ -1774,7 +1800,7 @@ static_assert(static_cast<u64>(TextureUsage::StorageAttachment) == WGPUTextureUs
         case WGPUStatus_Error:
             return Status::Error;
         default:
-            return Status::Success;
+            return Status::Error;
     }
 }
 
@@ -2332,7 +2358,7 @@ static_assert(static_cast<u64>(TextureUsage::StorageAttachment) == WGPUTextureUs
         case SurfaceGetCurrentTextureStatus::Error:
             return WGPUSurfaceGetCurrentTextureStatus_Error;
     }
-    return WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal;
+    return WGPUSurfaceGetCurrentTextureStatus_Error;
 }
 
 [[nodiscard]] inline SurfaceGetCurrentTextureStatus FromWgpu(WGPUSurfaceGetCurrentTextureStatus value) noexcept {
@@ -2350,7 +2376,7 @@ static_assert(static_cast<u64>(TextureUsage::StorageAttachment) == WGPUTextureUs
         case WGPUSurfaceGetCurrentTextureStatus_Error:
             return SurfaceGetCurrentTextureStatus::Error;
         default:
-            return SurfaceGetCurrentTextureStatus::SuccessOptimal;
+            return SurfaceGetCurrentTextureStatus::Error;
     }
 }
 
@@ -3216,7 +3242,7 @@ static_assert(static_cast<u64>(TextureUsage::StorageAttachment) == WGPUTextureUs
         case WaitStatus::Error:
             return WGPUWaitStatus_Error;
     }
-    return WGPUWaitStatus_Success;
+    return WGPUWaitStatus_Error;
 }
 
 [[nodiscard]] inline WaitStatus FromWgpu(WGPUWaitStatus value) noexcept {
@@ -3228,7 +3254,7 @@ static_assert(static_cast<u64>(TextureUsage::StorageAttachment) == WGPUTextureUs
         case WGPUWaitStatus_Error:
             return WaitStatus::Error;
         default:
-            return WaitStatus::Success;
+            return WaitStatus::Error;
     }
 }
 
@@ -3338,133 +3364,31 @@ static_assert(static_cast<u64>(TextureUsage::StorageAttachment) == WGPUTextureUs
 }
 
 [[nodiscard]] inline BufferUsage FromWgpuBufferUsage(WGPUBufferUsage value) noexcept {
-    switch (value) {
-        case WGPUBufferUsage_None:
-            return BufferUsage::None;
-        case WGPUBufferUsage_MapRead:
-            return BufferUsage::MapRead;
-        case WGPUBufferUsage_MapWrite:
-            return BufferUsage::MapWrite;
-        case WGPUBufferUsage_CopySrc:
-            return BufferUsage::CopySrc;
-        case WGPUBufferUsage_CopyDst:
-            return BufferUsage::CopyDst;
-        case WGPUBufferUsage_Index:
-            return BufferUsage::Index;
-        case WGPUBufferUsage_Vertex:
-            return BufferUsage::Vertex;
-        case WGPUBufferUsage_Uniform:
-            return BufferUsage::Uniform;
-        case WGPUBufferUsage_Storage:
-            return BufferUsage::Storage;
-        case WGPUBufferUsage_Indirect:
-            return BufferUsage::Indirect;
-        case WGPUBufferUsage_QueryResolve:
-            return BufferUsage::QueryResolve;
-        case WGPUBufferUsage_TexelBuffer:
-            return BufferUsage::TexelBuffer;
-        default:
-            return BufferUsage::None;
-    }
+    return static_cast<BufferUsage>(static_cast<u64>(value));
 }
 
 [[nodiscard]] inline WGPUColorWriteMask ToWgpuColorWriteMask(ColorWriteMask value) noexcept {
-    switch (value) {
-        case ColorWriteMask::None:
-            return WGPUColorWriteMask_None;
-        case ColorWriteMask::Red:
-            return WGPUColorWriteMask_Red;
-        case ColorWriteMask::Green:
-            return WGPUColorWriteMask_Green;
-        case ColorWriteMask::Blue:
-            return WGPUColorWriteMask_Blue;
-        case ColorWriteMask::Alpha:
-            return WGPUColorWriteMask_Alpha;
-        case ColorWriteMask::All:
-            return WGPUColorWriteMask_All;
-    }
-    return WGPUColorWriteMask_None;
+    return static_cast<WGPUColorWriteMask>(static_cast<u64>(value));
 }
 
 [[nodiscard]] inline ColorWriteMask FromWgpuColorWriteMask(WGPUColorWriteMask value) noexcept {
-    switch (value) {
-        case WGPUColorWriteMask_None:
-            return ColorWriteMask::None;
-        case WGPUColorWriteMask_Red:
-            return ColorWriteMask::Red;
-        case WGPUColorWriteMask_Green:
-            return ColorWriteMask::Green;
-        case WGPUColorWriteMask_Blue:
-            return ColorWriteMask::Blue;
-        case WGPUColorWriteMask_Alpha:
-            return ColorWriteMask::Alpha;
-        case WGPUColorWriteMask_All:
-            return ColorWriteMask::All;
-        default:
-            return ColorWriteMask::None;
-    }
+    return static_cast<ColorWriteMask>(static_cast<u64>(value));
 }
 
 [[nodiscard]] inline WGPUHeapProperty ToWgpuHeapProperty(HeapProperty value) noexcept {
-    switch (value) {
-        case HeapProperty::None:
-            return WGPUHeapProperty_None;
-        case HeapProperty::DeviceLocal:
-            return WGPUHeapProperty_DeviceLocal;
-        case HeapProperty::HostVisible:
-            return WGPUHeapProperty_HostVisible;
-        case HeapProperty::HostCoherent:
-            return WGPUHeapProperty_HostCoherent;
-        case HeapProperty::HostUncached:
-            return WGPUHeapProperty_HostUncached;
-        case HeapProperty::HostCached:
-            return WGPUHeapProperty_HostCached;
-    }
-    return WGPUHeapProperty_None;
+    return static_cast<WGPUHeapProperty>(static_cast<u64>(value));
 }
 
 [[nodiscard]] inline HeapProperty FromWgpuHeapProperty(WGPUHeapProperty value) noexcept {
-    switch (value) {
-        case WGPUHeapProperty_None:
-            return HeapProperty::None;
-        case WGPUHeapProperty_DeviceLocal:
-            return HeapProperty::DeviceLocal;
-        case WGPUHeapProperty_HostVisible:
-            return HeapProperty::HostVisible;
-        case WGPUHeapProperty_HostCoherent:
-            return HeapProperty::HostCoherent;
-        case WGPUHeapProperty_HostUncached:
-            return HeapProperty::HostUncached;
-        case WGPUHeapProperty_HostCached:
-            return HeapProperty::HostCached;
-        default:
-            return HeapProperty::None;
-    }
+    return static_cast<HeapProperty>(static_cast<u64>(value));
 }
 
 [[nodiscard]] inline WGPUMapMode ToWgpuMapMode(MapMode value) noexcept {
-    switch (value) {
-        case MapMode::None:
-            return WGPUMapMode_None;
-        case MapMode::Read:
-            return WGPUMapMode_Read;
-        case MapMode::Write:
-            return WGPUMapMode_Write;
-    }
-    return WGPUMapMode_None;
+    return static_cast<WGPUMapMode>(static_cast<u64>(value));
 }
 
 [[nodiscard]] inline MapMode FromWgpuMapMode(WGPUMapMode value) noexcept {
-    switch (value) {
-        case WGPUMapMode_None:
-            return MapMode::None;
-        case WGPUMapMode_Read:
-            return MapMode::Read;
-        case WGPUMapMode_Write:
-            return MapMode::Write;
-        default:
-            return MapMode::None;
-    }
+    return static_cast<MapMode>(static_cast<u64>(value));
 }
 
 [[nodiscard]] inline WGPUShaderStage ToWgpuShaderStage(ShaderStage value) noexcept {
@@ -3472,18 +3396,7 @@ static_assert(static_cast<u64>(TextureUsage::StorageAttachment) == WGPUTextureUs
 }
 
 [[nodiscard]] inline ShaderStage FromWgpuShaderStage(WGPUShaderStage value) noexcept {
-    switch (value) {
-        case WGPUShaderStage_None:
-            return ShaderStage::None;
-        case WGPUShaderStage_Vertex:
-            return ShaderStage::Vertex;
-        case WGPUShaderStage_Fragment:
-            return ShaderStage::Fragment;
-        case WGPUShaderStage_Compute:
-            return ShaderStage::Compute;
-        default:
-            return ShaderStage::None;
-    }
+    return static_cast<ShaderStage>(static_cast<u64>(value));
 }
 
 [[nodiscard]] inline WGPUTextureUsage ToWgpuTextureUsage(TextureUsage value) noexcept {
@@ -3491,26 +3404,7 @@ static_assert(static_cast<u64>(TextureUsage::StorageAttachment) == WGPUTextureUs
 }
 
 [[nodiscard]] inline TextureUsage FromWgpuTextureUsage(WGPUTextureUsage value) noexcept {
-    switch (value) {
-        case WGPUTextureUsage_None:
-            return TextureUsage::None;
-        case WGPUTextureUsage_CopySrc:
-            return TextureUsage::CopySrc;
-        case WGPUTextureUsage_CopyDst:
-            return TextureUsage::CopyDst;
-        case WGPUTextureUsage_TextureBinding:
-            return TextureUsage::TextureBinding;
-        case WGPUTextureUsage_StorageBinding:
-            return TextureUsage::StorageBinding;
-        case WGPUTextureUsage_RenderAttachment:
-            return TextureUsage::RenderAttachment;
-        case WGPUTextureUsage_TransientAttachment:
-            return TextureUsage::TransientAttachment;
-        case WGPUTextureUsage_StorageAttachment:
-            return TextureUsage::StorageAttachment;
-        default:
-            return TextureUsage::None;
-    }
+    return static_cast<TextureUsage>(static_cast<u64>(value));
 }
 
 } // namespace woki::rhi::wgpu::convert

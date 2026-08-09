@@ -1,11 +1,11 @@
 package woki:extension@1.0.0;
 
 world extension {
-  import logging
-  import paths
-  import storage
-  import config
-  import events
+  import logging;
+  import paths;
+  import storage;
+  import config;
+  import events;
 
-  export lifecycle
+  export lifecycle;
 }

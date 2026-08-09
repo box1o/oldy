@@ -59,6 +59,22 @@ void ShaderModuleCompilationInfoThunk(const WGPUCompilationInfoRequestStatus sta
     return static_cast<WGPUTexture>(texture.GetNativeHandles().resource);
 }
 
+[[nodiscard]] bool IsMappedRangeValid(const WGPUBuffer buffer, const size_t offset, const size_t size, const bool allow_whole_size) noexcept {
+    if (buffer == nullptr) {
+        return false;
+    }
+
+    const u64 buffer_size = wgpuBufferGetSize(buffer);
+    const u64 range_offset = static_cast<u64>(offset);
+    if (range_offset > buffer_size) {
+        return false;
+    }
+    if (allow_whole_size && size == kWholeMapSize) {
+        return true;
+    }
+    return static_cast<u64>(size) <= buffer_size - range_offset;
+}
+
 } // namespace
 
 class WgpuBindGroupImpl final : public BindGroup {
@@ -551,7 +567,11 @@ Result<scope<TexelBufferView>> WgpuBufferImpl::CreateTexelView(const TexelBuffer
     }
 
     const detail::TexelBufferViewDescriptorStorage storage(desc);
-    return Ok(CreateTexelBufferViewObject(wgpuBufferCreateTexelView(handle_.get(), &storage.native)));
+    const WGPUTexelBufferView view = wgpuBufferCreateTexelView(handle_.get(), &storage.native);
+    if (view == nullptr) {
+        return Err(ErrorCode::GraphicsResourceCreationFailed, "Failed to create texel buffer view");
+    }
+    return Ok(CreateTexelBufferViewObject(view));
 }
 
 void WgpuBufferImpl::Destroy() {
@@ -561,7 +581,7 @@ void WgpuBufferImpl::Destroy() {
 }
 
 const void* WgpuBufferImpl::GetConstMappedRange(const size_t offset, const size_t size) const {
-    if (!handle_) {
+    if (!IsMappedRangeValid(handle_.get(), offset, size, true)) {
         return nullptr;
     }
 
@@ -569,7 +589,7 @@ const void* WgpuBufferImpl::GetConstMappedRange(const size_t offset, const size_
 }
 
 void* WgpuBufferImpl::GetMappedRange(const size_t offset, const size_t size) {
-    if (!handle_) {
+    if (!IsMappedRangeValid(handle_.get(), offset, size, true)) {
         return nullptr;
     }
 
@@ -612,6 +632,11 @@ Future WgpuBufferImpl::MapAsync(const MapMode mode, const size_t offset, const s
         return future;
     }
 
+    if (!IsMappedRangeValid(handle_.get(), offset, size, true)) {
+        future.message = "Buffer map range is out of bounds";
+        return future;
+    }
+
     auto callback_state = createScope<MapAsyncCallbackState>(MapAsyncCallbackState{.callback = std::move(callback)});
 
     WGPUBufferMapCallbackInfo callback_info = WGPU_BUFFER_MAP_CALLBACK_INFO_INIT;
@@ -634,6 +659,13 @@ Result<void> WgpuBufferImpl::ReadMappedRange(const size_t offset, void* data, co
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Buffer is invalid");
     }
 
+    if (data == nullptr && size != 0) {
+        return Err(ErrorCode::GraphicsResourceCreationFailed, "Mapped range destination is null");
+    }
+    if (!IsMappedRangeValid(handle_.get(), offset, size, false)) {
+        return Err(ErrorCode::GraphicsResourceCreationFailed, "Mapped range is out of bounds");
+    }
+
     return FromWgpuStatus(wgpuBufferReadMappedRange(handle_.get(), offset, data, size), "Failed to read mapped buffer range");
 }
 
@@ -652,6 +684,13 @@ void WgpuBufferImpl::Unmap() {
 Result<void> WgpuBufferImpl::WriteMappedRange(const size_t offset, const void* data, const size_t size) {
     if (!handle_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Buffer is invalid");
+    }
+
+    if (data == nullptr && size != 0) {
+        return Err(ErrorCode::GraphicsResourceCreationFailed, "Mapped range source is null");
+    }
+    if (!IsMappedRangeValid(handle_.get(), offset, size, false)) {
+        return Err(ErrorCode::GraphicsResourceCreationFailed, "Mapped range is out of bounds");
     }
 
     return FromWgpuStatus(wgpuBufferWriteMappedRange(handle_.get(), offset, data, size), "Failed to write mapped buffer range");
@@ -1011,12 +1050,9 @@ Result<scope<Buffer>> WgpuSharedBufferMemoryImpl::CreateBuffer(const BufferDesc&
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Shared buffer memory is invalid");
     }
 
-    WGPUBufferDescriptor native = WGPU_BUFFER_DESCRIPTOR_INIT;
-    native.size = desc.size;
-    native.usage = static_cast<WGPUBufferUsage>(static_cast<u64>(desc.usage));
-    native.label = detail::ToStringView(desc.label);
+    const detail::BufferDescriptorStorage storage(desc);
 
-    const WGPUBuffer buffer = wgpuSharedBufferMemoryCreateBuffer(handle_.get(), &native);
+    const WGPUBuffer buffer = wgpuSharedBufferMemoryCreateBuffer(handle_.get(), &storage.native);
     if (buffer == nullptr) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Failed to create shared buffer");
     }

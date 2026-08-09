@@ -1,10 +1,10 @@
-#include "wokiext/cli.hpp"
+#include <string>
+#include <iostream>
+#include <filesystem>
 
 #include <woki/ext/ext.hpp>
 
-#include <filesystem>
-#include <iostream>
-#include <string>
+#include "wokiext/cli.hpp"
 
 namespace wokiext {
 
@@ -17,48 +17,46 @@ namespace fs = std::filesystem;
     out.reserve(value.size() + 8);
     for (const char ch : value) {
         switch (ch) {
-        case '"':
-            out += "\\\"";
-            break;
-        case '\\':
-            out += "\\\\";
-            break;
-        case '\b':
-            out += "\\b";
-            break;
-        case '\f':
-            out += "\\f";
-            break;
-        case '\n':
-            out += "\\n";
-            break;
-        case '\r':
-            out += "\\r";
-            break;
-        case '\t':
-            out += "\\t";
-            break;
-        default:
-            const auto byte = static_cast<unsigned char>(ch);
-            if (byte < 0x20) {
-                out += "\\u00";
-                constexpr char kHex[] = "0123456789abcdef";
-                out.push_back(kHex[(byte >> 4) & 0x0f]);
-                out.push_back(kHex[byte & 0x0f]);
-            } else {
-                out.push_back(ch);
-            }
-            break;
+            case '"':
+                out += "\\\"";
+                break;
+            case '\\':
+                out += "\\\\";
+                break;
+            case '\b':
+                out += "\\b";
+                break;
+            case '\f':
+                out += "\\f";
+                break;
+            case '\n':
+                out += "\\n";
+                break;
+            case '\r':
+                out += "\\r";
+                break;
+            case '\t':
+                out += "\\t";
+                break;
+            default:
+                const auto byte = static_cast<unsigned char>(ch);
+                if (byte < 0x20) {
+                    out += "\\u00";
+                    constexpr char kHex[] = "0123456789abcdef";
+                    out.push_back(kHex[(byte >> 4) & 0x0f]);
+                    out.push_back(kHex[byte & 0x0f]);
+                } else {
+                    out.push_back(ch);
+                }
+                break;
         }
     }
     return out;
 }
 
-void PrintCommandJsonObject(
-    std::string_view extension_id, const woki::ext::CommandContribution& command) {
-    std::cout << "{\"extension\":\"" << JsonEscape(extension_id) << "\",\"id\":\""
-              << JsonEscape(command.id) << "\",\"title\":\"" << JsonEscape(command.title)
-              << "\",\"category\":\"" << JsonEscape(command.category) << "\"}";
+void PrintCommandJsonObject(std::string_view extension_id, const woki::ext::CommandContribution& command) {
+    std::cout << "{\"extension\":\"" << JsonEscape(extension_id) << "\",\"id\":\"" << JsonEscape(command.id) << "\",\"title\":\"" << JsonEscape(command.title) << "\",\"category\":\"" << JsonEscape(command.category)
+              << "\"}";
 }
 
 Status CommandsForPath(const fs::path& path, bool json) {

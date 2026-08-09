@@ -15,7 +15,7 @@ template <typename T>
 concept arithmetic = integral<T> || floating_point<T>;
 
 template <typename T>
-concept signed_arithmetic = arithmetic<T> && std::signed_integral<T>;
+concept signed_arithmetic = std::signed_integral<T> || floating_point<T>;
 
 template <typename T>
 concept unsigned_arithmetic = arithmetic<T> && std::unsigned_integral<T>;

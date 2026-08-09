@@ -1,0 +1,9 @@
+#pragma once
+
+#include <string_view>
+
+namespace wokiext {
+
+inline constexpr std::string_view kManifestSchema = R"woki_schema(@WOKI_MANIFEST_SCHEMA@)woki_schema";
+
+} // namespace wokiext

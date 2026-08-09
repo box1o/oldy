@@ -1,6 +1,17 @@
+#include <random>
+#include <fstream>
 #include <catch2/catch_test_macros.hpp>
 
 #include <woki/core.hpp>
+
+namespace {
+
+std::filesystem::path UniqueTempPath(const std::filesystem::path& directory, std::string_view stem) {
+    std::random_device random;
+    return directory / (std::string(stem) + "-" + std::to_string(random()));
+}
+
+} // namespace
 
 TEST_CASE("Working and temporary directories resolve") {
     auto working = woki::paths::WorkingDirectory();
@@ -32,4 +43,21 @@ TEST_CASE("Logs directory resolves for app name") {
     auto logs = woki::paths::LogsDirectory("woki-test");
     REQUIRE(logs.has_value());
     REQUIRE(logs->filename() == "logs");
+}
+
+TEST_CASE("EnsureDirectory rejects an existing regular file") {
+    const auto temporary = woki::paths::TemporaryDirectory();
+    REQUIRE(temporary.has_value());
+    const auto path = UniqueTempPath(*temporary, "woki_core_directory_test_file");
+    std::filesystem::remove_all(path);
+
+    {
+        std::ofstream output(path);
+        REQUIRE(output.good());
+    }
+
+    const auto result = woki::paths::EnsureDirectory(path);
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE(result.error().Code() == woki::ErrorCode::FileWriteError);
+    std::filesystem::remove(path);
 }

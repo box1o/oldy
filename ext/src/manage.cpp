@@ -1,15 +1,20 @@
-#include "wokiext/cli.hpp"
+#include <iostream>
+#include <filesystem>
 
 #include <woki/ext/ext.hpp>
 
-#include <filesystem>
-#include <iostream>
+#include "wokiext/cli.hpp"
 
 namespace wokiext {
 
 namespace {
 
 namespace fs = std::filesystem;
+
+[[nodiscard]] bool IsSafeExtensionId(std::string_view id) {
+    const fs::path path{id};
+    return !id.empty() && !path.has_root_path() && !path.has_parent_path() && path != "." && path != "..";
+}
 
 [[nodiscard]] bool RemovePath(const fs::path& path) {
     std::error_code error;
@@ -52,8 +57,8 @@ Status List(const ListOptions& options) {
 }
 
 Status Remove(const RemoveOptions& options) {
-    if (options.id.empty()) {
-        std::cerr << "Extension id is required\n";
+    if (!IsSafeExtensionId(options.id)) {
+        std::cerr << "Extension id must be a single relative path component\n";
         return Status::Usage;
     }
 

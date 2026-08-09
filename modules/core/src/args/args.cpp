@@ -20,6 +20,8 @@ void ArgumentParser::SetPositionalHelp(std::string help) {
 }
 
 Result<void> ArgumentParser::Parse(int argc, char** argv) {
+    parse_result_.reset();
+
     try {
         parse_result_ = options_.parse(argc, argv);
         return Ok();

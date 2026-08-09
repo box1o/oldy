@@ -38,6 +38,9 @@ public:
 
     [[nodiscard]] woki::Result<void> Event(woki::ext::Record&, woki::u32 event_type, std::span<const woki::u8>) override {
         last_event_type = event_type;
+        if (fail_event) {
+            return woki::Err(woki::ErrorCode::InvalidState, "ext_on_event trap");
+        }
         return woki::Ok();
     }
 
@@ -58,6 +61,7 @@ public:
     woki::i32 init_result{0};
     woki::i32 command_result{0};
     bool fail_tick{false};
+    bool fail_event{false};
     bool fail_command{false};
     bool loaded{false};
     bool initialized{false};
@@ -229,4 +233,48 @@ TEST_CASE("Wasm backend marks active records failed when tick returns an error")
     backend.Tick(record, 16.0);
     REQUIRE(record.state == woki::ext::State::Failed);
     REQUIRE(record.error.contains("ext_on_tick"));
+}
+
+TEST_CASE("Wasm backend marks active records failed when event dispatch returns an error") {
+    const fs::path root = MakeTempDir("event_fail");
+    WriteManifest(root / "manifest.yaml");
+    WriteWasmMagic(root / "extension.wasm");
+
+    auto engine = woki::createScope<FakeEngine>();
+    engine->fail_event = true;
+    woki::ext::wasm::Backend backend(std::move(engine));
+    auto record = MakeRecord(root);
+
+    REQUIRE(backend.Load(record).has_value());
+    REQUIRE(backend.Initialize(record).has_value());
+    record.state = woki::ext::State::Active;
+
+    backend.DispatchEvent(record, 7, {});
+    REQUIRE(record.state == woki::ext::State::Failed);
+    REQUIRE(record.error == "ext_on_event trap");
+}
+
+TEST_CASE("Wasm backend rejects oversized event and command payloads") {
+    const fs::path root = MakeTempDir("payload_limits");
+    WriteManifest(root / "manifest.yaml");
+    WriteWasmMagic(root / "extension.wasm");
+    auto engine = woki::createScope<FakeEngine>();
+    FakeEngine* engine_ptr = engine.get();
+    woki::ext::wasm::Backend backend(std::move(engine));
+    auto record = MakeRecord(root);
+    REQUIRE(backend.Load(record).has_value());
+    REQUIRE(backend.Initialize(record).has_value());
+    record.state = woki::ext::State::Active;
+    woki::ext::Runtime runtime(&backend);
+
+    const std::vector<woki::u8> oversized(woki::ext::limits::kMaxEventBytes + 1);
+    runtime.DispatchEvent(record, 1, oversized);
+    REQUIRE(record.state == woki::ext::State::Active);
+    REQUIRE(engine_ptr->last_event_type == 0);
+
+    auto command = runtime.DispatchCommand(record, "woki.hello.say", oversized);
+    REQUIRE_FALSE(command.has_value());
+    REQUIRE(command.error().Code() == woki::ErrorCode::ValidationOutOfRange);
+    REQUIRE(record.state == woki::ext::State::Active);
+    REQUIRE_FALSE(engine_ptr->unloaded);
 }

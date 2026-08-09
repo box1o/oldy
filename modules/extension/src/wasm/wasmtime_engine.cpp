@@ -9,6 +9,7 @@
 #include <wasmtime.hh>
 #include <unordered_map>
 
+#include "woki/ext/limits.hpp"
 #include "woki/ext/host/cabi.hpp"
 #include "woki/ext/wasm/wasmtime_engine.hpp"
 
@@ -75,7 +76,7 @@ template <typename T>
     const wasmtime::Span<uint8_t> data = memory->data(caller);
     const auto start = static_cast<std::size_t>(offset);
     const auto size = static_cast<std::size_t>(len);
-    if (start + size > data.size()) {
+    if (start > data.size() || size > data.size() - start) {
         return Err(ErrorCode::ValidationOutOfRange, "Guest memory read is out of bounds.");
     }
 
@@ -121,7 +122,7 @@ template <typename T>
 
     const wasmtime::Span<uint8_t> data = memory->data(caller);
     const auto start = static_cast<std::size_t>(offset);
-    if (start + cap > data.size()) {
+    if (start > data.size() || cap > data.size() - start) {
         return Err(ErrorCode::ValidationOutOfRange, "Guest memory write is out of bounds.");
     }
 
@@ -141,7 +142,7 @@ template <typename T>
     const wasmtime::Span<uint8_t> data = memory->data(caller);
     const auto start = static_cast<std::size_t>(offset);
     const auto size = static_cast<std::size_t>(len);
-    if (start + size > data.size()) {
+    if (start > data.size() || size > data.size() - start) {
         return Err(ErrorCode::ValidationOutOfRange, "Guest output buffer is out of bounds.");
     }
 
@@ -219,7 +220,7 @@ struct InstanceState {
     const wasmtime::Span<uint8_t> data = memory->data(state.store);
     const auto start = static_cast<std::size_t>(offset);
     const auto size = static_cast<std::size_t>(len);
-    if (start + size > data.size()) {
+    if (start > data.size() || size > data.size() - start) {
         return Err(ErrorCode::ValidationOutOfRange, "Guest event payload buffer is out of bounds.");
     }
     return Ok(std::span<u8>(data.data() + start, size));
@@ -303,6 +304,9 @@ template <typename Params, typename Results>
     if (HasPermission(record.manifest, Permission::Paths)) {
         if (auto defined = linker.func_wrap(kImportModule, "host_path_data",
                 [record_ptr](wasmtime::Caller caller, int32_t out_ptr, int32_t out_cap) -> int32_t {
+                    if (out_cap < 0) {
+                        return host::cabi::kInvalid;
+                    }
                     auto out = GuestCStringOut(caller, out_ptr, static_cast<u32>(out_cap));
                     if (!out) {
                         return host::cabi::kInvalid;
@@ -315,6 +319,9 @@ template <typename Params, typename Results>
 
         if (auto defined = linker.func_wrap(kImportModule, "host_path_cache",
                 [record_ptr](wasmtime::Caller caller, int32_t out_ptr, int32_t out_cap) -> int32_t {
+                    if (out_cap < 0) {
+                        return host::cabi::kInvalid;
+                    }
                     auto out = GuestCStringOut(caller, out_ptr, static_cast<u32>(out_cap));
                     if (!out) {
                         return host::cabi::kInvalid;
@@ -449,6 +456,9 @@ template <typename Params, typename Results>
     if (HasPermission(record.manifest, Permission::Config)) {
         if (auto defined = linker.func_wrap(kImportModule, "host_config_get",
                 [record_ptr](wasmtime::Caller caller, int32_t key_ptr, int32_t out_ptr, int32_t out_cap) -> int32_t {
+                    if (out_cap < 0) {
+                        return host::cabi::kInvalid;
+                    }
                     auto key = GuestCString(caller, key_ptr);
                     if (!key) {
                         return host::cabi::kInvalid;
@@ -489,6 +499,12 @@ template <typename Params, typename Results>
 
         if (auto defined = linker.func_wrap(kImportModule, "host_event_emit",
                 [record_ptr](wasmtime::Caller caller, int32_t event_type, int32_t payload_ptr, int32_t payload_len) -> int32_t {
+                    if (payload_len < 0) {
+                        return host::cabi::kInvalid;
+                    }
+                    if (static_cast<u32>(payload_len) > limits::kMaxEventBytes) {
+                        return host::cabi::kNoSpace;
+                    }
                     auto payload = GuestBytes(caller, payload_ptr, payload_len);
                     if (!payload) {
                         return host::cabi::kInvalid;

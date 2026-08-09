@@ -29,7 +29,7 @@ void QueryInstanceFeatures(SupportedInstanceFeatures& features) {
 
 Result<scope<Instance>> Instance::Create(InstanceDesc desc) {
     auto instance = createScope<wgpu::WgpuInstanceImpl>(std::move(desc));
-    if (!instance->IsValid()) {
+    if (instance == nullptr || !instance->IsValid()) {
         return Err(ErrorCode::GraphicsInitFailed, "Failed to create WebGPU instance");
     }
 

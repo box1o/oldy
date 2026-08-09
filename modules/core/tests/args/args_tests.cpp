@@ -39,3 +39,28 @@ TEST_CASE("ArgumentParser returns invalid state before parse") {
     REQUIRE_FALSE(value.has_value());
     REQUIRE(value.error().Code() == woki::ErrorCode::InvalidState);
 }
+
+TEST_CASE("ArgumentParser state reflects the latest parse attempt") {
+    woki::ArgumentParser parser;
+    parser.AddFlag("verbose", "Enable verbose logging");
+
+    char program[] = "app";
+    char verbose[] = "--verbose";
+    char* valid_argv[] = {program, verbose};
+
+    REQUIRE(parser.Parse(2, valid_argv).has_value());
+    REQUIRE(parser.Parsed());
+    REQUIRE(parser.Has("verbose"));
+
+    char unknown[] = "--unknown";
+    char* invalid_argv[] = {program, unknown};
+
+    const auto result = parser.Parse(2, invalid_argv);
+    REQUIRE_FALSE(result.has_value());
+    REQUIRE_FALSE(parser.Parsed());
+    REQUIRE_FALSE(parser.Has("verbose"));
+
+    const auto value = parser.Get<bool>("verbose");
+    REQUIRE_FALSE(value.has_value());
+    REQUIRE(value.error().Code() == woki::ErrorCode::InvalidState);
+}

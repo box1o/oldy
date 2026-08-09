@@ -2,8 +2,8 @@
 
 #include <stdint.h>
 
-using woki_ext_log_level_t = uint32_t;
-using woki_ext_event_type_t = uint32_t;
+typedef uint32_t woki_ext_log_level_t;
+typedef uint32_t woki_ext_event_type_t;
 
 enum {
     WOKI_EXT_LOG_DEBUG = 0,

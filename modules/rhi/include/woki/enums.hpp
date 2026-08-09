@@ -830,27 +830,27 @@ enum class BufferUsage : u64 {
 };
 
 enum class ColorWriteMask : u64 {
-    None,
-    Red,
-    Green,
-    Blue,
-    Alpha,
-    All,
+    None = 0,
+    Red = 1ull << 0,
+    Green = 1ull << 1,
+    Blue = 1ull << 2,
+    Alpha = 1ull << 3,
+    All = Red | Green | Blue | Alpha,
 };
 
 enum class HeapProperty : u64 {
-    None,
-    DeviceLocal,
-    HostVisible,
-    HostCoherent,
-    HostUncached,
-    HostCached,
+    None = 0,
+    DeviceLocal = 1ull << 0,
+    HostVisible = 1ull << 1,
+    HostCoherent = 1ull << 2,
+    HostUncached = 1ull << 3,
+    HostCached = 1ull << 4,
 };
 
 enum class MapMode : u64 {
-    None,
-    Read,
-    Write,
+    None = 0,
+    Read = 1ull << 0,
+    Write = 1ull << 1,
 };
 
 enum class ShaderStage : u64 {

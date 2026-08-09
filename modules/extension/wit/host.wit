@@ -1,3 +1,5 @@
+package woki:extension@1.0.0;
+
 interface logging {
   enum level {
     debug,

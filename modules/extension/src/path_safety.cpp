@@ -9,7 +9,15 @@ bool HasPathTraversal(const std::filesystem::path& path) {
 }
 
 bool IsSafeRelativePath(const std::filesystem::path& path) {
-    return !path.empty() && !path.has_root_path() && !HasPathTraversal(path);
+    if (path.empty() || path.has_root_path() || HasPathTraversal(path)) {
+        return false;
+    }
+
+    const std::string native = path.generic_string();
+    if (native.contains('\0') || native.contains('\\') || native.contains(':')) {
+        return false;
+    }
+    return std::ranges::none_of(path, [](const std::filesystem::path& part) { return part.empty() || part == "."; });
 }
 
 } // namespace woki::ext

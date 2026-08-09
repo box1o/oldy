@@ -1,10 +1,10 @@
-#include "wokiext/cli.hpp"
+#include <chrono>
+#include <iostream>
+#include <filesystem>
 
 #include <woki/ext/ext.hpp>
 
-#include <chrono>
-#include <filesystem>
-#include <iostream>
+#include "wokiext/cli.hpp"
 
 namespace wokiext {
 
@@ -57,8 +57,7 @@ Status Install(const InstallOptions& options) {
         }
 
         const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
-        temp_archive =
-            fs::temp_directory_path() / ("wokiext-install-" + std::to_string(stamp) + ".wokiext");
+        temp_archive = fs::temp_directory_path() / ("wokiext-install-" + std::to_string(stamp) + ".wokiext");
         if (Bundle(BundleOptions{.path = path, .out_file = temp_archive}) != Status::Ok) {
             return Status::Error;
         }
@@ -74,8 +73,7 @@ Status Install(const InstallOptions& options) {
         }
     }
 
-    woki::Result<woki::ext::PackageLayout> installed =
-        woki::ext::InstallArchive(install_path, *roots);
+    woki::Result<woki::ext::PackageLayout> installed = woki::ext::InstallArchive(install_path, *roots);
 
     if (!temp_archive.empty()) {
         std::error_code error;

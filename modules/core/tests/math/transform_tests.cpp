@@ -11,6 +11,10 @@
 using namespace woki::math;
 using Catch::Approx;
 
+static_assert(signed_arithmetic<float>);
+static_assert(signed_arithmetic<int>);
+static_assert(!signed_arithmetic<unsigned>);
+
 TEST_CASE("radians and degrees conversion") {
     REQUIRE(radians(180.0f) == Approx(pi<float>));
     REQUIRE(radians(90.0f) == Approx(half_pi<float>));
@@ -30,6 +34,8 @@ TEST_CASE("sign and abs") {
     REQUIRE(sign(0.0f) == 0.0f);
     REQUIRE(abs(-5.0f) == 5.0f);
     REQUIRE(abs(5) == 5);
+    REQUIRE(sign(0u) == 0u);
+    REQUIRE(sign(5u) == 1u);
 }
 
 TEST_CASE("clamp") {

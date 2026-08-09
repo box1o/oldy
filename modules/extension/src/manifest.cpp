@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <string_view>
 #include <yaml-cpp/yaml.h>
+#include <initializer_list>
 
 #include "woki/ext/manifest.hpp"
 #include "woki/ext/path_safety.hpp"
@@ -77,12 +78,8 @@ namespace fs = std::filesystem;
     if (path.empty()) {
         return Err(ErrorCode::ParseMissingField, MissingFieldMessage("runtime.wasm", "runtime:\n  wasm: extension.wasm"));
     }
-    if (path.is_absolute()) {
-        return Err(ErrorCode::ValidationInvalidState, "Manifest field 'runtime.wasm' must be relative to the package root. Use:\n"
-                                                      "runtime:\n  wasm: extension.wasm");
-    }
-    if (HasPathTraversal(path)) {
-        return Err(ErrorCode::ValidationInvalidState, "Manifest field 'runtime.wasm' must not contain '..'. Use a file inside the package, "
+    if (!IsSafeRelativePath(path)) {
+        return Err(ErrorCode::ValidationInvalidState, "Manifest field 'runtime.wasm' must be a portable relative path without '.', '..', or backslashes. Use a file inside the package, "
                                                       "for example:\nruntime:\n  wasm: extension.wasm");
     }
     return Ok();
@@ -148,7 +145,11 @@ namespace fs = std::filesystem;
     if (!wasm.IsScalar()) {
         return Err(ErrorCode::ParseTypeMismatch, WrongTypeMessage("runtime.wasm", "a relative path string", "runtime:\n  wasm: extension.wasm"));
     }
-    return Ok(fs::path(wasm.as<std::string>()));
+    const std::string text = wasm.as<std::string>();
+    if (text.contains('\\')) {
+        return Err(ErrorCode::ValidationInvalidState, "Manifest field 'runtime.wasm' must not contain backslashes.");
+    }
+    return Ok(fs::path(text));
 }
 
 [[nodiscard]] Result<std::vector<Permission>> ParsePermissions(const YAML::Node& root) {
@@ -171,12 +172,53 @@ namespace fs = std::filesystem;
         if (!permission) {
             return Err(permission.error());
         }
-        if (std::ranges::find(parsed, *permission) == parsed.end()) {
-            parsed.push_back(*permission);
+        if (std::ranges::find(parsed, *permission) != parsed.end()) {
+            return Err(ErrorCode::ValidationInvalidState, "Manifest contains duplicate permission: " + std::string(ToString(*permission)));
         }
+        parsed.push_back(*permission);
     }
 
     return Ok(std::move(parsed));
+}
+
+[[nodiscard]] Result<void> RejectUnknownFields(const YAML::Node& map, std::initializer_list<std::string_view> allowed, std::string_view field) {
+    for (const auto& entry : map) {
+        if (!entry.first.IsScalar()) {
+            return Err(ErrorCode::ParseTypeMismatch, "Manifest map keys must be strings.");
+        }
+        const std::string key = entry.first.as<std::string>();
+        if (std::ranges::find(allowed, key) == allowed.end()) {
+            return Err(ErrorCode::ParseUnexpectedToken, "Unknown manifest field '" + (field.empty() ? key : std::string(field) + "." + key) + "'.");
+        }
+    }
+    return Ok();
+}
+
+[[nodiscard]] Result<void> ValidateKnownFields(const YAML::Node& root) {
+    auto known = RejectUnknownFields(root, {"id", "name", "version", "apiVersion", "runtime", "permissions", "contributes"}, {});
+    if (!known) {
+        return known;
+    }
+    if (const YAML::Node runtime = root["runtime"]; runtime && runtime.IsMap()) {
+        if (auto valid = RejectUnknownFields(runtime, {"wasm"}, "runtime"); !valid) {
+            return valid;
+        }
+    }
+    if (const YAML::Node contributes = root["contributes"]; contributes && contributes.IsMap()) {
+        if (auto valid = RejectUnknownFields(contributes, {"commands"}, "contributes"); !valid) {
+            return valid;
+        }
+        if (const YAML::Node commands = contributes["commands"]; commands && commands.IsSequence()) {
+            for (const YAML::Node& command : commands) {
+                if (command.IsMap()) {
+                    if (auto valid = RejectUnknownFields(command, {"id", "title", "category"}, "contributes.commands[]"); !valid) {
+                        return valid;
+                    }
+                }
+            }
+        }
+    }
+    return Ok();
 }
 
 [[nodiscard]] Result<std::vector<CommandContribution>> ParseCommands(const YAML::Node& root) {
@@ -248,6 +290,10 @@ Result<Manifest> LoadManifest(const fs::path& path) {
             return Err(ErrorCode::ParseInvalidFormat, "Manifest must be a YAML map. Minimal example:\nid: woki.hello\nname: "
                                                       "Hello\nversion: 0.1.0\napiVersion: 1\nruntime:\n  wasm: "
                                                       "extension.wasm\npermissions:\n  - log");
+        }
+
+        if (auto known = ValidateKnownFields(root); !known) {
+            return Err(known.error());
         }
 
         Manifest manifest;

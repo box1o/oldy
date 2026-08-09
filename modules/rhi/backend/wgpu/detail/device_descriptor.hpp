@@ -20,6 +20,10 @@ struct DeviceDescriptorStorage final {
     WGPUDeviceDescriptor native_desc = WGPU_DEVICE_DESCRIPTOR_INIT;
     ref<DeviceLostCallback> device_lost_callback{};
     ref<UncapturedErrorCallback> uncaptured_error_callback{};
+
+    explicit DeviceDescriptorStorage(const DeviceDesc& desc);
+    DeviceDescriptorStorage(const DeviceDescriptorStorage&) = delete;
+    DeviceDescriptorStorage(DeviceDescriptorStorage&&) = delete;
 };
 
 inline void DeviceLostThunk(WGPUDevice const*, WGPUDeviceLostReason reason, WGPUStringView message, void*, void* userdata) {
@@ -40,43 +44,38 @@ inline void UncapturedErrorThunk(WGPUDevice const*, WGPUErrorType type, WGPUStri
     (*callback)(FromWgpu(type), StringFromView(message));
 }
 
-[[nodiscard]] inline DeviceDescriptorStorage BuildDeviceDescriptor(const DeviceDesc& desc) {
-    DeviceDescriptorStorage storage{};
-    storage.required_features.reserve(desc.required_features.size());
+inline DeviceDescriptorStorage::DeviceDescriptorStorage(const DeviceDesc& desc) {
+    required_features.reserve(desc.required_features.size());
     for (const FeatureName feature : desc.required_features) {
-        storage.required_features.push_back(ToWgpu(feature));
+        required_features.push_back(ToWgpu(feature));
     }
 
-    storage.native_desc = WGPU_DEVICE_DESCRIPTOR_INIT;
-    storage.native_desc.label = ToStringView(desc.label);
-    storage.native_desc.requiredFeatureCount = storage.required_features.size();
-    storage.native_desc.requiredFeatures = storage.required_features.empty() ? nullptr : storage.required_features.data();
+    native_desc.label = ToStringView(desc.label);
+    native_desc.requiredFeatureCount = required_features.size();
+    native_desc.requiredFeatures = required_features.empty() ? nullptr : required_features.data();
 
     if (desc.required_limits.has_value()) {
-        storage.required_limits = ToWgpuLimits(*desc.required_limits);
-        storage.native_desc.requiredLimits = &storage.required_limits;
+        required_limits = ToWgpuLimits(*desc.required_limits);
+        native_desc.requiredLimits = &required_limits;
     }
 
-    storage.default_queue = WGPU_QUEUE_DESCRIPTOR_INIT;
-    storage.default_queue.label = ToStringView(desc.default_queue.label);
-    storage.native_desc.defaultQueue = storage.default_queue;
+    default_queue.label = ToStringView(desc.default_queue.label);
+    native_desc.defaultQueue = default_queue;
 
     if (desc.device_lost_callback) {
-        storage.device_lost_callback = createRef<DeviceLostCallback>(desc.device_lost_callback);
-        storage.native_desc.deviceLostCallbackInfo = WGPU_DEVICE_LOST_CALLBACK_INFO_INIT;
-        storage.native_desc.deviceLostCallbackInfo.mode = WGPUCallbackMode_AllowSpontaneous;
-        storage.native_desc.deviceLostCallbackInfo.callback = DeviceLostThunk;
-        storage.native_desc.deviceLostCallbackInfo.userdata2 = storage.device_lost_callback.get();
+        device_lost_callback = createRef<DeviceLostCallback>(desc.device_lost_callback);
+        native_desc.deviceLostCallbackInfo = WGPU_DEVICE_LOST_CALLBACK_INFO_INIT;
+        native_desc.deviceLostCallbackInfo.mode = WGPUCallbackMode_AllowSpontaneous;
+        native_desc.deviceLostCallbackInfo.callback = DeviceLostThunk;
+        native_desc.deviceLostCallbackInfo.userdata2 = device_lost_callback.get();
     }
 
     if (desc.uncaptured_error_callback) {
-        storage.uncaptured_error_callback = createRef<UncapturedErrorCallback>(desc.uncaptured_error_callback);
-        storage.native_desc.uncapturedErrorCallbackInfo = WGPU_UNCAPTURED_ERROR_CALLBACK_INFO_INIT;
-        storage.native_desc.uncapturedErrorCallbackInfo.callback = UncapturedErrorThunk;
-        storage.native_desc.uncapturedErrorCallbackInfo.userdata2 = storage.uncaptured_error_callback.get();
+        uncaptured_error_callback = createRef<UncapturedErrorCallback>(desc.uncaptured_error_callback);
+        native_desc.uncapturedErrorCallbackInfo = WGPU_UNCAPTURED_ERROR_CALLBACK_INFO_INIT;
+        native_desc.uncapturedErrorCallbackInfo.callback = UncapturedErrorThunk;
+        native_desc.uncapturedErrorCallbackInfo.userdata2 = uncaptured_error_callback.get();
     }
-
-    return storage;
 }
 
 } // namespace woki::rhi::wgpu::detail

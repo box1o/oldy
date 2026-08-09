@@ -1,15 +1,14 @@
-#include "wokiext/cli.hpp"
-
-#include <woki/ext/ext.hpp>
-
-#include <archive.h>
-#include <archive_entry.h>
-
-#include <filesystem>
+#include <string>
 #include <fstream>
 #include <iostream>
 #include <iterator>
-#include <string>
+#include <archive.h>
+#include <filesystem>
+#include <archive_entry.h>
+
+#include <woki/ext/ext.hpp>
+
+#include "wokiext/cli.hpp"
 
 namespace wokiext {
 
@@ -25,9 +24,7 @@ namespace fs = std::filesystem;
     return root.parent_path() / (manifest->id + "-" + manifest->version + ".wokiext");
 }
 
-[[nodiscard]] Status WriteEntry(
-    struct archive* writer, const fs::path& root, const fs::path& path,
-    const std::filesystem::path& wasm_path) {
+[[nodiscard]] Status WriteEntry(struct archive* writer, const fs::path& root, const fs::path& path, const std::filesystem::path& wasm_path) {
     const fs::path relative = fs::relative(path, root);
     if (!woki::ext::IsAllowedArchiveEntry(relative, wasm_path)) {
         return Status::Ok;
@@ -62,8 +59,7 @@ namespace fs = std::filesystem;
         archive_entry_free(entry);
         return Status::Error;
     }
-    if (!bytes.empty() && archive_write_data(writer, bytes.data(), bytes.size()) !=
-                              static_cast<la_ssize_t>(bytes.size())) {
+    if (!bytes.empty() && archive_write_data(writer, bytes.data(), bytes.size()) != static_cast<la_ssize_t>(bytes.size())) {
         std::cerr << archive_error_string(writer) << '\n';
         archive_entry_free(entry);
         return Status::Error;
@@ -87,8 +83,7 @@ Status Bundle(const BundleOptions& options) {
         return Status::Error;
     }
 
-    const fs::path out_file =
-        options.out_file.empty() ? DefaultBundlePath(root) : fs::absolute(options.out_file);
+    const fs::path out_file = options.out_file.empty() ? DefaultBundlePath(root) : fs::absolute(options.out_file);
     fs::create_directories(out_file.parent_path());
 
     struct archive* writer = archive_write_new();
@@ -97,7 +92,11 @@ Status Bundle(const BundleOptions& options) {
         return Status::Error;
     }
 
-    archive_write_set_format_zip(writer);
+    if (archive_write_set_format_zip(writer) != ARCHIVE_OK) {
+        std::cerr << archive_error_string(writer) << '\n';
+        archive_write_free(writer);
+        return Status::Error;
+    }
     if (archive_write_open_filename(writer, out_file.string().c_str()) != ARCHIVE_OK) {
         std::cerr << archive_error_string(writer) << '\n';
         archive_write_free(writer);
@@ -105,8 +104,7 @@ Status Bundle(const BundleOptions& options) {
     }
 
     Status status = Status::Ok;
-    for (const fs::directory_entry& entry :
-        fs::recursive_directory_iterator(root, fs::directory_options::skip_permission_denied)) {
+    for (const fs::directory_entry& entry : fs::recursive_directory_iterator(root, fs::directory_options::skip_permission_denied)) {
         if (entry.is_directory()) {
             continue;
         }
@@ -116,8 +114,13 @@ Status Bundle(const BundleOptions& options) {
         }
     }
 
-    archive_write_close(writer);
-    archive_write_free(writer);
+    if (archive_write_close(writer) != ARCHIVE_OK) {
+        std::cerr << archive_error_string(writer) << '\n';
+        status = Status::Error;
+    }
+    if (archive_write_free(writer) != ARCHIVE_OK) {
+        status = Status::Error;
+    }
 
     if (status != Status::Ok) {
         std::error_code error;

@@ -2,9 +2,11 @@
 
 // IWYU pragma: private, include "woki/core.hpp"
 
+#include <cerrno>
 #include <string>
 #include <cstdlib>
 #include <charconv>
+#include <concepts>
 #include <filesystem>
 #include <string_view>
 #include <type_traits>
@@ -82,22 +84,23 @@ template <typename T>
     } else if constexpr (std::floating_point<Decayed>) {
         std::string owned(value);
         char* parse_end = nullptr;
+        errno = 0;
 
         if constexpr (std::same_as<Decayed, float>) {
             const float parsed = std::strtof(owned.c_str(), &parse_end);
-            if (parse_end == nullptr || *parse_end != '\0') {
+            if (parse_end == owned.c_str() || *parse_end != '\0' || errno == ERANGE) {
                 return Err(ErrorCode::ParseInvalidFormat, "Failed to parse float config value");
             }
             return Ok(parsed);
         } else if constexpr (std::same_as<Decayed, double>) {
             const double parsed = std::strtod(owned.c_str(), &parse_end);
-            if (parse_end == nullptr || *parse_end != '\0') {
+            if (parse_end == owned.c_str() || *parse_end != '\0' || errno == ERANGE) {
                 return Err(ErrorCode::ParseInvalidFormat, "Failed to parse double config value");
             }
             return Ok(parsed);
         } else {
             const long double parsed = std::strtold(owned.c_str(), &parse_end);
-            if (parse_end == nullptr || *parse_end != '\0') {
+            if (parse_end == owned.c_str() || *parse_end != '\0' || errno == ERANGE) {
                 return Err(ErrorCode::ParseInvalidFormat, "Failed to parse long double config value");
             }
             return Ok(static_cast<Decayed>(parsed));

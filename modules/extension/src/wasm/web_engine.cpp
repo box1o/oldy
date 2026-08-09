@@ -12,6 +12,7 @@ int woki_web_ext_tick(const char* id, double delta_ms);
 int woki_web_ext_event(const char* id, unsigned event_type, const unsigned char* payload, unsigned payload_len);
 int woki_web_ext_command(const char* id, const char* command_id, const unsigned char* payload, unsigned payload_len);
 void woki_web_ext_unload(const char* id);
+void woki_web_ext_discard(const char* id);
 const char* woki_web_ext_last_error();
 }
 
@@ -158,7 +159,7 @@ Result<i32> WebEngine::Command(Record& record, std::string_view command_id, std:
 
 void WebEngine::Discard(Record& record) {
 #ifdef __EMSCRIPTEN__
-    woki_web_ext_unload(record.id.c_str());
+    woki_web_ext_discard(record.id.c_str());
 #else
     (void)record;
 #endif

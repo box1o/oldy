@@ -1,7 +1,7 @@
 # Wasm guest extension build (outputs extension.wasm next to the project sources).
 #
 # Usage:
-#   include(${WOKI_REPO_ROOT}/cmake/ExtensionWasm.cmake)
+#   include(${WOKI_CMAKE_DIR}/ExtensionWasm.cmake)
 #   add_wokiext(src/plugin.cpp)
 #
 # Requires clang/clang++ with --target=wasm32-unknown-unknown support.
@@ -19,11 +19,14 @@ set(WOKI_WASM_GUEST_EXPORTS
 )
 
 function(add_wokiext source_file)
-    if(NOT DEFINED WOKI_REPO_ROOT)
-        get_filename_component(WOKI_REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
-    endif()
     if(NOT WOKI_SDK_DIR)
-        set(WOKI_SDK_DIR "${WOKI_REPO_ROOT}/modules/extension/sdk")
+        if(EXISTS "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../modules/extension/sdk/ext.h")
+            set(WOKI_SDK_DIR "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../modules/extension/sdk")
+        elseif(EXISTS "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../../../include/woki/ext.h")
+            set(WOKI_SDK_DIR "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../../../include/woki")
+        else()
+            message(FATAL_ERROR "Cannot locate the Woki extension SDK; set WOKI_SDK_DIR")
+        endif()
     endif()
 
     set(_source "${CMAKE_CURRENT_SOURCE_DIR}/${source_file}")
@@ -31,14 +34,16 @@ function(add_wokiext source_file)
 
     if(_source MATCHES "\\.c$")
         set(_std_flag -std=c17)
-        if(NOT WOKI_WASM_COMPILER)
-            find_program(WOKI_WASM_COMPILER clang REQUIRED)
+        if(NOT WOKI_WASM_C_COMPILER)
+            find_program(WOKI_WASM_C_COMPILER clang REQUIRED)
         endif()
+        set(_guest_compiler "${WOKI_WASM_C_COMPILER}")
     else()
         set(_std_flag -std=c++23)
         if(NOT WOKI_WASM_COMPILER)
             find_program(WOKI_WASM_COMPILER clang++ REQUIRED)
         endif()
+        set(_guest_compiler "${WOKI_WASM_COMPILER}")
     endif()
 
     set(_guest_flags
@@ -67,7 +72,7 @@ function(add_wokiext source_file)
 
     add_custom_command(
         OUTPUT "${_wasm}"
-        COMMAND ${WOKI_WASM_COMPILER}
+        COMMAND ${_guest_compiler}
             ${_guest_flags}
             -O2
             -Wl,--no-entry

@@ -14,6 +14,9 @@ namespace fs = std::filesystem;
 class FakeBackend final : public woki::ext::RuntimeBackend {
 public:
     [[nodiscard]] woki::Result<void> Load(woki::ext::Record& record) override {
+        if (!fail_load_prefix.empty() && record.id.starts_with(fail_load_prefix)) {
+            return woki::Err(woki::ErrorCode::InvalidState, "selected load failure");
+        }
         record.tier = woki::ext::RuntimeTier::Wasm;
         ++loads;
         return woki::Ok();
@@ -51,6 +54,7 @@ public:
     woki::u32 last_event{0};
     std::string last_command;
     std::size_t last_command_payload_size{0};
+    std::string fail_load_prefix;
 };
 
 [[nodiscard]] fs::path MakeTempDir(std::string_view name) {
@@ -82,6 +86,19 @@ contributes:
   commands:
     - id: woki.hello.say
       title: Say Hello
+)");
+    WriteFile(package / "extension.wasm", "");
+}
+
+void WritePackage(const fs::path& package, std::string_view id) {
+    fs::create_directories(package);
+    WriteFile(package / "manifest.yaml", "id: " + std::string(id) + R"(
+name: Test
+version: 0.1.0
+apiVersion: 1
+runtime:
+  wasm: extension.wasm
+permissions: []
 )");
     WriteFile(package / "extension.wasm", "");
 }
@@ -200,4 +217,41 @@ TEST_CASE("Extension manager can own and swap runtime backends") {
     manager.Find("woki.hello")->state = woki::ext::State::PermissionChecked;
     REQUIRE(manager.Load("woki.hello").has_value());
     REQUIRE(replacement_ptr->loads == 1);
+}
+
+TEST_CASE("Extension manager unloads active records before rescanning") {
+    const fs::path root = MakeTempDir("rescan_cleanup");
+    WritePackage(root / "extensions" / "woki.hello");
+    FakeBackend backend;
+    woki::ext::Manager manager(&backend);
+    manager.SetRoots({root / "extensions", root / "ext-data", root / "cache"});
+
+    REQUIRE(manager.Scan().has_value());
+    REQUIRE(manager.Load("woki.hello").has_value());
+    REQUIRE(manager.Scan().has_value());
+    REQUIRE(backend.unloads == 1);
+    REQUIRE(manager.Find("woki.hello")->state == woki::ext::State::PermissionChecked);
+}
+
+TEST_CASE("Extension manager LoadAll continues after failures and aggregates errors") {
+    const fs::path root = MakeTempDir("load_all_failures");
+    WritePackage(root / "extensions" / "woki.bad-one", "woki.bad-one");
+    WritePackage(root / "extensions" / "woki.bad-two", "woki.bad-two");
+    WritePackage(root / "extensions" / "woki.good", "woki.good");
+    FakeBackend backend;
+    backend.fail_load_prefix = "woki.bad";
+    woki::ext::Manager manager(&backend);
+    manager.SetRoots({root / "extensions", root / "ext-data", root / "cache"});
+
+    REQUIRE(manager.Scan().has_value());
+    auto loaded = manager.LoadAll();
+    REQUIRE_FALSE(loaded.has_value());
+    REQUIRE(loaded.error().Message().contains("woki.bad-one"));
+    REQUIRE(loaded.error().Message().contains("woki.bad-two"));
+    REQUIRE(manager.Find("woki.bad-one")->state == woki::ext::State::Failed);
+    REQUIRE(manager.Find("woki.bad-two")->state == woki::ext::State::Failed);
+    INFO(manager.Find("woki.good")->error);
+    REQUIRE(manager.Find("woki.good")->state == woki::ext::State::Active);
+    REQUIRE(backend.loads == 1);
+    REQUIRE(backend.initializes == 1);
 }

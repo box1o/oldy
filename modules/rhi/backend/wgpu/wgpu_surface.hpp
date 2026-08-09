@@ -37,6 +37,7 @@ private:
     detail::TextureHandle current_texture_;
     detail::TextureViewHandle current_view_;
     bool configured_{false};
+    bool acquired_{false};
 };
 
 [[nodiscard]] WGPUSurface CreateNativeSurface(WGPUInstance instance, Window& window);

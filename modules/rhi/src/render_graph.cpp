@@ -1,5 +1,8 @@
+#include <cmath>
+#include <limits>
 #include <utility>
 #include <algorithm>
+#include <unordered_set>
 
 #include <woki/rhi/queue.hpp>
 #include <woki/rhi/device.hpp>
@@ -53,6 +56,260 @@ using render_graph::detail::TransientPoolKey;
     }
 }
 
+[[nodiscard]] TextureUsage ResourceUsage(const ResourceRecord& resource) noexcept {
+    if (resource.kind == ResourceKind::Transient) {
+        return resource.transient.usage;
+    }
+    if (resource.kind == ResourceKind::Owned && resource.owned_texture != nullptr) {
+        return resource.owned_texture->GetUsage();
+    }
+    return TextureUsage::None;
+}
+
+[[nodiscard]] TextureFormat ResourceFormat(const ResourceRecord& resource) noexcept {
+    if (resource.kind == ResourceKind::Transient) {
+        return resource.transient.format;
+    }
+    if (resource.kind == ResourceKind::Owned && resource.owned_texture != nullptr) {
+        return resource.owned_texture->GetFormat();
+    }
+    return TextureFormat::Undefined;
+}
+
+[[nodiscard]] TextureDimension ResourceDimension(const ResourceRecord& resource) noexcept {
+    if (resource.kind == ResourceKind::Transient) {
+        return TextureDimension::e2D;
+    }
+    return resource.kind == ResourceKind::Owned && resource.owned_texture != nullptr ? resource.owned_texture->GetDimension() : TextureDimension::Undefined;
+}
+
+[[nodiscard]] u32 ResourceSampleCount(const ResourceRecord& resource) noexcept {
+    if (resource.kind == ResourceKind::Transient) {
+        return 1;
+    }
+    return resource.kind == ResourceKind::Owned && resource.owned_texture != nullptr ? resource.owned_texture->GetSampleCount() : 0;
+}
+
+enum class FormatAspects : u8 {
+    Color,
+    Depth,
+    Stencil,
+    DepthStencil,
+};
+
+[[nodiscard]] FormatAspects ResourceAspects(const TextureFormat format) noexcept {
+    switch (format) {
+        case TextureFormat::Stencil8:
+            return FormatAspects::Stencil;
+        case TextureFormat::Depth24PlusStencil8:
+        case TextureFormat::Depth32FloatStencil8:
+            return FormatAspects::DepthStencil;
+        case TextureFormat::Depth16Unorm:
+        case TextureFormat::Depth24Plus:
+        case TextureFormat::Depth32Float:
+            return FormatAspects::Depth;
+        default:
+            return FormatAspects::Color;
+    }
+}
+
+[[nodiscard]] Extent3D ResourceExtent(const ResourceRecord& resource, const u32 width, const u32 height) noexcept {
+    if (resource.kind == ResourceKind::Transient) {
+        return ResolveExtent(resource.transient.extent, width, height);
+    }
+    if (resource.kind == ResourceKind::Owned && resource.owned_texture != nullptr) {
+        return {resource.owned_texture->GetWidth(), resource.owned_texture->GetHeight(), resource.owned_texture->GetDepthOrArrayLayers()};
+    }
+    return {};
+}
+
+[[nodiscard]] bool ExtentsEqual(const Extent3D& lhs, const Extent3D& rhs) noexcept {
+    return lhs.width == rhs.width && lhs.height == rhs.height && lhs.depth_or_array_layers == rhs.depth_or_array_layers;
+}
+
+[[nodiscard]] Result<void> ValidateCopyCompatibility(const ResourceRecord& source, const ResourceRecord& destination, const u32 width, const u32 height) {
+    if (ResourceFormat(source) != ResourceFormat(destination)) {
+        return Err(ErrorCode::GraphicsInvalidFormat, "RenderGraph copy source and destination formats differ");
+    }
+    if (ResourceAspects(ResourceFormat(source)) != ResourceAspects(ResourceFormat(destination))) {
+        return Err(ErrorCode::GraphicsInvalidFormat, "RenderGraph copy source and destination aspects differ");
+    }
+    if (ResourceDimension(source) != ResourceDimension(destination)) {
+        return Err(ErrorCode::ValidationInvalidState, "RenderGraph copy source and destination dimensions differ");
+    }
+    if (ResourceSampleCount(source) != 1 || ResourceSampleCount(destination) != 1) {
+        return Err(ErrorCode::ValidationInvalidState, "RenderGraph texture copies require single-sampled resources");
+    }
+    if (!ExtentsEqual(ResourceExtent(source, width, height), ResourceExtent(destination, width, height))) {
+        return Err(ErrorCode::ValidationInvalidState, "RenderGraph whole-texture copy requires matching extents");
+    }
+    return Ok();
+}
+
+[[nodiscard]] Result<void> ValidateExtentMode(const ExtentMode& extent, const u32 width, const u32 height) {
+    switch (extent.kind) {
+        case ExtentModeKind::Swapchain:
+            return Ok();
+        case ExtentModeKind::Fixed:
+            if (extent.width == 0 || extent.height == 0) {
+                return Err(ErrorCode::ValidationOutOfRange, "RenderGraph fixed extent must be non-zero");
+            }
+            return Ok();
+        case ExtentModeKind::Relative:
+            if (!std::isfinite(extent.relative_width) || !std::isfinite(extent.relative_height) || extent.relative_width <= 0.f || extent.relative_height <= 0.f) {
+                return Err(ErrorCode::ValidationOutOfRange, "RenderGraph relative extent must be finite and positive");
+            }
+            constexpr auto max = static_cast<double>(std::numeric_limits<u32>::max());
+            if (static_cast<double>(width) * extent.relative_width > max || static_cast<double>(height) * extent.relative_height > max) {
+                return Err(ErrorCode::ValidationOutOfRange, "RenderGraph relative extent exceeds the supported range");
+            }
+            return Ok();
+    }
+    return Err(ErrorCode::ValidationOutOfRange, "RenderGraph extent mode is invalid");
+}
+
+[[nodiscard]] Result<void> ValidateBlueprint(const GraphBlueprint& blueprint, const u32 width, const u32 height) {
+    auto validate_resource_id = [&](const u32 id, const std::string& usage) -> Result<void> {
+        if (id >= blueprint.resources.size()) {
+            return Err(ErrorCode::ValidationOutOfRange, "RenderGraph " + usage + " references an invalid resource");
+        }
+        return Ok();
+    };
+    auto validate_attachment = [&](const u32 id, const bool depth, const std::string& usage) -> Result<void> {
+        TRY_VOID(validate_resource_id(id, usage));
+        const ResourceRecord& resource = blueprint.resources[id];
+        const TextureFormat format = ResourceFormat(resource);
+        if (format != TextureFormat::Undefined && IsDepthFormat(format) != depth) {
+            return Err(ErrorCode::GraphicsInvalidFormat, "RenderGraph " + usage + " has an incompatible texture format");
+        }
+        if (resource.kind != ResourceKind::PerFrame && !HasFlag(ResourceUsage(resource), TextureUsage::RenderAttachment)) {
+            return Err(ErrorCode::ValidationInvalidState, "RenderGraph " + usage + " requires RenderAttachment usage");
+        }
+        return Ok();
+    };
+
+    for (const ResourceRecord& resource : blueprint.resources) {
+        if (resource.kind == ResourceKind::Owned && resource.owned_texture == nullptr) {
+            return Err(ErrorCode::ValidationNullValue, "RenderGraph owned texture is null");
+        }
+        if (resource.kind == ResourceKind::Owned
+            && (resource.owned_texture->GetFormat() == TextureFormat::Undefined || resource.owned_texture->GetWidth() == 0 || resource.owned_texture->GetHeight() == 0
+                || resource.owned_texture->GetDepthOrArrayLayers() == 0)) {
+            return Err(ErrorCode::ValidationInvalidState, "RenderGraph owned texture has an invalid format or extent");
+        }
+        if (resource.kind == ResourceKind::Transient) {
+            if (resource.transient.format == TextureFormat::Undefined || resource.transient.usage == TextureUsage::None) {
+                return Err(ErrorCode::ValidationInvalidState, "RenderGraph transient texture requires a format and usage");
+            }
+            TRY_VOID(ValidateExtentMode(resource.transient.extent, width, height));
+        }
+    }
+
+    for (const FramebufferRecord& framebuffer : blueprint.framebuffers) {
+        std::unordered_set<u32> slots{};
+        for (const auto& [slot, resource_id] : framebuffer.colors) {
+            if (!slots.insert(slot).second) {
+                return Err(ErrorCode::ValidationInvalidState, "RenderGraph framebuffer has a duplicate color slot");
+            }
+            TRY_VOID(validate_attachment(resource_id, false, "framebuffer color attachment"));
+        }
+        if (framebuffer.depth_resource_id != kInvalidGraphResource) {
+            TRY_VOID(validate_attachment(framebuffer.depth_resource_id, true, "framebuffer depth attachment"));
+        }
+    }
+
+    std::unordered_set<std::string> pass_names{};
+    for (const PassRecord& pass : blueprint.passes) {
+        if (!pass_names.insert(pass.debug_name).second) {
+            return Err(ErrorCode::ValidationInvalidState, "RenderGraph has duplicate pass name '" + pass.debug_name + "'");
+        }
+
+        const bool copy_pass = pass.kind == PassKind::Copy || !pass.copies.empty();
+        if (copy_pass) {
+            if (pass.copies.empty() || !pass.copy_execute) {
+                return Err(ErrorCode::ValidationInvalidState, "RenderGraph copy pass '" + pass.debug_name + "' requires Copy operations and an Execute callback");
+            }
+            if (pass.render_execute || pass.framebuffer_id.has_value() || !pass.colors.empty() || pass.depth.has_value() || !pass.samples.empty()) {
+                return Err(ErrorCode::ValidationInvalidState, "RenderGraph copy pass '" + pass.debug_name + "' mixes copy and render state");
+            }
+            for (const CopyOperation& copy : pass.copies) {
+                TRY_VOID(validate_resource_id(copy.src_resource_id, "copy source"));
+                TRY_VOID(validate_resource_id(copy.dst_resource_id, "copy destination"));
+                const ResourceRecord& source = blueprint.resources[copy.src_resource_id];
+                const ResourceRecord& destination = blueprint.resources[copy.dst_resource_id];
+                if (source.kind == ResourceKind::PerFrame || destination.kind == ResourceKind::PerFrame) {
+                    return Err(ErrorCode::ValidationInvalidState, "RenderGraph copy pass cannot use a per-frame view as a texture");
+                }
+                if (!HasFlag(ResourceUsage(source), TextureUsage::CopySrc) || !HasFlag(ResourceUsage(destination), TextureUsage::CopyDst)) {
+                    return Err(ErrorCode::ValidationInvalidState, "RenderGraph copy resources require CopySrc and CopyDst usage");
+                }
+                TRY_VOID(ValidateCopyCompatibility(source, destination, width, height));
+            }
+            continue;
+        }
+
+        if (!pass.render_execute) {
+            return Err(ErrorCode::ValidationInvalidState, "RenderGraph pass '" + pass.debug_name + "' has no Execute callback");
+        }
+        if (pass.copy_execute) {
+            return Err(ErrorCode::ValidationInvalidState, "RenderGraph render pass '" + pass.debug_name + "' has a copy callback");
+        }
+        if (pass.framebuffer_id.has_value() && *pass.framebuffer_id >= blueprint.framebuffers.size()) {
+            return Err(ErrorCode::ValidationOutOfRange, "RenderGraph pass '" + pass.debug_name + "' references an invalid framebuffer");
+        }
+
+        std::unordered_set<u32> color_slots{};
+        std::unordered_set<u32> attachment_resources{};
+        bool has_target = false;
+        if (pass.framebuffer_id.has_value()) {
+            const FramebufferRecord& framebuffer = blueprint.framebuffers[*pass.framebuffer_id];
+            for (const auto& [slot, resource_id] : framebuffer.colors) {
+                color_slots.insert(slot);
+                attachment_resources.insert(resource_id);
+                has_target = true;
+            }
+            has_target = has_target || framebuffer.depth_resource_id != kInvalidGraphResource;
+            if (framebuffer.depth_resource_id != kInvalidGraphResource) {
+                attachment_resources.insert(framebuffer.depth_resource_id);
+            }
+            if (pass.depth.has_value() && framebuffer.depth_resource_id != kInvalidGraphResource) {
+                return Err(ErrorCode::ValidationInvalidState, "RenderGraph pass '" + pass.debug_name + "' has multiple depth attachments");
+            }
+        }
+        for (const ColorOutput& color : pass.colors) {
+            if (!color_slots.insert(color.slot).second) {
+                return Err(ErrorCode::ValidationInvalidState, "RenderGraph pass '" + pass.debug_name + "' has a duplicate color slot");
+            }
+            TRY_VOID(validate_attachment(color.resource_id, false, "color attachment"));
+            attachment_resources.insert(color.resource_id);
+            has_target = true;
+        }
+        if (pass.depth.has_value()) {
+            TRY_VOID(validate_attachment(pass.depth->resource_id, true, "depth attachment"));
+            attachment_resources.insert(pass.depth->resource_id);
+            has_target = true;
+        }
+        if (!has_target) {
+            return Err(ErrorCode::ValidationInvalidState, "RenderGraph pass '" + pass.debug_name + "' has no render targets");
+        }
+        for (const SampleInput& sample : pass.samples) {
+            TRY_VOID(validate_resource_id(sample.resource_id, "sample input"));
+            const ResourceRecord& resource = blueprint.resources[sample.resource_id];
+            if (attachment_resources.contains(sample.resource_id)) {
+                return Err(ErrorCode::ValidationInvalidState, "RenderGraph pass cannot sample one of its attachments");
+            }
+            if (resource.kind == ResourceKind::PerFrame || !HasFlag(ResourceUsage(resource), TextureUsage::TextureBinding)) {
+                return Err(ErrorCode::ValidationInvalidState, "RenderGraph sample input requires a texture with TextureBinding usage");
+            }
+            const TextureFormat format = ResourceFormat(resource);
+            if (format != TextureFormat::Undefined && (sample.mode == SampleMode::DepthTexture) != IsDepthFormat(format)) {
+                return Err(ErrorCode::GraphicsInvalidFormat, "RenderGraph sample mode is incompatible with the texture format");
+            }
+        }
+    }
+    return Ok();
+}
+
 [[nodiscard]] TextureViewDesc MakeTransientViewDesc(const TransientDesc& desc) {
     TextureViewDesc view_desc{};
     view_desc.label = desc.label.empty() ? "RenderGraphView" : desc.label;
@@ -65,7 +322,7 @@ using render_graph::detail::TransientPoolKey;
     TextureViewDesc view_desc{};
     view_desc.label = desc.label.empty() ? "RenderGraphDepthSample" : desc.label + ".DepthSample";
     view_desc.format = TextureFormat::Undefined;
-    view_desc.usage = desc.usage;
+    view_desc.usage = TextureUsage::TextureBinding;
     view_desc.aspect = TextureAspect::DepthOnly;
     return view_desc;
 }
@@ -148,6 +405,9 @@ BindGroup* RenderPassContext::GetOrCreateBindGroup(const std::string_view key, s
         return it->second.get();
     }
 
+    if (!factory) {
+        return nullptr;
+    }
     auto created = factory();
     if (!created) {
         return nullptr;
@@ -194,6 +454,15 @@ BindGroupBuilder& BindGroupBuilder::BindBuffer(const u32 binding, Buffer& buffer
 Result<scope<BindGroup>> BindGroupBuilder::Build() {
     if (device_ == nullptr || layout_ == nullptr) {
         return Err(ErrorCode::InvalidState, "BindGroupBuilder is invalid");
+    }
+    std::unordered_set<u32> bindings{};
+    for (const BindGroupEntryDesc& entry : entries_) {
+        if (!bindings.insert(entry.binding).second) {
+            return Err(ErrorCode::ValidationInvalidState, "BindGroupBuilder contains a duplicate binding");
+        }
+        if (entry.buffer != nullptr && entry.size == 0) {
+            return Err(ErrorCode::ValidationOutOfRange, "BindGroupBuilder buffer binding size must be non-zero");
+        }
     }
 
     BindGroupDesc desc{};
@@ -244,11 +513,19 @@ Result<void> CopyPassContext::CopyAll() {
             return Err(ErrorCode::GraphicsResourceCreationFailed, "CopyPassContext missing texture");
         }
 
-        const Extent3D copy_size{
-            std::max(1u, width_),
-            std::max(1u, height_),
-            1,
-        };
+        if (source->GetFormat() != destination->GetFormat() || ResourceAspects(source->GetFormat()) != ResourceAspects(destination->GetFormat())) {
+            return Err(ErrorCode::GraphicsInvalidFormat, "CopyPassContext texture formats or aspects differ");
+        }
+        if (source->GetDimension() != destination->GetDimension() || source->GetSampleCount() != 1 || destination->GetSampleCount() != 1) {
+            return Err(ErrorCode::ValidationInvalidState, "CopyPassContext textures require matching dimensions and single-sampled resources");
+        }
+        const Extent3D copy_size{source->GetWidth(), source->GetHeight(), source->GetDepthOrArrayLayers()};
+        if (!ExtentsEqual(copy_size, Extent3D{destination->GetWidth(), destination->GetHeight(), destination->GetDepthOrArrayLayers()})) {
+            return Err(ErrorCode::ValidationInvalidState, "CopyPassContext whole-texture copy requires matching extents");
+        }
+        if (copy_size.width == 0 || copy_size.height == 0 || copy_size.depth_or_array_layers == 0) {
+            return Err(ErrorCode::ValidationOutOfRange, "CopyPassContext texture extent is empty");
+        }
         if (auto result = encoder_->CopyTextureToTexture(MakeCopyInfo(*source), MakeCopyInfo(*destination), copy_size); !result) {
             return result;
         }
@@ -428,21 +705,7 @@ Result<ref<RenderGraph>> RenderGraphBuilder::Compile(const u32 width, const u32 
         return Err(ErrorCode::ValidationOutOfRange, "RenderGraph compile requires non-zero size");
     }
 
-    for (const PassRecord& pass : blueprint_->passes) {
-        if (pass.kind == PassKind::Copy || !pass.copies.empty()) {
-            if (pass.copies.empty()) {
-                return Err(ErrorCode::ValidationInvalidState, "RenderGraph copy pass '" + pass.debug_name + "' has no Copy operations");
-            }
-            if (!pass.copy_execute) {
-                return Err(ErrorCode::ValidationInvalidState, "RenderGraph copy pass '" + pass.debug_name + "' has no Execute callback");
-            }
-            continue;
-        }
-
-        if (!pass.render_execute) {
-            return Err(ErrorCode::ValidationInvalidState, "RenderGraph pass '" + pass.debug_name + "' has no Execute callback");
-        }
-    }
+    TRY_VOID(ValidateBlueprint(*blueprint_, width, height));
 
     return RenderGraph::Create(device_, std::move(*blueprint_), width, height);
 }
@@ -469,7 +732,22 @@ u32 RenderGraphBuilder::AllocatePass(const std::string_view debug_name) {
 // --- RenderGraph ---
 
 Result<ref<RenderGraph>> RenderGraph::Create(ref<Device> device, GraphBlueprint blueprint, const u32 width, const u32 height) {
-    return Ok(createRef<RenderGraph>(ConstructionKey{}, std::move(device), std::move(blueprint), width, height));
+    if (device == nullptr) {
+        return Err(ErrorCode::ValidationNullValue, "RenderGraph requires a device");
+    }
+    if (width == 0 || height == 0) {
+        return Err(ErrorCode::ValidationOutOfRange, "RenderGraph requires non-zero dimensions");
+    }
+    TRY_VOID(ValidateBlueprint(blueprint, width, height));
+
+    auto graph = createRef<RenderGraph>(ConstructionKey{}, std::move(device), std::move(blueprint), width, height);
+    if (graph == nullptr) {
+        return Err(ErrorCode::GraphicsResourceCreationFailed, "Failed to allocate RenderGraph");
+    }
+    if (auto allocation = graph->AllocateRuntimeResources(width, height); !allocation) {
+        return Err(std::move(allocation).error());
+    }
+    return Ok(std::move(graph));
 }
 
 RenderGraph::RenderGraph(ConstructionKey, ref<Device> device, GraphBlueprint blueprint, const u32 width, const u32 height)
@@ -481,13 +759,9 @@ RenderGraph::RenderGraph(ConstructionKey, ref<Device> device, GraphBlueprint blu
     for (size_t i = 0; i < blueprint_.resources.size(); ++i) {
         runtime_resources_[i].blueprint = blueprint_.resources[i];
     }
-    (void)AllocateRuntimeResources(width, height);
 }
 
 Result<void> RenderGraph::AllocateRuntimeResources(const u32 width, const u32 height) {
-    width_ = width;
-    height_ = height;
-
     for (RuntimeResource& runtime : runtime_resources_) {
         if (runtime.blueprint.kind != ResourceKind::Transient) {
             continue;
@@ -503,10 +777,25 @@ Result<void> RenderGraph::AllocateRuntimeResources(const u32 width, const u32 he
         if (record.kind == ResourceKind::Owned && record.owned_texture != nullptr) {
             if (runtime.view == nullptr) {
                 runtime.view = record.owned_texture->CreateView({});
+                if (runtime.view == nullptr) {
+                    return Err(ErrorCode::GraphicsResourceCreationFailed, "Failed to create RenderGraph owned texture view");
+                }
+            }
+            if (IsDepthFormat(record.owned_texture->GetFormat()) && HasFlag(record.owned_texture->GetUsage(), TextureUsage::TextureBinding) && runtime.depth_sample_view == nullptr) {
+                TextureViewDesc depth_view_desc{};
+                depth_view_desc.label = "RenderGraphOwnedDepthSample";
+                depth_view_desc.aspect = TextureAspect::DepthOnly;
+                depth_view_desc.usage = TextureUsage::TextureBinding;
+                runtime.depth_sample_view = record.owned_texture->CreateView(depth_view_desc);
+                if (runtime.depth_sample_view == nullptr) {
+                    return Err(ErrorCode::GraphicsResourceCreationFailed, "Failed to create RenderGraph owned depth sample view");
+                }
             }
         }
     }
 
+    width_ = width;
+    height_ = height;
     return Ok();
 }
 
@@ -545,6 +834,9 @@ Result<void> RenderGraph::AcquireTransientResource(RuntimeResource& runtime, con
     if (!texture) {
         return Err(texture.error());
     }
+    if (*texture == nullptr) {
+        return Err(ErrorCode::GraphicsTextureCreationFailed, "Device returned a null RenderGraph transient texture");
+    }
 
     TextureViewDesc view_desc = MakeTransientViewDesc(record.transient);
 
@@ -552,8 +844,14 @@ Result<void> RenderGraph::AcquireTransientResource(RuntimeResource& runtime, con
     pooled.key = key;
     pooled.texture = std::move(*texture);
     pooled.view = pooled.texture->CreateView(view_desc);
-    if (IsDepthFormat(record.transient.format)) {
+    if (pooled.view == nullptr) {
+        return Err(ErrorCode::GraphicsResourceCreationFailed, "Failed to create RenderGraph transient texture view");
+    }
+    if (IsDepthFormat(record.transient.format) && HasFlag(record.transient.usage, TextureUsage::TextureBinding)) {
         pooled.depth_sample_view = pooled.texture->CreateView(MakeDepthSampleViewDesc(record.transient));
+        if (pooled.depth_sample_view == nullptr) {
+            return Err(ErrorCode::GraphicsResourceCreationFailed, "Failed to create RenderGraph depth sample view");
+        }
     }
     pooled.in_use = true;
 
@@ -566,9 +864,16 @@ Result<void> RenderGraph::RebuildForResize(const u32 width, const u32 height) {
     if (width == 0 || height == 0) {
         return Err(ErrorCode::ValidationOutOfRange, "RenderGraph resize requires non-zero size");
     }
+    if (active_frame_count_ != 0) {
+        return Err(ErrorCode::InvalidState, "RenderGraph cannot resize while a frame is outstanding");
+    }
 
     ReleaseTransientPool();
-    return AllocateRuntimeResources(width, height);
+    if (auto allocation = AllocateRuntimeResources(width, height); !allocation) {
+        ReleaseTransientPool();
+        return allocation;
+    }
+    return Ok();
 }
 
 Texture* RenderGraph::ResolveTexture(const u32 resource_id) {
@@ -619,6 +924,9 @@ TextureView* RenderGraph::ResolveSampleView(const u32 resource_id, const SampleM
             if (depth_view != nullptr) {
                 return depth_view;
             }
+        }
+        if (runtime.blueprint.kind == ResourceKind::Owned && runtime.depth_sample_view != nullptr) {
+            return runtime.depth_sample_view.get();
         }
     }
     return ResolveView(resource_id);
@@ -719,17 +1027,31 @@ Result<void> RenderGraph::ExecuteRenderPass(const u32 pass_index, CommandEncoder
             return Err(ErrorCode::GraphicsResourceCreationFailed, "RenderGraph pass '" + pass.debug_name + "' missing depth attachment view");
         }
 
+        const bool read_only = !pass.depth->config.write;
         depth_attachment = RenderPassDepthStencilAttachmentDesc{
             .view = depth_view,
-            .depth_load_op = pass.depth->config.load,
-            .depth_store_op = pass.depth->config.store,
-            .depth_clear_value = pass.depth->config.clear,
-            .depth_read_only = !pass.depth->config.write,
+            .depth_load_op = read_only ? LoadOp::Undefined : pass.depth->config.load,
+            .depth_store_op = read_only ? StoreOp::Undefined : pass.depth->config.store,
+            .depth_clear_value = read_only ? kDepthClearValueUndefined : pass.depth->config.clear,
+            .depth_read_only = read_only,
+            .stencil_load_op = LoadOp::Undefined,
+            .stencil_store_op = StoreOp::Undefined,
+            .stencil_read_only = true,
         };
     }
 
     if (color_attachments.empty() && !depth_attachment.has_value()) {
         return Err(ErrorCode::ValidationInvalidState, "RenderGraph pass '" + pass.debug_name + "' has no render targets");
+    }
+
+    std::vector<TextureView*> sample_views{};
+    sample_views.reserve(pass.samples.size());
+    for (const SampleInput& sample : pass.samples) {
+        TextureView* view = ResolveSampleView(sample.resource_id, sample.mode);
+        if (view == nullptr) {
+            return Err(ErrorCode::GraphicsResourceCreationFailed, "RenderGraph pass '" + pass.debug_name + "' missing sample view");
+        }
+        sample_views.push_back(view);
     }
 
     RenderPassDescTyped pass_desc{};
@@ -740,6 +1062,9 @@ Result<void> RenderGraph::ExecuteRenderPass(const u32 pass_index, CommandEncoder
     auto pass_encoder = encoder.BeginRenderPass(pass_desc);
     if (!pass_encoder) {
         return Err(pass_encoder.error());
+    }
+    if (*pass_encoder == nullptr) {
+        return Err(ErrorCode::GraphicsResourceCreationFailed, "Command encoder returned a null render pass encoder");
     }
 
     RenderPassContext context{};
@@ -755,18 +1080,11 @@ Result<void> RenderGraph::ExecuteRenderPass(const u32 pass_index, CommandEncoder
     }
     context.depth_ = depth_attachment.has_value() ? depth_attachment->view : nullptr;
 
-    context.samples_.reserve(pass.samples.size());
-    for (const SampleInput& sample : pass.samples) {
-        TextureView* view = ResolveSampleView(sample.resource_id, sample.mode);
-        if (view == nullptr) {
-            return Err(ErrorCode::GraphicsResourceCreationFailed, "RenderGraph pass '" + pass.debug_name + "' missing sample view");
-        }
-        context.samples_.push_back(view);
-    }
+    context.samples_ = std::move(sample_views);
 
-    pass.render_execute(context);
+    Result<void> execute = pass.render_execute(context);
     pass_encoder->get()->End();
-    return Ok();
+    return execute;
 }
 
 Result<void> RenderGraph::ExecuteCopyPass(const u32 pass_index, CommandEncoder& encoder, const u32 width, const u32 height) {
@@ -791,21 +1109,30 @@ Result<void> RenderGraph::ExecuteCopyPass(const u32 pass_index, CommandEncoder& 
         context.destinations_.push_back(destination);
     }
 
-    pass.copy_execute(context);
-    return Ok();
+    return pass.copy_execute(context);
 }
 
-RenderGraphFrame RenderGraph::BeginFrame(const u32 width, const u32 height) {
+Result<RenderGraphFrame> RenderGraph::BeginFrame(const u32 width, const u32 height) {
+    if (device_ == nullptr) {
+        return Err(ErrorCode::InvalidState, "RenderGraph has no device");
+    }
+    if (width == 0 || height == 0) {
+        return Err(ErrorCode::ValidationOutOfRange, "RenderGraph frame dimensions must be non-zero");
+    }
     if (width != width_ || height != height_) {
-        (void)RebuildForResize(width, height);
+        TRY_VOID(RebuildForResize(width, height));
     }
 
     RenderGraphFrame frame(shared_from_this(), width, height);
     auto encoder = device_->CreateCommandEncoder({.label = "RenderGraphFrame"});
-    if (encoder) {
-        frame.encoder_ = std::move(*encoder);
+    if (!encoder) {
+        return Err(std::move(encoder).error());
     }
-    return frame;
+    if (*encoder == nullptr) {
+        return Err(ErrorCode::GraphicsResourceCreationFailed, "Device returned a null RenderGraph command encoder");
+    }
+    frame.encoder_ = std::move(*encoder);
+    return Ok(std::move(frame));
 }
 
 // --- RenderGraphFrame ---
@@ -813,9 +1140,42 @@ RenderGraphFrame RenderGraph::BeginFrame(const u32 width, const u32 height) {
 RenderGraphFrame::RenderGraphFrame(ref<RenderGraph> graph, const u32 width, const u32 height)
     : graph_(std::move(graph)),
       width_(width),
-      height_(height) {}
+      height_(height) {
+    ++graph_->active_frame_count_;
+}
 
-RenderGraphFrame::~RenderGraphFrame() = default;
+RenderGraphFrame::RenderGraphFrame(RenderGraphFrame&& other) noexcept
+    : graph_(std::move(other.graph_)),
+      width_(other.width_),
+      height_(other.height_),
+      encoder_(std::move(other.encoder_)),
+      per_frame_views_(std::move(other.per_frame_views_)),
+      executed_(other.executed_) {}
+
+RenderGraphFrame& RenderGraphFrame::operator=(RenderGraphFrame&& other) noexcept {
+    if (this != &other) {
+        ReleaseFrame();
+        graph_ = std::move(other.graph_);
+        width_ = other.width_;
+        height_ = other.height_;
+        encoder_ = std::move(other.encoder_);
+        per_frame_views_ = std::move(other.per_frame_views_);
+        executed_ = other.executed_;
+    }
+    return *this;
+}
+
+RenderGraphFrame::~RenderGraphFrame() {
+    ReleaseFrame();
+}
+
+void RenderGraphFrame::ReleaseFrame() noexcept {
+    if (graph_ != nullptr) {
+        WOKI_ASSERT(graph_->active_frame_count_ > 0);
+        --graph_->active_frame_count_;
+        graph_.reset();
+    }
+}
 
 void RenderGraphFrame::Bind(const PerFrameSlot slot, ref<TextureView> view) {
     if (!slot || graph_ == nullptr) {
@@ -826,9 +1186,13 @@ void RenderGraphFrame::Bind(const PerFrameSlot slot, ref<TextureView> view) {
 }
 
 Result<void> RenderGraphFrame::Execute() {
+    if (executed_) {
+        return Err(ErrorCode::InvalidState, "RenderGraphFrame has already been executed");
+    }
     if (graph_ == nullptr || graph_->device_ == nullptr || !encoder_) {
         return Err(ErrorCode::InvalidState, "RenderGraphFrame is invalid");
     }
+    executed_ = true;
 
     for (size_t pass_index = 0; pass_index < graph_->blueprint_.passes.size(); ++pass_index) {
         const PassRecord& pass = graph_->blueprint_.passes[pass_index];
@@ -847,8 +1211,12 @@ Result<void> RenderGraphFrame::Execute() {
     if (!command_buffer) {
         return Err(command_buffer.error());
     }
+    if (*command_buffer == nullptr) {
+        return Err(ErrorCode::GraphicsResourceCreationFailed, "Command encoder returned a null command buffer");
+    }
 
     CommandBuffer* buffers[] = {command_buffer->get()};
+    encoder_.reset();
     return graph_->device_->GetQueue().Submit(buffers);
 }
 

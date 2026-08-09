@@ -227,6 +227,29 @@ __attribute__((export_name("ext_on_unload"))) void ext_on_unload(void) {}
     REQUIRE(initialized.error().Message().contains("-3"));
 }
 
+TEST_CASE("Wasmtime engine enforces emitted event payload limit") {
+    const fs::path root = MakeTempDir("oversize_emitted_event");
+    const fs::path source = root / "extension.c";
+    WriteFile(source, R"c(
+__attribute__((import_module("woki_host"), import_name("host_event_emit")))
+extern int host_event_emit(unsigned type, const unsigned char* payload, unsigned len);
+unsigned char memory_anchor[8192];
+__attribute__((export_name("ext_api_version"))) unsigned ext_api_version(void) { return 1; }
+__attribute__((export_name("ext_init"))) int ext_init(void) { return host_event_emit(1, memory_anchor, 65537); }
+__attribute__((export_name("ext_on_tick"))) void ext_on_tick(double delta_ms) { (void)delta_ms; }
+__attribute__((export_name("ext_on_event"))) void ext_on_event(unsigned t, unsigned p, unsigned l) { (void)t; (void)p; (void)l; }
+__attribute__((export_name("ext_on_unload"))) void ext_on_unload(void) {}
+)c");
+    REQUIRE(CompileWasm(source, root / "extension.wasm", StandardExports()));
+
+    auto record = MakeRecord(root, {woki::ext::Permission::Events});
+    auto backend = MakeBackend();
+    REQUIRE(backend.Load(record).has_value());
+    auto initialized = backend.Initialize(record);
+    REQUIRE_FALSE(initialized.has_value());
+    REQUIRE(initialized.error().Message().contains("-3"));
+}
+
 TEST_CASE("Wasmtime engine dispatches commands through optional export") {
     const fs::path root = MakeTempDir("command_dispatch");
     const fs::path source = root / "extension.c";

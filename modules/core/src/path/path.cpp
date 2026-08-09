@@ -1,3 +1,4 @@
+#include <limits>
 #include <string>
 #include <cstdlib>
 #include <optional>
@@ -55,12 +56,18 @@ namespace {
 Result<Path> ExecutablePath() {
 #if defined(_WIN32)
     std::string buffer(MAX_PATH, '\0');
-    const DWORD length = GetModuleFileNameA(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
-    if (length == 0) {
-        return Err(ErrorCode::FileReadError, "Failed to query executable path");
+    while (buffer.size() <= std::numeric_limits<DWORD>::max()) {
+        const DWORD length = GetModuleFileNameA(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
+        if (length == 0) {
+            return Err(ErrorCode::FileReadError, "Failed to query executable path");
+        }
+        if (length < buffer.size()) {
+            buffer.resize(length);
+            return Ok(Path(buffer));
+        }
+        buffer.resize(buffer.size() * 2);
     }
-    buffer.resize(length);
-    return Ok(Path(buffer));
+    return Err(ErrorCode::FileReadError, "Executable path is too long");
 #elif defined(__APPLE__)
     uint32_t size = 0;
     _NSGetExecutablePath(nullptr, &size);
@@ -71,12 +78,17 @@ Result<Path> ExecutablePath() {
     return Ok(Path(buffer).lexically_normal());
 #elif defined(__linux__)
     std::string buffer(PATH_MAX, '\0');
-    const auto length = readlink("/proc/self/exe", buffer.data(), buffer.size());
-    if (length < 0) {
-        return Err(ErrorCode::FileReadError, "Failed to query executable path");
+    while (true) {
+        const auto length = readlink("/proc/self/exe", buffer.data(), buffer.size());
+        if (length < 0) {
+            return Err(ErrorCode::FileReadError, "Failed to query executable path");
+        }
+        if (static_cast<std::size_t>(length) < buffer.size()) {
+            buffer.resize(static_cast<std::size_t>(length));
+            return Ok(Path(buffer));
+        }
+        buffer.resize(buffer.size() * 2);
     }
-    buffer.resize(static_cast<std::size_t>(length));
-    return Ok(Path(buffer));
 #else
     return Err(ErrorCode::InvalidState, "ExecutablePath is unsupported on this platform");
 #endif
@@ -272,7 +284,9 @@ Result<Path> Normalize(const Path& path) {
 
 Result<void> EnsureDirectory(const Path& path) {
     try {
-        std::filesystem::create_directories(path);
+        if (!std::filesystem::create_directories(path) && !std::filesystem::is_directory(path)) {
+            return Err(ErrorCode::FileWriteError, "Path exists and is not a directory");
+        }
         return Ok();
     } catch (const std::filesystem::filesystem_error& exception) {
         return Err(ErrorCode::FileWriteError, exception.what());

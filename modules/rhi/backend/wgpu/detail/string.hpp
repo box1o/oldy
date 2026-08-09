@@ -21,29 +21,7 @@ namespace woki::rhi::wgpu::detail {
 }
 
 [[nodiscard]] inline TextureUsage TextureUsageFromWgpu(WGPUTextureUsage flags) noexcept {
-    TextureUsage result = TextureUsage::None;
-    if ((flags & WGPUTextureUsage_CopySrc) != 0) {
-        result = result | TextureUsage::CopySrc;
-    }
-    if ((flags & WGPUTextureUsage_CopyDst) != 0) {
-        result = result | TextureUsage::CopyDst;
-    }
-    if ((flags & WGPUTextureUsage_TextureBinding) != 0) {
-        result = result | TextureUsage::TextureBinding;
-    }
-    if ((flags & WGPUTextureUsage_StorageBinding) != 0) {
-        result = result | TextureUsage::StorageBinding;
-    }
-    if ((flags & WGPUTextureUsage_RenderAttachment) != 0) {
-        result = result | TextureUsage::RenderAttachment;
-    }
-    if ((flags & WGPUTextureUsage_TransientAttachment) != 0) {
-        result = result | TextureUsage::TransientAttachment;
-    }
-    if ((flags & WGPUTextureUsage_StorageAttachment) != 0) {
-        result = result | TextureUsage::StorageAttachment;
-    }
-    return result;
+    return static_cast<TextureUsage>(static_cast<u64>(flags));
 }
 
 [[nodiscard]] inline WGPUTextureUsage TextureUsageToWgpu(TextureUsage usage) noexcept {

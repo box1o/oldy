@@ -53,6 +53,36 @@ struct ThrowingComponent {
     }
 };
 
+struct ConstructionTrackedComponent {
+    static inline int constructions = 0;
+
+    int value;
+
+    explicit ConstructionTrackedComponent(int initial_value)
+        : value(initial_value) {
+        ++constructions;
+    }
+};
+
+struct LifetimeTrackedComponent {
+    static inline int alive = 0;
+    static inline int destructions = 0;
+
+    LifetimeTrackedComponent() {
+        ++alive;
+    }
+
+    ~LifetimeTrackedComponent() {
+        --alive;
+        ++destructions;
+    }
+
+    LifetimeTrackedComponent(const LifetimeTrackedComponent&) = delete;
+    LifetimeTrackedComponent& operator=(const LifetimeTrackedComponent&) = delete;
+    LifetimeTrackedComponent(LifetimeTrackedComponent&&) = delete;
+    LifetimeTrackedComponent& operator=(LifetimeTrackedComponent&&) = delete;
+};
+
 } // namespace
 
 TEST_CASE("Registry spawns destroys and recycles entities with new generations") {
@@ -95,6 +125,99 @@ TEST_CASE("Registry manages component lifetime and lookup") {
     REQUIRE(registry.Remove<Position>(entity));
     REQUIRE_FALSE(registry.Has<Position>(entity));
     REQUIRE_FALSE(registry.Remove<Position>(entity));
+}
+
+TEST_CASE("Removing a middle component preserves sparse set lookup") {
+    woki::Registry registry;
+    const woki::Entity first = registry.Create();
+    const woki::Entity middle = registry.Create();
+    const woki::Entity last = registry.Create();
+
+    registry.Emplace<Position>(first, 1.0f, 10.0f);
+    registry.Emplace<Position>(middle, 2.0f, 20.0f);
+    registry.Emplace<Position>(last, 3.0f, 30.0f);
+
+    REQUIRE(registry.Remove<Position>(middle));
+
+    REQUIRE(registry.Count<Position>() == 2);
+    REQUIRE_FALSE(registry.Has<Position>(middle));
+    REQUIRE(registry.TryGet<Position>(middle) == nullptr);
+    REQUIRE(registry.Get<Position>(first).x == 1.0f);
+    REQUIRE(registry.Get<Position>(first).y == 10.0f);
+    REQUIRE(registry.Get<Position>(last).x == 3.0f);
+    REQUIRE(registry.Get<Position>(last).y == 30.0f);
+
+    REQUIRE(registry.Remove<Position>(last));
+    REQUIRE(registry.Count<Position>() == 1);
+    REQUIRE(registry.Get<Position>(first).x == 1.0f);
+}
+
+TEST_CASE("Recycled entity indices reject stale component handles") {
+    woki::Registry registry;
+    const woki::Entity stale = registry.Create();
+    registry.Emplace<Position>(stale, 1.0f, 2.0f);
+
+    REQUIRE(registry.Destroy(stale));
+    const woki::Entity recycled = registry.Create();
+
+    REQUIRE(recycled.Index() == stale.Index());
+    REQUIRE(recycled.Generation() != stale.Generation());
+    REQUIRE_FALSE(registry.Valid(stale));
+    REQUIRE_FALSE(registry.Has<Position>(stale));
+    REQUIRE(registry.TryGet<Position>(stale) == nullptr);
+    REQUIRE_FALSE(registry.Remove<Position>(stale));
+    REQUIRE_FALSE(registry.Has<Position>(recycled));
+
+    registry.Emplace<Position>(recycled, 3.0f, 4.0f);
+    REQUIRE(registry.Get<Position>(recycled).x == 3.0f);
+    REQUIRE_FALSE(registry.Remove<Position>(stale));
+    REQUIRE(registry.Has<Position>(recycled));
+}
+
+TEST_CASE("GetOrEmplace returns an existing component without reconstructing it") {
+    ConstructionTrackedComponent::constructions = 0;
+
+    woki::Registry registry;
+    const woki::Entity entity = registry.Create();
+    ConstructionTrackedComponent& original = registry.GetOrEmplace<ConstructionTrackedComponent>(entity, 42);
+
+    REQUIRE(ConstructionTrackedComponent::constructions == 1);
+
+    ConstructionTrackedComponent& fetched = registry.GetOrEmplace<ConstructionTrackedComponent>(entity, 99);
+
+    REQUIRE(&fetched == &original);
+    REQUIRE(fetched.value == 42);
+    REQUIRE(ConstructionTrackedComponent::constructions == 1);
+    REQUIRE(registry.Count<ConstructionTrackedComponent>() == 1);
+}
+
+TEST_CASE("Destroy and clear release component instances exactly once") {
+    LifetimeTrackedComponent::alive = 0;
+    LifetimeTrackedComponent::destructions = 0;
+
+    woki::Registry registry;
+    const woki::Entity first = registry.Create();
+    const woki::Entity second = registry.Create();
+    registry.Emplace<LifetimeTrackedComponent>(first);
+    registry.Emplace<LifetimeTrackedComponent>(second);
+
+    REQUIRE(LifetimeTrackedComponent::alive == 2);
+    REQUIRE(registry.Destroy(first));
+    REQUIRE(LifetimeTrackedComponent::alive == 1);
+    REQUIRE(LifetimeTrackedComponent::destructions == 1);
+
+    registry.Clear<LifetimeTrackedComponent>();
+    REQUIRE(LifetimeTrackedComponent::alive == 0);
+    REQUIRE(LifetimeTrackedComponent::destructions == 2);
+    REQUIRE(registry.Valid(second));
+
+    registry.Emplace<LifetimeTrackedComponent>(second);
+    REQUIRE(LifetimeTrackedComponent::alive == 1);
+
+    registry.Clear();
+    REQUIRE(LifetimeTrackedComponent::alive == 0);
+    REQUIRE(LifetimeTrackedComponent::destructions == 3);
+    REQUIRE_FALSE(registry.Valid(second));
 }
 
 TEST_CASE("Views iterate entities that match all requested components") {
@@ -228,6 +351,32 @@ TEST_CASE("Failed component construction leaves storage unchanged") {
     REQUIRE(registry.Count<ThrowingComponent>() == 0);
 }
 
+TEST_CASE("Invalid component reference operations fail safely") {
+    woki::Registry registry;
+    const woki::Entity entity = registry.Create();
+    const woki::Entity dead = woki::Entity::Null();
+
+    REQUIRE_THROWS_AS(registry.Get<Position>(entity), std::out_of_range);
+    REQUIRE_THROWS_AS(registry.Emplace<Position>(dead), std::invalid_argument);
+    REQUIRE_THROWS_AS(registry.GetOrEmplace<Position>(dead), std::invalid_argument);
+
+    registry.Emplace<Position>(entity);
+    REQUIRE_THROWS_AS(registry.Emplace<Position>(entity), std::logic_error);
+    REQUIRE(registry.Count<Position>() == 1);
+}
+
+TEST_CASE("Views reject entities outside their component intersection") {
+    woki::Registry registry;
+    const woki::Entity included = registry.Create();
+    const woki::Entity excluded = registry.Create();
+    registry.Emplace<Position>(included);
+
+    const auto view = registry.View<Position>();
+
+    REQUIRE_THROWS_AS(view.Get(excluded), std::out_of_range);
+    REQUIRE_THROWS_AS(view.Get(woki::Entity::Null()), std::out_of_range);
+}
+
 TEST_CASE("Views remain valid when registry storage changes") {
     woki::Registry registry;
     const woki::Entity first = registry.Create();
@@ -241,4 +390,22 @@ TEST_CASE("Views remain valid when registry storage changes") {
 
     REQUIRE(view.Empty());
     REQUIRE(registry.View<Position>().Size() == 1);
+}
+
+TEST_CASE("View iteration remains valid when callbacks destroy current entities") {
+    woki::Registry registry;
+    for (int value = 0; value < 3; ++value) {
+        const woki::Entity entity = registry.Create();
+        registry.Emplace<Position>(entity, static_cast<float>(value));
+    }
+
+    std::size_t visited = 0;
+    registry.View<Position>().Each([&](woki::Entity entity, Position&) {
+        ++visited;
+        REQUIRE(registry.Destroy(entity));
+    });
+
+    REQUIRE(visited == 3);
+    REQUIRE(registry.Empty());
+    REQUIRE(registry.Count<Position>() == 0);
 }

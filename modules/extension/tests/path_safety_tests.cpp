@@ -8,4 +8,7 @@ TEST_CASE("Extension path safety rejects traversal") {
     REQUIRE_FALSE(woki::ext::IsSafeRelativePath(std::filesystem::path{}));
     REQUIRE(woki::ext::IsSafeRelativePath(std::filesystem::path{"assets/icon.png"}));
     REQUIRE_FALSE(woki::ext::IsSafeRelativePath(std::filesystem::path{"/abs"}));
+    REQUIRE_FALSE(woki::ext::IsSafeRelativePath(std::filesystem::path{"assets/./icon.png"}));
+    REQUIRE_FALSE(woki::ext::IsSafeRelativePath(std::filesystem::path{"..\\secret"}));
+    REQUIRE_FALSE(woki::ext::IsSafeRelativePath(std::filesystem::path{"C:/extension.wasm"}));
 }

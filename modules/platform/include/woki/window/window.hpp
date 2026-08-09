@@ -81,10 +81,10 @@ private:
     void HandleCursorMoved(f32 x, f32 y) noexcept;
     void HandleMouseButton(i32 button, i32 action) noexcept;
     void HandleWindowCloseRequested() noexcept;
-    void EmitEvent(events::Event& event);
+    void EmitEvent(events::Event& event) noexcept;
 
     template <typename T, typename... Args>
-    void EmitEvent(Args&&... args) {
+    void EmitEvent(Args&&... args) noexcept {
         T event(std::forward<Args>(args)...);
         EmitEvent(event);
     }
