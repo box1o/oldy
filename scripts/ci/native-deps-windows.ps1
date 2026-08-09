@@ -5,7 +5,11 @@ if ($env:VCPKG_INSTALLATION_ROOT) {
 } elseif (Test-Path 'C:\vcpkg\vcpkg.exe') {
     $vcpkgRoot = 'C:\vcpkg'
 } else {
-  throw 'vcpkg was not found on this runner (expected C:\vcpkg or VCPKG_INSTALLATION_ROOT)'
+    throw 'vcpkg was not found on this runner (expected C:\vcpkg or VCPKG_INSTALLATION_ROOT)'
+}
+
+if ($env:VCPKG_DEFAULT_BINARY_CACHE) {
+    New-Item -ItemType Directory -Force -Path $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
 }
 
 & (Join-Path $vcpkgRoot 'vcpkg.exe') install `
@@ -14,9 +18,11 @@ if ($env:VCPKG_INSTALLATION_ROOT) {
 
 "VCPKG_ROOT=$vcpkgRoot" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
-choco install llvm -y --no-progress
-
 $llvmBin = 'C:\Program Files\LLVM\bin'
+if (-not (Test-Path (Join-Path $llvmBin 'clang++.exe'))) {
+    choco install llvm -y --no-progress
+}
+
 if (-not (Test-Path (Join-Path $llvmBin 'clang++.exe'))) {
     throw "LLVM clang++ was not installed at $llvmBin"
 }
