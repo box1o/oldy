@@ -615,7 +615,7 @@ TEST_CASE("ExtensionManager reports a committed install without mutating the act
 
     const auto installed = manager.InstallUnpacked(source);
     REQUIRE(installed);
-    CHECK(installed->install_root == root / "extensions" / "woki.new");
+    CHECK(fs::equivalent(installed->install_root, root / "extensions" / "woki.new"));
     CHECK(fs::is_regular_file(installed->manifest));
     CHECK(manager.Find("woki.old") != nullptr);
     CHECK(manager.Find("woki.new") == nullptr);
@@ -640,7 +640,7 @@ TEST_CASE("ExtensionManager install completes only missing roots") {
     const auto installed = manager.InstallUnpacked(source);
 
     REQUIRE(installed);
-    CHECK(installed->install_root == extensions / "woki.partial");
+    CHECK(fs::equivalent(installed->install_root, extensions / "woki.partial"));
 }
 
 TEST_CASE("Web bridge uses session handles, external config roots, and caller-owned errors") {
