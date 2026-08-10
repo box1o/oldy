@@ -8,7 +8,7 @@
 #include <iomanip>
 #include <sstream>
 #else
-#include <cstdlib>
+#include <stdlib.h>
 #endif
 
 #include "cli_internal.hpp"

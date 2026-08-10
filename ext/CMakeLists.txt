@@ -55,6 +55,15 @@ target_include_directories(wokiext PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 apply_compiler_options(wokiext)
 target_link_libraries(wokiext PRIVATE wokiext_cli)
 
+if(WIN32 AND EXISTS "${CDEPS_ROOT}/wasmtime-c-api/lib/wasmtime.dll")
+    add_custom_command(TARGET wokiext POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CDEPS_ROOT}/wasmtime-c-api/lib/wasmtime.dll"
+            "$<TARGET_FILE_DIR:wokiext>"
+        VERBATIM
+    )
+endif()
+
 install(TARGETS wokiext
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
@@ -81,6 +90,9 @@ if(BUILD_TESTING)
     )
     apply_compiler_options(wokiext_cli_unit_tests)
     target_link_libraries(wokiext_cli_unit_tests PRIVATE wokiext_cli Catch2::Catch2WithMain)
+    if(TARGET woki_tests)
+        add_dependencies(woki_tests wokiext_cli_unit_tests)
+    endif()
     add_test(NAME wokiext_cli_unit COMMAND wokiext_cli_unit_tests)
     set_tests_properties(wokiext_cli_unit PROPERTIES
         ENVIRONMENT "TMPDIR=${CMAKE_CURRENT_BINARY_DIR}/test-tmp;TEMP=${CMAKE_CURRENT_BINARY_DIR}/test-tmp;TMP=${CMAKE_CURRENT_BINARY_DIR}/test-tmp"
