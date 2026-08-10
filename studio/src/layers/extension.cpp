@@ -1,6 +1,5 @@
-#include "woki/events/format.hpp"
-
 #include "extension.hpp"
+#include "extension_event_adapter.hpp"
 
 namespace woki {
 
@@ -16,11 +15,20 @@ namespace {
 #endif
 }
 
-[[nodiscard]] scope<ext::Manager> CreateExtensionManager() {
-    return createScope<ext::Manager>(ext::wasm::Backend::Create());
+} // namespace
+
+void StudioExtensionEventBus::Bind(ext::ExtensionManager* manager) noexcept {
+    manager_ = manager;
 }
 
-} // namespace
+void StudioExtensionEventBus::Publish(const ext::host::Event& event) {
+    if (manager_ == nullptr)
+        return;
+    if (event.topic)
+        manager_->DispatchNamedEvent(*event.topic, event.payload);
+    else
+        manager_->DispatchEvent(event.type, event.payload);
+}
 
 void ExtensionLayer::OnAttach(Context& ctx) {
     (void)ctx;
@@ -32,6 +40,7 @@ void ExtensionLayer::OnDetach(Context& ctx) {
     if (extensions_ != nullptr) {
         extensions_->UnloadAll();
         extensions_.reset();
+        event_bus_.Bind(nullptr);
     }
 }
 
@@ -57,31 +66,50 @@ void ExtensionLayer::OnEvent(Context& ctx, events::Event& event) {
 }
 
 void ExtensionLayer::LoadInstalledExtensions() {
-    extensions_ = CreateExtensionManager();
+    ext::HostOptions host_options{.event_bus = &event_bus_};
+#if defined(__EMSCRIPTEN__) && defined(WOKI_SOURCE_EXTENSIONS_DIR)
+    // This build-time directory contains only Studio's bundled first-party packages.
+    host_options.allow_trusted_synchronous_web = true;
+#endif
+    extensions_ = ext::CreateExtensionManager(host_options);
+    event_bus_.Bind(extensions_.get());
     if (extensions_ == nullptr) {
         slog::Warn("Extension manager could not be created");
         return;
     }
 
-    if (auto scanned = extensions_->Scan(); !scanned) {
+#ifdef WOKI_SOURCE_EXTENSIONS_DIR
+    auto roots = ext::DefaultRoots();
+    if (!roots) {
+        slog::Warn("Failed to resolve extension roots: {}", roots.error().Message());
+        return;
+    }
+    const std::filesystem::path bundled_root = SourceExtensionsRoot();
+    roots->extensions = bundled_root;
+    extensions_->SetRoots(std::move(*roots));
+    auto scanned = extensions_->ScanSource(bundled_root);
+#else
+    auto scanned = extensions_->Scan();
+#endif
+    if (!scanned) {
         slog::Warn("Extension scan failed: {}", scanned.error().Message());
         return;
     }
 
-    if (auto loaded = extensions_->LoadAll(); !loaded) {
-        slog::Warn("Extension load failed: {}", loaded.error().Message());
+    for (const ext::DiscoveryFailure& failure : extensions_->Failures()) {
+        slog::Warn("Installed extension '{}' at '{}' failed discovery: {}", failure.CandidateId(), failure.PackageRoot().string(), failure.Cause().Message());
+    }
+
+    if (auto loaded = extensions_->ActivateStartup(); !loaded) {
+        slog::Warn("Extension startup activation failed: {}", loaded.error().Message());
+    }
+    for (const ext::ExtensionStatus& status : extensions_->Statuses()) {
+        if (status.state == ext::ExtensionState::Failed)
+            slog::Warn("Installed extension '{}' failed: {}", status.extension_id, status.error);
     }
 }
 
 void ExtensionLayer::LoadSourceExtensions() {
-    if (extensions_ == nullptr) {
-        extensions_ = CreateExtensionManager();
-        if (extensions_ == nullptr) {
-            slog::Warn("Extension manager could not be created");
-            return;
-        }
-    }
-
     auto roots = ext::DefaultRoots();
     if (!roots) {
         slog::Warn("Failed to resolve extension roots: {}", roots.error().Message());
@@ -91,31 +119,50 @@ void ExtensionLayer::LoadSourceExtensions() {
     const std::filesystem::path source_root = SourceExtensionsRoot();
     roots->extensions = source_root;
 
-    extensions_->UnloadAll();
-    extensions_->SetRoots(std::move(*roots));
+    auto candidate = ext::CreateExtensionManager({.event_bus = &event_bus_});
+    if (candidate == nullptr) {
+        slog::Warn("Extension manager could not be created");
+        return;
+    }
+    event_bus_.Bind(candidate.get());
+    candidate->SetRoots(std::move(*roots));
 
-    if (auto scanned = extensions_->ScanSource(source_root); !scanned) {
+    if (auto scanned = candidate->ScanSource(source_root); !scanned) {
+        candidate->UnloadAll();
+        event_bus_.Bind(extensions_.get());
         slog::Warn("Source extension scan failed: {}", scanned.error().Message());
         return;
     }
 
-    if (auto loaded = extensions_->LoadAll(); !loaded) {
-        slog::Warn("Source extension load failed: {}", loaded.error().Message());
+    for (const ext::DiscoveryFailure& failure : candidate->Failures()) {
+        slog::Warn("Source extension '{}' at '{}' failed discovery: {}", failure.CandidateId(), failure.PackageRoot().string(), failure.Cause().Message());
+    }
+
+    if (auto loaded = candidate->ActivateStartup(); !loaded) {
+        for (const ext::ExtensionStatus& status : candidate->Statuses()) {
+            if (status.state == ext::ExtensionState::Failed)
+                slog::Warn("Source extension '{}' failed: {}", status.extension_id, status.error);
+        }
+        candidate->UnloadAll();
+        event_bus_.Bind(extensions_.get());
+        slog::Warn("Source extension startup activation failed: {}", loaded.error().Message());
         return;
     }
 
-    u32 active_count = 0;
-    for (const ext::Record& record : extensions_->Records()) {
-        if (record.state == ext::State::Active) {
-            ++active_count;
-            continue;
-        }
-        if (record.state == ext::State::Failed) {
-            slog::Warn("Extension '{}' failed: {}", record.id, record.error);
+    for (const ext::ExtensionStatus& status : candidate->Statuses()) {
+        if (status.state == ext::ExtensionState::Failed) {
+            slog::Warn("Extension '{}' failed: {}", status.extension_id, status.error);
         }
     }
 
-    slog::Info("Loaded {} source extension(s) from {}", active_count, source_root.string());
+    const std::size_t package_count = candidate->Packages().size();
+    event_bus_.Bind(extensions_.get());
+    if (extensions_ != nullptr)
+        extensions_->UnloadAll();
+    event_bus_.Bind(candidate.get());
+    extensions_ = std::move(candidate);
+    event_bus_.Bind(extensions_.get());
+    slog::Info("Loaded {} source extension(s) from {}", package_count, source_root.string());
 }
 
 void ExtensionLayer::ExecuteRegisteredCommands() {
@@ -123,7 +170,7 @@ void ExtensionLayer::ExecuteRegisteredCommands() {
         return;
     }
 
-    const auto& commands = extensions_->Commands().Records();
+    const auto commands = extensions_->Commands();
     if (commands.empty()) {
         slog::Info("No extension commands registered");
         return;
@@ -143,12 +190,12 @@ void ExtensionLayer::DispatchEventToExtensions(const events::Event& event) {
         return;
     }
 
-    if (!events::ShouldForwardToExtensions(event.GetEventType())) {
+    const auto encoded = EncodeExtensionEvent(event);
+    if (!encoded) {
         return;
     }
 
-    const std::string payload = events::ToJson(event);
-    extensions_->DispatchEvent(static_cast<u32>(event.GetEventType()), std::span<const u8>(reinterpret_cast<const u8*>(payload.data()), payload.size()));
+    extensions_->DispatchEvent(static_cast<u32>(encoded->type), encoded->Payload());
 }
 
 } // namespace woki

@@ -3,7 +3,7 @@
 #include <string_view>
 #include <catch2/catch_test_macros.hpp>
 
-#include <woki/ext/ext.hpp>
+#include <woki/ext/manifest.hpp>
 
 namespace {
 
@@ -77,6 +77,49 @@ contributes:
     REQUIRE(manifest->commands.front().category == "Examples");
 }
 
+TEST_CASE("Extension manifest parses explicit activation and defaults to lazy only") {
+    const fs::path root = MakeTempDir("activation");
+    WriteFile(root / "manifest.yaml", R"(
+id: woki.hello
+name: Hello
+version: 1.0.0
+apiVersion: 1
+runtime:
+  wasm: extension.wasm
+permissions: [events]
+activation:
+  startup: true
+  tick: true
+  events: [window.resized, app.resume]
+)");
+    auto manifest = woki::ext::LoadManifest(root / "manifest.yaml");
+    REQUIRE(manifest);
+    CHECK(manifest->activation.startup);
+    CHECK(manifest->activation.tick);
+    CHECK(woki::ext::ActivatesOn(*manifest, woki::ext::ApplicationEventType::WindowResized));
+    CHECK(woki::ext::ActivatesOn(*manifest, woki::ext::ApplicationEventType::AppResume));
+
+    WriteFile(root / "manifest.yaml", kValidManifest);
+    manifest = woki::ext::LoadManifest(root / "manifest.yaml");
+    REQUIRE(manifest);
+    CHECK_FALSE(manifest->activation.startup);
+    CHECK_FALSE(manifest->activation.tick);
+    CHECK(manifest->activation.events.empty());
+}
+
+TEST_CASE("Extension manifest rejects invalid activation metadata") {
+    const fs::path root = MakeTempDir("invalid_activation");
+    WriteFile(root / "manifest.yaml", std::string(kValidManifest) + "activation:\n  events: [window.resized]\n");
+    auto manifest = woki::ext::LoadManifest(root / "manifest.yaml");
+    REQUIRE_FALSE(manifest);
+    CHECK(manifest.error().Message().contains("events' permission"));
+
+    WriteFile(root / "manifest.yaml", std::string(kValidManifest) + "activation:\n  events: [not.an-event]\n");
+    manifest = woki::ext::LoadManifest(root / "manifest.yaml");
+    REQUIRE_FALSE(manifest);
+    CHECK(manifest.error().Message().contains("not.an-event"));
+}
+
 TEST_CASE("Extension manifest rejects command ids outside the extension namespace") {
     const fs::path root = MakeTempDir("bad_command_id");
     const fs::path path = root / "manifest.yaml";
@@ -106,7 +149,7 @@ TEST_CASE("Extension manifest rejects invalid id") {
     manifest.id = "Woki.Hello";
     manifest.name = "Hello";
     manifest.version = "0.1.0";
-    manifest.permissions = {woki::ext::Permission::Log};
+    manifest.requested_capabilities.permissions = {woki::ext::Permission::Log};
 
     auto valid = woki::ext::ValidateManifest(manifest);
     REQUIRE_FALSE(valid.has_value());
@@ -120,7 +163,7 @@ TEST_CASE("Extension manifest rejects malformed id segments") {
     manifest.id = "woki.-hello";
     manifest.name = "Hello";
     manifest.version = "0.1.0";
-    manifest.permissions = {woki::ext::Permission::Log};
+    manifest.requested_capabilities.permissions = {woki::ext::Permission::Log};
 
     auto valid = woki::ext::ValidateManifest(manifest);
     REQUIRE_FALSE(valid.has_value());
@@ -133,7 +176,7 @@ TEST_CASE("Extension manifest rejects path traversal") {
     manifest.name = "Hello";
     manifest.version = "0.1.0";
     manifest.wasm_path = "../extension.wasm";
-    manifest.permissions = {woki::ext::Permission::Log};
+    manifest.requested_capabilities.permissions = {woki::ext::Permission::Log};
 
     auto valid = woki::ext::ValidateManifest(manifest);
     REQUIRE_FALSE(valid.has_value());
@@ -166,7 +209,7 @@ TEST_CASE("Extension manifest validates package directory name") {
     manifest.id = "woki.hello";
     manifest.name = "Hello";
     manifest.version = "0.1.0";
-    manifest.permissions = {woki::ext::Permission::Log};
+    manifest.requested_capabilities.permissions = {woki::ext::Permission::Log};
 
     auto valid = woki::ext::ValidateManifestForPackage(manifest, "woki.other");
     REQUIRE_FALSE(valid.has_value());
@@ -231,7 +274,8 @@ TEST_CASE("Extension manifest rejects runtime paths with dot components") {
         .name = "Hello",
         .version = "0.1.0",
         .wasm_path = "nested/./extension.wasm",
-        .permissions = {},
+        .requested_capabilities = {},
+        .activation = {},
         .commands = {},
     };
     REQUIRE_FALSE(woki::ext::ValidateManifest(manifest).has_value());
@@ -253,4 +297,104 @@ permissions: []
     auto manifest = woki::ext::LoadManifest(path);
     REQUIRE_FALSE(manifest.has_value());
     REQUIRE(manifest.error().Message().contains("backslashes"));
+}
+
+TEST_CASE("Extension manifest enforces Semantic Versioning 2.0.0") {
+    auto manifest = woki::ext::Manifest{
+        .id = "woki.hello",
+        .name = "Hello",
+        .version = "1.2.3-alpha.1+build.7",
+        .requested_capabilities = {},
+        .activation = {},
+        .commands = {},
+    };
+    REQUIRE(woki::ext::ValidateManifest(manifest).has_value());
+
+    for (const std::string_view invalid : {"1", "1.2", "01.2.3", "1.02.3", "1.2.03", "1.2.3-01", "1.2.3+", "v1.2.3"}) {
+        manifest.version = invalid;
+        REQUIRE_FALSE(woki::ext::ValidateManifest(manifest).has_value());
+    }
+}
+
+TEST_CASE("Extension manifest rejects duplicate YAML keys") {
+    const fs::path root = MakeTempDir("duplicate_keys");
+    const fs::path path = root / "manifest.yaml";
+    WriteFile(path, R"(
+id: woki.hello
+id: woki.other
+name: Hello
+version: 1.0.0
+apiVersion: 1
+runtime:
+  wasm: extension.wasm
+permissions: []
+)");
+
+    auto manifest = woki::ext::LoadManifest(path);
+    REQUIRE_FALSE(manifest.has_value());
+    INFO(manifest.error().Message());
+    REQUIRE(manifest.error().Message().contains("map keys must be unique"));
+}
+
+TEST_CASE("Extension manifest enforces field size limits") {
+    auto manifest = woki::ext::Manifest{
+        .id = "woki.hello",
+        .name = std::string(woki::ext::kMaxManifestNameBytes + 1, 'x'),
+        .version = "1.0.0",
+        .requested_capabilities = {},
+        .activation = {},
+        .commands = {},
+    };
+    auto valid = woki::ext::ValidateManifest(manifest);
+    REQUIRE_FALSE(valid.has_value());
+    REQUIRE(valid.error().Code() == woki::ErrorCode::ValidationOutOfRange);
+}
+
+TEST_CASE("Extension manifest programmatic validation matches schema constraints") {
+    auto manifest = woki::ext::Manifest{
+        .id = "woki.hello",
+        .name = "Hello",
+        .version = "1.0.0",
+        .requested_capabilities = {{woki::ext::Permission::Log}},
+        .activation = {},
+        .commands = {{"woki.hello.run", "Run", "Tools"}},
+    };
+    REQUIRE(woki::ext::ValidateManifest(manifest));
+
+    manifest.requested_capabilities.permissions.push_back(woki::ext::Permission::Log);
+    REQUIRE_FALSE(woki::ext::ValidateManifest(manifest));
+    manifest.requested_capabilities.permissions.pop_back();
+
+    manifest.wasm_path = std::string(woki::ext::kMaxRuntimePathBytes + 1, 'x');
+    REQUIRE_FALSE(woki::ext::ValidateManifest(manifest));
+    manifest.wasm_path = "extension.wasm";
+
+    manifest.commands.push_back(manifest.commands.front());
+    REQUIRE_FALSE(woki::ext::ValidateManifest(manifest));
+}
+
+TEST_CASE("Extension manifest parser and schema agree on scalar and collection boundaries") {
+    const fs::path schema_path = fs::path(WOKI_EXTENSION_SOURCE_DIR) / "schema" / "manifest.schema.json";
+    std::ifstream schema_input(schema_path);
+    REQUIRE(schema_input.good());
+    const std::string schema{std::istreambuf_iterator<char>(schema_input), std::istreambuf_iterator<char>()};
+    CHECK(schema.find("\"maxLength\": 4096") != std::string::npos);
+    CHECK(schema.find("\"maxItems\": 5") != std::string::npos);
+    CHECK(schema.find("\"uniqueItems\": true") != std::string::npos);
+
+    const fs::path root = MakeTempDir("schema_boundaries");
+    WriteFile(root / "manifest.yaml", R"(
+id: woki.boundary
+name: 'true: still a string'
+version: 1.0.0
+apiVersion: 1
+runtime:
+  wasm: extension.wasm
+permissions: [log, paths, storage, config, events]
+contributes:
+  commands:
+    - id: woki.boundary.run
+      title: Run
+)");
+    REQUIRE(woki::ext::LoadManifest(root / "manifest.yaml"));
 }

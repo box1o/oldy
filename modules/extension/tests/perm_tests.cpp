@@ -1,6 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include <woki/ext/ext.hpp>
+#include <woki/ext/perm.hpp>
 
 TEST_CASE("Extension permissions parse known names") {
     auto permission = woki::ext::ParsePermission("log");

@@ -1,0 +1,30 @@
+{
+  "exports": {
+    "ext_api_version": {"parameters": [], "results": ["I32"]},
+    "ext_init": {"parameters": [], "results": ["I32"]},
+    "ext_on_tick": {"parameters": ["F64"], "results": []},
+    "ext_on_event": {"parameters": ["I32", "I32", "I32"], "results": []},
+    "ext_on_event_named": {"parameters": ["I32", "I32", "I32", "I32"], "results": []},
+    "ext_on_unload": {"parameters": [], "results": []},
+    "ext_on_command": {"parameters": ["I32", "I32", "I32", "I32"], "results": ["I32"]},
+    "ext_alloc": {"parameters": ["I32"], "results": ["I32"]},
+    "ext_free": {"parameters": ["I32", "I32"], "results": []}
+  },
+  "imports": {
+    "host_log": {"parameters": ["I32", "I32", "I32"], "results": ["I32"]},
+    "host_path_data": {"parameters": ["I32", "I32"], "results": ["I32"]},
+    "host_path_cache": {"parameters": ["I32", "I32"], "results": ["I32"]},
+    "host_file_read": {"parameters": ["I32", "I32", "I32"], "results": ["I32"]},
+    "host_file_write": {"parameters": ["I32", "I32", "I32"], "results": ["I32"]},
+    "host_file_append": {"parameters": ["I32", "I32", "I32"], "results": ["I32"]},
+    "host_file_read_n": {"parameters": ["I32", "I32", "I32", "I32"], "results": ["I32"]},
+    "host_file_write_n": {"parameters": ["I32", "I32", "I32", "I32"], "results": ["I32"]},
+    "host_file_append_n": {"parameters": ["I32", "I32", "I32", "I32"], "results": ["I32"]},
+    "host_config_get": {"parameters": ["I32", "I32", "I32"], "results": ["I32"]},
+    "host_config_set": {"parameters": ["I32", "I32", "I32"], "results": ["I32"]},
+    "host_event_subscribe": {"parameters": ["I32"], "results": ["I32"]},
+    "host_event_emit": {"parameters": ["I32", "I32", "I32"], "results": ["I32"]},
+    "host_event_subscribe_named": {"parameters": ["I32", "I32"], "results": ["I32"]},
+    "host_event_emit_named": {"parameters": ["I32", "I32", "I32", "I32"], "results": ["I32"]}
+  }
+}

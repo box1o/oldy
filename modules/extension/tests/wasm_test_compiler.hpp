@@ -118,7 +118,7 @@ inline bool woki_test_compile_wasm(const std::string& source_path, const std::st
 
         const std::string command = clang
                                     + " --target=wasm32-unknown-unknown -nostdlib -fno-builtin "
-                                      "-Wl,--no-entry -Wl,--export-memory "
+                                      "-Wl,--no-entry -Wl,--export-memory -Wl,--max-memory=33554432 "
                                     + wl_exports + "-o \"" + wasm_path + "\" \"" + source_path + "\"";
         return std::system(command.c_str()) == 0;
     }
@@ -139,7 +139,7 @@ inline bool woki_test_compile_wasm(const std::string& source_path, const std::st
         linker_exports.erase(pos, 4);
     }
 
-    const std::string link = woki_test_wasm_compile_prefix() + wasm_ld + " -o \"" + wasm_path + "\" \"" + obj_path.string() + "\" --no-entry --allow-undefined --export-memory " + linker_exports;
+    const std::string link = woki_test_wasm_compile_prefix() + wasm_ld + " -o \"" + wasm_path + "\" \"" + obj_path.string() + "\" --no-entry --allow-undefined --export-memory --max-memory=33554432 " + linker_exports;
 
     const bool ok = std::system(link.c_str()) == 0;
     std::error_code ec;

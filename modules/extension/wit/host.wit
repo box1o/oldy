@@ -1,6 +1,14 @@
 package woki:extension@1.0.0;
 
+interface types {
+  /// Raw ABI v1 status: 0 success, -1 error, -2 denied, -3 no-space,
+  /// -4 not-found, and -5 invalid. Other negative values are reserved.
+  type status = s32;
+}
+
 interface logging {
+  use types.{status};
+
   enum level {
     debug,
     info,
@@ -8,26 +16,51 @@ interface logging {
     error,
   }
 
-  log: func(level: level, message: string) -> s32;
+  /// `message` is limited to 4096 UTF-8 bytes.
+  log: func(level: level, message: string) -> status;
 }
 
 interface paths {
-  data-dir: func() -> string;
-  cache-dir: func() -> string;
+  use types.{status};
+
+  /// Returned paths, including their terminating NUL in raw ABI v1, are
+  /// limited to 4096 UTF-8 bytes.
+  data-dir: func() -> result<string, status>;
+  cache-dir: func() -> result<string, status>;
 }
 
 interface storage {
-  read: func(path: string) -> result<list<u8>, s32>;
-  write: func(path: string, data: list<u8>) -> s32;
-  append: func(path: string, data: list<u8>) -> s32;
+  use types.{status};
+
+  /// Paths are limited to 4096 bytes and file operations to 16 MiB.
+  read: func(path: string) -> result<list<u8>, status>;
+  write: func(path: string, data: list<u8>) -> status;
+  append: func(path: string, data: list<u8>) -> status;
 }
 
 interface config {
-  get: func(key: string) -> result<string, s32>;
-  set: func(key: string, value: string) -> s32;
+  use types.{status};
+
+  /// Keys are limited to 128 bytes and values to 64 KiB.
+  get: func(key: string) -> result<string, status>;
+  set: func(key: string, value: string) -> status;
 }
 
 interface events {
-  subscribe: func(event-type: u32) -> s32;
-  emit: func(event-type: u32, payload: list<u8>) -> s32;
+  use types.{status};
+
+  /// Stable raw ABI v1 event IDs are the WOKI_EXT_EVENT_* constants in
+  /// sdk/events.h. Numeric fields are encoded little-endian.
+  type event-id = u32;
+
+  /// Subscription state belongs to this runtime session. Event type 0 is a
+  /// wildcard; no events are delivered before an explicit subscription.
+  subscribe: func(event-type: event-id) -> status;
+  /// Payloads are limited to 64 KiB.
+  /// Guest event types must have bit 31 set (0x80000000).
+  emit: func(event-type: event-id, payload: list<u8>) -> status;
+  /// Collision-free extension topics use lowercase reverse-DNS names.
+  subscribe-named: func(topic: string) -> status;
+  /// The topic must be prefixed by the emitting extension id and a dot.
+  emit-named: func(topic: string, payload: list<u8>) -> status;
 }

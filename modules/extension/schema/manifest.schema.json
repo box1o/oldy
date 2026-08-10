@@ -5,16 +5,36 @@
   "type": "object",
   "additionalProperties": false,
   "required": ["id", "name", "version", "apiVersion", "runtime", "permissions"],
+  "allOf": [
+    {
+      "if": {
+        "required": ["activation"],
+        "properties": {
+          "activation": {
+            "required": ["events"],
+            "properties": { "events": { "minItems": 1 } }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "permissions": { "contains": { "const": "events" } }
+        }
+      }
+    }
+  ],
   "properties": {
     "id": {
       "type": "string",
+      "maxLength": 255,
       "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$",
       "description": "Reverse-DNS extension id. Must match installed package directory."
     },
-    "name": { "type": "string", "minLength": 1 },
+    "name": { "type": "string", "minLength": 1, "maxLength": 256 },
     "version": {
       "type": "string",
-      "pattern": "^(?=.*[0-9])[0-9A-Za-z][0-9A-Za-z.+-]*$"
+      "maxLength": 128,
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
     },
     "apiVersion": { "type": "integer", "const": 1 },
     "runtime": {
@@ -25,6 +45,7 @@
         "wasm": {
           "type": "string",
           "minLength": 1,
+          "maxLength": 4096,
           "default": "extension.wasm",
           "pattern": "^(?!/)(?!.*[\\\\:])(?!\\.{1,2}(?:/|$))(?!.*\\/\\.{1,2}(?:/|$))[^/]+(?:/[^/]+)*$"
         }
@@ -32,10 +53,34 @@
     },
     "permissions": {
       "type": "array",
+      "maxItems": 5,
       "uniqueItems": true,
       "items": {
         "type": "string",
         "enum": ["log", "paths", "storage", "config", "events"]
+      }
+    },
+    "activation": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Declarative activation. When omitted, the extension does not activate at startup, on ticks, or for application events; contributed commands still activate it lazily.",
+      "properties": {
+        "startup": { "type": "boolean", "default": false },
+        "tick": { "type": "boolean", "default": false },
+        "events": {
+          "type": "array",
+          "default": [],
+          "maxItems": 22,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": [
+              "window.closed", "window.resized", "window.focused", "window.lost-focus", "window.moved", "window.minimized", "window.maximized", "window.restored",
+              "key.pressed", "key.released", "key.typed", "mouse.scrolled", "mouse-button.pressed", "mouse-button.released", "mouse-button.clicked", "mouse.entered", "mouse.left",
+              "window.scale-changed", "viewport.resized", "app.shutdown", "app.suspend", "app.resume"
+            ]
+          }
+        }
       }
     },
     "contributes": {
@@ -44,6 +89,8 @@
       "properties": {
         "commands": {
           "type": "array",
+          "maxItems": 256,
+          "uniqueItems": true,
           "items": {
             "type": "object",
             "additionalProperties": false,
@@ -51,10 +98,11 @@
             "properties": {
               "id": {
                 "type": "string",
+                "maxLength": 255,
                 "pattern": "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$"
               },
-              "title": { "type": "string", "minLength": 1 },
-              "category": { "type": "string" }
+              "title": { "type": "string", "minLength": 1, "maxLength": 256 },
+              "category": { "type": "string", "maxLength": 128 }
             }
           }
         }

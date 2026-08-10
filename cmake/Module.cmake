@@ -1,6 +1,7 @@
 function(add_module name)
+    set(options NO_INSTALL_HEADERS)
     set(multi_value_args SOURCES HEADERS DEPENDENCIES)
-    cmake_parse_arguments(ARG "" "" "${multi_value_args}" ${ARGN})
+    cmake_parse_arguments(ARG "${options}" "" "${multi_value_args}" ${ARGN})
 
     if(NOT ARG_HEADERS)
         message(FATAL_ERROR "Module '${name}' must define HEADERS")
@@ -38,9 +39,11 @@ function(add_module name)
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     )
 
-    install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/
-        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-    )
+    if(NOT ARG_NO_INSTALL_HEADERS)
+        install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/
+            DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+        )
+    endif()
 endfunction()
 
 function(add_module_test name)
@@ -74,13 +77,20 @@ function(add_module_test name)
     else()
         include(Catch)
     endif()
+    set(test_temp_dir "${CMAKE_BINARY_DIR}/test-tmp")
+    file(MAKE_DIRECTORY "${test_temp_dir}")
+    set(test_environment "TMPDIR=${test_temp_dir};TEMP=${test_temp_dir};TMP=${test_temp_dir}")
     if(WIN32 AND EXISTS "${CDEPS_ROOT}/wasmtime-c-api/lib/wasmtime.dll")
         catch_discover_tests(${name}
             EXTRA_ARGS --durations yes
             DL_PATHS "${CDEPS_ROOT}/wasmtime-c-api/lib"
+            PROPERTIES ENVIRONMENT "${test_environment}"
         )
     else()
-        catch_discover_tests(${name} EXTRA_ARGS --durations yes)
+        catch_discover_tests(${name}
+            EXTRA_ARGS --durations yes
+            PROPERTIES ENVIRONMENT "${test_environment}"
+        )
     endif()
 
     if(TARGET woki_tests)

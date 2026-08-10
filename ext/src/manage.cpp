@@ -1,9 +1,9 @@
-#include <iostream>
 #include <filesystem>
 
-#include <woki/ext/ext.hpp>
+#include <woki/ext/package.hpp>
+#include <woki/ext/registry.hpp>
 
-#include "wokiext/cli.hpp"
+#include "cli_internal.hpp"
 
 namespace wokiext {
 
@@ -16,11 +16,11 @@ namespace fs = std::filesystem;
     return !id.empty() && !path.has_root_path() && !path.has_parent_path() && path != "." && path != "..";
 }
 
-[[nodiscard]] bool RemovePath(const fs::path& path) {
+[[nodiscard]] bool RemovePath(Context& context, const fs::path& path) {
     std::error_code error;
     fs::remove_all(path, error);
     if (error) {
-        std::cerr << error.message() << ": " << path << '\n';
+        context.diagnostics.Err() << error.message() << ": " << path << '\n';
         return false;
     }
     return true;
@@ -28,56 +28,56 @@ namespace fs = std::filesystem;
 
 } // namespace
 
-Status List(const ListOptions& options) {
+Status List(Context& context, const ListOptions& options) {
     auto roots = woki::ext::RootsFromBase(options.root);
     if (!roots) {
-        std::cerr << roots.error().Message() << '\n';
+        context.diagnostics.Error(roots.error().Message());
         return Status::Error;
     }
 
     woki::ext::Registry registry;
-    registry.SetRoots(*roots);
-    auto scanned = registry.Scan();
+    auto scanned = registry.Scan(*roots);
     if (!scanned) {
-        std::cerr << scanned.error().Message() << '\n';
+        context.diagnostics.Error(scanned.error().Message());
         return Status::Error;
     }
 
-    for (const woki::ext::Record& record : registry.Records()) {
-        std::cout << record.id << " " << record.manifest.version << " ";
-        if (record.state == woki::ext::State::Failed) {
-            std::cout << "failed " << record.error;
-        } else {
-            std::cout << "ok";
-        }
-        std::cout << '\n';
+    for (const woki::ext::ExtensionPackage& package : registry.Packages()) {
+        context.diagnostics.Out() << package.Id() << " " << package.GetManifest().version << " ok\n";
+    }
+    for (const woki::ext::DiscoveryFailure& failure : registry.Failures()) {
+        context.diagnostics.Out() << failure.CandidateId() << " failed " << failure.Cause().Message() << '\n';
     }
 
     return Status::Ok;
 }
 
-Status Remove(const RemoveOptions& options) {
+Status Remove(Context& context, const RemoveOptions& options) {
     if (!IsSafeExtensionId(options.id)) {
-        std::cerr << "Extension id must be a single relative path component\n";
+        context.diagnostics.Error("Extension id must be a single relative path component");
         return Status::Usage;
     }
 
     auto roots = woki::ext::RootsFromBase(options.root);
     if (!roots) {
-        std::cerr << roots.error().Message() << '\n';
+        context.diagnostics.Error(roots.error().Message());
         return Status::Error;
     }
 
-    bool ok = RemovePath(roots->extensions / options.id);
+    bool ok = RemovePath(context, roots->extensions / options.id);
     if (!options.keep_data) {
-        ok = RemovePath(roots->data / options.id) && ok;
-        ok = RemovePath(roots->cache / options.id) && ok;
+        ok = RemovePath(context, roots->data / options.id) && ok;
+        ok = RemovePath(context, roots->config / options.id) && ok;
+        ok = RemovePath(context, roots->cache / options.id) && ok;
     }
     if (!ok) {
         return Status::Error;
     }
 
-    std::cout << "Removed extension: " << options.id << '\n';
+    context.diagnostics.Out() << "Removed extension: " << options.id;
+    if (options.keep_data)
+        context.diagnostics.Out() << " (kept data, config, and cache)";
+    context.diagnostics.Out() << '\n';
     return Status::Ok;
 }
 

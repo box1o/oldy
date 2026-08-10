@@ -1,155 +1,210 @@
-#include <string>
+#include <algorithm>
 
 #include "woki/ext/runtime.hpp"
+#include "woki/ext/internal/event_service.hpp"
 
 namespace woki::ext {
 
 namespace {
-
-[[nodiscard]] Result<void> RequireBackend(RuntimeBackend* backend) {
-    if (backend == nullptr) {
-        return Err(ErrorCode::InvalidState, "Extension runtime backend is not configured. Add the Wasmtime backend before loading "
-                                            "extensions.");
-    }
-    return Ok();
+[[nodiscard]] bool IsNonfatalCommandError(ErrorCode code) noexcept {
+    return code == ErrorCode::FileAccessDenied || code == ErrorCode::ValidationOutOfRange || code == ErrorCode::FileNotFound || code == ErrorCode::InvalidArgument;
 }
-
-void MarkFailed(Record& record, const Error& error) {
-    record.state = State::Failed;
-    record.tier = RuntimeTier::None;
-    record.error = std::string(error.Message());
-}
-
-void CleanupFailure(RuntimeBackend* backend, Record& record, const Error& error) {
-    if (backend != nullptr && record.tier != RuntimeTier::None) {
-        backend->Unload(record);
-    }
-    MarkFailed(record, error);
-}
-
 } // namespace
 
-Runtime::Runtime(RuntimeBackend* backend) noexcept
-    : backend_(backend) {}
+struct Runtime::Session {
+    std::string extension_id;
+    scope<RuntimeInstance> instance;
+    std::shared_ptr<host::EventSession> events;
+    EffectiveCapabilities grants;
+};
 
-Runtime::Runtime(scope<RuntimeBackend> backend) noexcept {
-    SetBackend(std::move(backend));
+Runtime::Runtime(scope<RuntimeEngine> engine) noexcept
+    : engine_(std::move(engine)) {}
+
+Runtime::~Runtime() {
+    UnloadAll();
 }
 
-void Runtime::SetBackend(RuntimeBackend* backend) noexcept {
-    owned_backend_.reset();
-    backend_ = backend;
+void Runtime::SetEngine(scope<RuntimeEngine> engine) noexcept {
+    UnloadAll();
+    engine_ = std::move(engine);
 }
 
-void Runtime::SetBackend(scope<RuntimeBackend> backend) noexcept {
-    owned_backend_ = std::move(backend);
-    backend_ = owned_backend_.get();
+void Runtime::SetEventService(std::shared_ptr<host::EventService> service) noexcept {
+    UnloadAll();
+    event_service_ = std::move(service);
 }
 
-RuntimeBackend* Runtime::Backend() noexcept {
-    return backend_;
-}
-
-const RuntimeBackend* Runtime::Backend() const noexcept {
-    return backend_;
-}
-
-Result<void> Runtime::Load(Record& record) {
-    if (record.state != State::PermissionChecked) {
-        return Err(ErrorCode::ValidationInvalidState, "Extension can only be loaded after manifest and permissions are validated.");
+Result<void> Runtime::Load(const ExtensionPackage& package, EffectiveCapabilities grants) {
+    if (IsActive(package.Id()))
+        return Err(ErrorCode::ValidationInvalidState, "Extension '" + package.Id() + "' already has an active runtime instance.");
+    std::erase_if(statuses_, [&package](const ExtensionStatus& status) { return status.extension_id == package.Id(); });
+    if (engine_ == nullptr) {
+        const Error error(ErrorCode::InvalidState, "Extension runtime engine is not configured.");
+        statuses_.push_back({package.Id(), ExtensionState::Failed, error.Code(), std::string(error.Message())});
+        return Err(error);
+    }
+    if (auto valid = ValidatePackageLayout(package.Layout()); !valid) {
+        statuses_.push_back({package.Id(), ExtensionState::Failed, valid.error().Code(), std::string(valid.error().Message())});
+        return Err(valid.error());
     }
 
-    auto backend = RequireBackend(backend_);
-    if (!backend) {
-        MarkFailed(record, backend.error());
-        return Err(backend.error());
+    auto events = std::make_shared<host::EventSession>();
+    host::Context context{package.Id(), grants.permissions, package.Layout().data_root, package.Layout().config_root, package.Layout().cache_root, events, event_service_};
+    auto instance = engine_->Create(package, host::HostApi(std::move(context)));
+    if (!instance) {
+        statuses_.push_back({package.Id(), ExtensionState::Failed, instance.error().Code(), std::string(instance.error().Message())});
+        return Err(instance.error());
     }
-
-    auto loaded = backend_->Load(record);
-    if (!loaded) {
-        MarkFailed(record, loaded.error());
-        return Err(loaded.error());
+    if (*instance == nullptr) {
+        const Error error(ErrorCode::InvalidState, "Extension runtime engine returned a null instance.");
+        statuses_.push_back({package.Id(), ExtensionState::Failed, error.Code(), std::string(error.Message())});
+        return Err(error);
     }
-
-    record.state = State::Loaded;
-    return Ok();
-}
-
-Result<void> Runtime::Initialize(Record& record) {
-    if (record.state != State::Loaded) {
-        return Err(ErrorCode::ValidationInvalidState, "Extension can only be initialized after it is loaded.");
-    }
-
-    auto backend = RequireBackend(backend_);
-    if (!backend) {
-        MarkFailed(record, backend.error());
-        return Err(backend.error());
-    }
-
-    auto initialized = backend_->Initialize(record);
+    auto initialized = (*instance)->Initialize();
     if (!initialized) {
-        CleanupFailure(backend_, record, initialized.error());
+        (*instance)->Unload();
+        statuses_.push_back({package.Id(), ExtensionState::Failed, initialized.error().Code(), std::string(initialized.error().Message())});
         return Err(initialized.error());
     }
-
-    record.state = State::Initialized;
-    record.state = State::Active;
+    sessions_.push_back(createScope<Session>(Session{package.Id(), std::move(*instance), std::move(events), std::move(grants)}));
+    statuses_.push_back({package.Id(), ExtensionState::Active, ErrorCode::Success, {}});
     return Ok();
 }
 
-void Runtime::Tick(Record& record, f64 delta_ms) {
-    if (record.state != State::Active || backend_ == nullptr) {
-        return;
-    }
-    backend_->Tick(record, delta_ms);
-    if (record.state == State::Failed) {
-        const Error error(ErrorCode::InvalidState, record.error);
-        CleanupFailure(backend_, record, error);
-    }
+Result<void> Runtime::Load(const ExtensionPackage& package) {
+    return Load(package, EffectiveCapabilities{package.GetManifest().requested_capabilities.permissions});
 }
 
-void Runtime::DispatchEvent(Record& record, u32 event_type, std::span<const u8> payload) {
-    if (record.state != State::Active || backend_ == nullptr) {
-        return;
-    }
-    backend_->DispatchEvent(record, event_type, payload);
-    if (record.state == State::Failed) {
-        const Error error(ErrorCode::InvalidState, record.error);
-        CleanupFailure(backend_, record, error);
-    }
+void Runtime::RecordFailure(std::string_view extension_id, const Error& error) {
+    std::erase_if(statuses_, [extension_id](const ExtensionStatus& status) { return status.extension_id == extension_id; });
+    statuses_.push_back({std::string(extension_id), ExtensionState::Failed, error.Code(), std::string(error.Message())});
 }
 
-Result<void> Runtime::DispatchCommand(Record& record, std::string_view command_id, std::span<const u8> payload) {
-    if (record.state != State::Active) {
-        return Err(ErrorCode::ValidationInvalidState, "Extension command can only run while the extension is active.");
-    }
-
-    auto backend = RequireBackend(backend_);
-    if (!backend) {
-        MarkFailed(record, backend.error());
-        return Err(backend.error());
-    }
-
-    auto dispatched = backend_->DispatchCommand(record, command_id, payload);
-    if (!dispatched) {
-        if (dispatched.error().Code() == ErrorCode::ValidationOutOfRange) {
-            return Err(dispatched.error());
+void Runtime::Tick(f64 delta_ms) {
+    for (std::size_t i = 0; i < sessions_.size();) {
+        auto result = sessions_[i]->instance->Tick(delta_ms);
+        if (result) {
+            ++i;
+            continue;
         }
-        CleanupFailure(backend_, record, dispatched.error());
-        return Err(dispatched.error());
+        const std::string id = sessions_[i]->extension_id;
+        sessions_[i]->instance->Unload();
+        sessions_.erase(sessions_.begin() + static_cast<std::ptrdiff_t>(i));
+        if (auto status = std::ranges::find(statuses_, id, &ExtensionStatus::extension_id); status != statuses_.end()) {
+            status->state = ExtensionState::Failed;
+            status->error_code = result.error().Code();
+            status->error = std::string(result.error().Message());
+        }
     }
-    return Ok();
 }
 
-void Runtime::Unload(Record& record) {
-    if (backend_ == nullptr || record.tier == RuntimeTier::None || (record.state != State::Loaded && record.state != State::Initialized && record.state != State::Active && record.state != State::Failed)) {
+void Runtime::Tick(std::string_view extension_id, f64 delta_ms) {
+    const auto it = std::ranges::find_if(sessions_, [extension_id](const auto& session) { return session->extension_id == extension_id; });
+    if (it == sessions_.end())
         return;
+    auto result = (*it)->instance->Tick(delta_ms);
+    if (result)
+        return;
+    const std::string id = (*it)->extension_id;
+    (*it)->instance->Unload();
+    sessions_.erase(it);
+    if (auto status = std::ranges::find(statuses_, id, &ExtensionStatus::extension_id); status != statuses_.end()) {
+        status->state = ExtensionState::Failed;
+        status->error_code = result.error().Code();
+        status->error = std::string(result.error().Message());
     }
+}
 
-    record.state = State::Unloading;
-    backend_->Unload(record);
-    record.tier = RuntimeTier::None;
-    record.state = State::Unloaded;
+void Runtime::DispatchEvent(std::string_view extension_id, u32 event_type, std::span<const u8> payload) {
+    const auto it = std::ranges::find_if(sessions_, [extension_id](const auto& session) { return session->extension_id == extension_id; });
+    if (it == sessions_.end())
+        return;
+    auto result = (*it)->instance->DispatchEvent(event_type, payload);
+    if (result)
+        return;
+    const std::string id = (*it)->extension_id;
+    (*it)->instance->Unload();
+    sessions_.erase(it);
+    if (auto status = std::ranges::find(statuses_, id, &ExtensionStatus::extension_id); status != statuses_.end()) {
+        status->state = ExtensionState::Failed;
+        status->error_code = result.error().Code();
+        status->error = std::string(result.error().Message());
+    }
+}
+
+void Runtime::DispatchNamedEvent(std::string_view extension_id, std::string_view topic, std::span<const u8> payload) {
+    const auto it = std::ranges::find_if(sessions_, [extension_id](const auto& session) { return session->extension_id == extension_id; });
+    if (it == sessions_.end())
+        return;
+    auto result = (*it)->instance->DispatchNamedEvent(topic, payload);
+    if (result)
+        return;
+    const std::string id = (*it)->extension_id;
+    (*it)->instance->Unload();
+    sessions_.erase(it);
+    if (auto status = std::ranges::find(statuses_, id, &ExtensionStatus::extension_id); status != statuses_.end()) {
+        status->state = ExtensionState::Failed;
+        status->error_code = result.error().Code();
+        status->error = std::string(result.error().Message());
+    }
+}
+
+Result<void> Runtime::DispatchCommand(std::string_view extension_id, std::string_view command_id, std::span<const u8> payload) {
+    const auto it = std::ranges::find_if(sessions_, [extension_id](const auto& session) { return session->extension_id == extension_id; });
+    if (it == sessions_.end())
+        return Err(ErrorCode::ValidationInvalidState, "Extension '" + std::string(extension_id) + "' is not active.");
+    auto result = (*it)->instance->DispatchCommand(command_id, payload);
+    if (!result && !IsNonfatalCommandError(result.error().Code())) {
+        const std::string id = (*it)->extension_id;
+        (*it)->instance->Unload();
+        sessions_.erase(it);
+        if (auto status = std::ranges::find(statuses_, id, &ExtensionStatus::extension_id); status != statuses_.end()) {
+            status->state = ExtensionState::Failed;
+            status->error_code = result.error().Code();
+            status->error = std::string(result.error().Message());
+        }
+    }
+    return result;
+}
+
+void Runtime::Unload(std::string_view extension_id) noexcept {
+    const auto it = std::ranges::find_if(sessions_, [extension_id](const auto& session) { return session->extension_id == extension_id; });
+    if (it != sessions_.end()) {
+        (*it)->instance->Unload();
+        sessions_.erase(it);
+    }
+    std::erase_if(statuses_, [extension_id](const ExtensionStatus& status) { return status.extension_id == extension_id; });
+}
+
+void Runtime::UnloadAll() noexcept {
+    for (auto& session : sessions_)
+        session->instance->Unload();
+    sessions_.clear();
+    statuses_.clear();
+}
+
+bool Runtime::IsActive(std::string_view extension_id) const noexcept {
+    return std::ranges::any_of(sessions_, [extension_id](const auto& session) { return session->extension_id == extension_id; });
+}
+
+bool Runtime::IsSubscribed(std::string_view extension_id, u32 event_type) const noexcept {
+    const auto it = std::ranges::find_if(sessions_, [extension_id](const auto& session) { return session->extension_id == extension_id; });
+    return it != sessions_.end() && (*it)->events->IsSubscribed(event_type);
+}
+
+bool Runtime::IsSubscribed(std::string_view extension_id, std::string_view topic) const noexcept {
+    const auto it = std::ranges::find_if(sessions_, [extension_id](const auto& session) { return session->extension_id == extension_id; });
+    return it != sessions_.end() && (*it)->events->IsSubscribed(topic);
+}
+
+bool Runtime::HasGrant(std::string_view extension_id, Permission permission) const noexcept {
+    const auto it = std::ranges::find_if(sessions_, [extension_id](const auto& session) { return session->extension_id == extension_id; });
+    return it != sessions_.end() && HasPermission((*it)->grants, permission);
+}
+
+std::span<const ExtensionStatus> Runtime::Statuses() const noexcept {
+    return statuses_;
 }
 
 } // namespace woki::ext

@@ -10,4 +10,8 @@ project(woki_extension LANGUAGES CXX)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include("${WOKI_REPO_ROOT}/cmake/ExtensionWasm.cmake")
-add_wokiext(src/plugin.cpp)
+add_wokiext(kitty
+    LANGUAGE CXX
+    MANIFEST manifest.yaml
+    SOURCES src/plugin.cpp
+)

@@ -6,6 +6,15 @@
 
 namespace woki {
 
+class StudioExtensionEventBus final : public ext::host::EventBus {
+public:
+    void Bind(ext::ExtensionManager* manager) noexcept;
+    void Publish(const ext::host::Event& event) override;
+
+private:
+    ext::ExtensionManager* manager_{};
+};
+
 class ExtensionLayer final : public Layer {
 public:
     void OnAttach(Context& ctx) override;
@@ -19,7 +28,8 @@ private:
     void ExecuteRegisteredCommands();
     void DispatchEventToExtensions(const events::Event& event);
 
-    scope<ext::Manager> extensions_;
+    StudioExtensionEventBus event_bus_;
+    scope<ext::ExtensionManager> extensions_;
 };
 
 } // namespace woki

@@ -1,10 +1,20 @@
 package woki:extension@1.0.0;
 
 interface lifecycle {
+  use types.{status};
+  use events.{event-id};
+
   api-version: func() -> u32;
-  init: func() -> s32;
+  init: func() -> status;
   tick: func(delta-ms: f64);
-  event: func(event-type: u32, payload: list<u8>);
-  command: func(command-id: string, payload: list<u8>) -> s32;
+  event: func(event-type: event-id, payload: list<u8>);
+  named-event: func(topic: string, payload: list<u8>);
   unload: func();
+}
+
+/// Exported only by extensions that contribute commands in their manifest.
+interface commands {
+  use types.{status};
+
+  command: func(command-id: string, payload: list<u8>) -> status;
 }

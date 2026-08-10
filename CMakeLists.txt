@@ -48,9 +48,7 @@ if(NOT EMSCRIPTEN)
     add_subdirectory(ext)
 endif()
 
-if(NOT EMSCRIPTEN)
-    include(Extensions)
-    woki_register_extensions("${CMAKE_SOURCE_DIR}/extensions")
-endif()
+include(Extensions)
+woki_register_extensions("${CMAKE_SOURCE_DIR}/extensions")
 
 add_subdirectory(studio)

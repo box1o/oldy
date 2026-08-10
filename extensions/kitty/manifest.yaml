@@ -6,6 +6,11 @@ runtime:
   wasm: extension.wasm
 permissions:
   - log
+  - events
+activation:
+  startup: true
+  events:
+    - window.resized
 contributes:
   commands:
     - id: woki.kitty.pet

@@ -44,4 +44,12 @@ bool IsKnownPermission(std::string_view text) noexcept {
     return std::ranges::find(kPermissionNames, text, &PermissionName::name) != kPermissionNames.end();
 }
 
+bool HasPermission(const RequestedCapabilities& capabilities, Permission permission) noexcept {
+    return std::ranges::find(capabilities.permissions, permission) != capabilities.permissions.end();
+}
+
+bool HasPermission(const EffectiveCapabilities& capabilities, Permission permission) noexcept {
+    return std::ranges::find(capabilities.permissions, permission) != capabilities.permissions.end();
+}
+
 } // namespace woki::ext

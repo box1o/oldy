@@ -19,13 +19,13 @@ namespace {
 } // namespace
 
 bool IsAllowedArchiveEntry(const std::filesystem::path& relative_path, const std::filesystem::path& wasm_path) {
-    if (relative_path.empty() || relative_path.is_absolute() || HasPathTraversal(relative_path)) {
+    if (!IsSafeRelativePath(relative_path) || !IsSafeRelativePath(wasm_path)) {
         return false;
     }
-    if (relative_path == "manifest.yaml" || relative_path == wasm_path || relative_path == "signature") {
+    if (relative_path == "manifest.yaml" || relative_path == wasm_path) {
         return true;
     }
-    return StartsWithPath(relative_path, "assets") || StartsWithPath(relative_path, "extension.native");
+    return StartsWithPath(relative_path, "assets");
 }
 
 } // namespace woki::ext

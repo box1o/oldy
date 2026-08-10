@@ -1,12 +1,13 @@
 #include <cctype>
 #include <string>
 #include <fstream>
-#include <iostream>
 #include <algorithm>
 #include <stdexcept>
 #include <filesystem>
 
-#include "wokiext/cli.hpp"
+#include <woki/ext/manifest.hpp>
+
+#include "cli_internal.hpp"
 
 namespace wokiext {
 
@@ -46,39 +47,66 @@ void WriteFile(const fs::path& path, std::string_view contents) {
         throw std::runtime_error("Failed to create file: " + path.string());
     }
     output << contents;
+    output.close();
+    if (!output) {
+        throw std::runtime_error("Failed to write file: " + path.string());
+    }
 }
 
 [[nodiscard]] std::string Manifest(std::string_view id, std::string_view name) {
+    std::string quoted_name(name);
+    std::size_t position = 0;
+    while ((position = quoted_name.find('\'', position)) != std::string::npos) {
+        quoted_name.insert(position, 1, '\'');
+        position += 2;
+    }
     return "id: " + std::string(id) + R"yaml(
-name: )yaml"
-           + std::string(name) + R"yaml(
+name: ')yaml"
+           + quoted_name + R"yaml('
 version: 0.1.0
 apiVersion: 1
 runtime:
   wasm: extension.wasm
 permissions:
   - log
+activation:
+  startup: true
 )yaml";
 }
 
 [[nodiscard]] std::string PluginSource(std::string_view lang) {
     const bool cpp = lang == "cpp";
-    const std::string init_message = cpp ? "    static constexpr char kMessage[] = \"hello from wokiext\";\n" : "    static const char kMessage[] = \"hello from wokiext\";\n";
-    const std::string extern_open = cpp ? "extern \"C\" {\n\n" : "";
-    const std::string extern_close = cpp ? "\n} // extern \"C\"\n" : "";
+    if (cpp) {
+        return R"cpp(#include <woki/ext/plugin.hpp>
 
-    return std::string("#include \"version.h\"\n#include \"ext.h\"\n#include \"host_imports.h\"\n"
-                       "#include \"guest_alloc.h\"\n\n")
-           + extern_open +
-           R"(
+using namespace woki::ext;
+
+class Extension final : public Plugin {
+public:
+    Status OnLoad(Context& context) noexcept {
+        return context.GetLog().Info("hello from wokiext");
+    }
+
+    void OnEvent(Event&) noexcept {}
+
+    Status OnCommand(Context& context, StringView command, Bytes) noexcept {
+        return context.GetLog().Info(command);
+    }
+};
+
+WOKI_PLUGIN(Extension)
+)cpp";
+    }
+    return std::string("#include <woki/ext/sdk/version.h>\n#include <woki/ext/sdk/ext.h>\n#include <woki/ext/sdk/host_imports.h>\n"
+                       "#include <woki/ext/sdk/guest_alloc.h>\n\n")
+           + R"(
 WOKI_EXPORT("ext_api_version")
 uint32_t ext_api_version(void) { return WOKI_EXT_API_VERSION; }
 
 WOKI_EXPORT("ext_init")
 int32_t ext_init(void) {
-)" + init_message
-           +
-           R"(    return host_log(WOKI_EXT_LOG_INFO, kMessage, sizeof(kMessage) - 1);
+    static const char kMessage[] = "hello from wokiext";
+    return host_log(WOKI_EXT_LOG_INFO, kMessage, sizeof(kMessage) - 1);
 }
 
 WOKI_EXPORT("ext_on_tick")
@@ -101,7 +129,7 @@ int32_t ext_on_command(const char* command_id, uint32_t command_len,
 
 WOKI_EXPORT("ext_on_unload")
 void ext_on_unload(void) {}
-)" + extern_close;
+)";
 }
 
 [[nodiscard]] std::string ExtensionCMake(std::string_view lang) {
@@ -122,36 +150,45 @@ void ext_on_unload(void) {}
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include("${WOKI_CMAKE_DIR}/ExtensionWasm.cmake")
-add_wokiext()"
-           + source + R"()
+add_wokiext(extension
+    LANGUAGE )"
+           + std::string(cpp ? "CXX" : "C") + R"(
+    MANIFEST manifest.yaml
+    SOURCES )"
+           + source + R"(
+)
 )";
 }
 
 } // namespace
 
-Status Create(const CreateOptions& options) {
+Status Create(Context& context, const CreateOptions& options) {
     if (options.name.empty()) {
-        std::cerr << "Extension name is required\n";
+        context.diagnostics.Error("Extension name is required");
         return Status::Usage;
     }
     if (options.lang != "c" && options.lang != "cpp") {
-        std::cerr << "--lang must be c or cpp\n";
+        context.diagnostics.Error("--lang must be c or cpp");
         return Status::Usage;
     }
 
     const std::string dir_name = Slug(options.name, '-');
     const std::string id = options.id.empty() ? ToId(options.name) : options.id;
+    if (!woki::ext::IsValidExtensionId(id)) {
+        context.diagnostics.Error("Extension id must use lowercase reverse-DNS-style segments, for example woki.hello");
+        return Status::Usage;
+    }
     const fs::path root = options.out_dir / dir_name;
 
     std::error_code error;
-    if (fs::exists(root, error)) {
-        std::cerr << "Refusing to overwrite existing directory: " << root << '\n';
+    if (context.filesystem.Exists(root, error)) {
+        context.diagnostics.Err() << "Refusing to overwrite existing directory: " << root << '\n';
         return Status::Error;
     }
 
-    fs::create_directories(root / "src", error);
+    context.filesystem.CreateDirectories(root / "src", error);
     if (error) {
-        std::cerr << error.message() << '\n';
+        context.diagnostics.Error(error.message());
         return Status::Error;
     }
 
@@ -159,7 +196,7 @@ Status Create(const CreateOptions& options) {
     WriteFile(root / "CMakeLists.txt", ExtensionCMake(options.lang));
     WriteFile(root / "src" / (options.lang == "cpp" ? "plugin.cpp" : "plugin.c"), PluginSource(options.lang));
 
-    std::cout << "Created extension project: " << root << '\n';
+    context.diagnostics.Out() << "Created extension project: " << root << '\n';
     return Status::Ok;
 }
 
