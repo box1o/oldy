@@ -533,13 +533,35 @@ WOKI_PLUGIN(TestPlugin)
                 str(cxx_file),
             ]
         )
-        run([cc, "-std=c17", "-c", *common, str(c_file), "-o", str(temp / "one.o")])
+        object_common = ["--target=wasm32-unknown-unknown", "-nostdlib"]
         run(
-            [cc, "-std=c17", "-c", *common, str(second_file), "-o", str(temp / "two.o")]
+            [
+                cc,
+                *object_common,
+                "-std=c17",
+                "-c",
+                *common,
+                str(c_file),
+                "-o",
+                str(temp / "one.o"),
+            ]
         )
         run(
             [
                 cc,
+                *object_common,
+                "-std=c17",
+                "-c",
+                *common,
+                str(second_file),
+                "-o",
+                str(temp / "two.o"),
+            ]
+        )
+        run(
+            [
+                cc,
+                *object_common,
                 "-r",
                 str(temp / "one.o"),
                 str(temp / "two.o"),
@@ -550,6 +572,7 @@ WOKI_PLUGIN(TestPlugin)
         run(
             [
                 cxx,
+                *object_common,
                 "-std=c++23",
                 "-c",
                 *common,
@@ -561,6 +584,7 @@ WOKI_PLUGIN(TestPlugin)
         run(
             [
                 cxx,
+                *object_common,
                 "-std=c++23",
                 "-c",
                 *common,
@@ -572,6 +596,7 @@ WOKI_PLUGIN(TestPlugin)
         run(
             [
                 cxx,
+                *object_common,
                 "-r",
                 str(temp / "one-cxx.o"),
                 str(temp / "two-cxx.o"),

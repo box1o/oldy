@@ -12,12 +12,15 @@ if(APPLE)
 endif()
 
 set(_woki_llvm_bin_paths)
-if(APPLE)
+if(DEFINED ENV{WOKI_LLVM_PREFIX})
+    list(APPEND _woki_llvm_bin_paths "$ENV{WOKI_LLVM_PREFIX}/bin")
+endif()
+if(CMAKE_HOST_APPLE)
     list(APPEND _woki_llvm_bin_paths
         /opt/homebrew/opt/llvm/bin
         /usr/local/opt/llvm/bin
     )
-elseif(WIN32)
+elseif(CMAKE_HOST_WIN32)
     list(APPEND _woki_llvm_bin_paths "C:/Program Files/LLVM/bin")
 endif()
 
@@ -26,13 +29,18 @@ endif()
 if(NOT WOKI_WASM_COMPILER)
     find_program(WOKI_WASM_COMPILER
         NAMES clang++
-        PATHS ${_woki_llvm_bin_paths}
+        HINTS ${_woki_llvm_bin_paths}
     )
+endif()
+if(NOT WOKI_WASM_C_COMPILER)
+    if(DEFINED ENV{WOKI_WASM_CLANG} AND EXISTS "$ENV{WOKI_WASM_CLANG}")
+        set(WOKI_WASM_C_COMPILER "$ENV{WOKI_WASM_CLANG}" CACHE FILEPATH "Wasm extension C compiler")
+    endif()
 endif()
 if(NOT WOKI_WASM_C_COMPILER)
     find_program(WOKI_WASM_C_COMPILER
         NAMES clang
-        PATHS ${_woki_llvm_bin_paths}
+        HINTS ${_woki_llvm_bin_paths}
     )
 endif()
 
