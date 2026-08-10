@@ -106,14 +106,14 @@ TEST_CASE("build arguments are deterministic and preserve path boundaries") {
     CHECK(configure[0] == "cmake");
     CHECK(configure[1] == "-G");
     CHECK(configure[2] == "Ninja");
-    CHECK(configure[4] == (root / "build").string());
-    CHECK(configure[6] == root.string());
+    CHECK(configure[4] == (root / "build").generic_string());
+    CHECK(configure[6] == root.generic_string());
     CHECK(configure[7] == "-DCMAKE_BUILD_TYPE=Debug");
     CHECK(configure[9] == "-DWOKI_CMAKE_DIR=/cmake modules");
     CHECK(configure[10] == "-DWOKI_SDK_DIR=/sdk path");
     CHECK(configure[11] == "-DWOKI_EXTENSION_PACKAGE_DIR=" + (root / "build/packages").generic_string());
 
-    CHECK(wokiext::BuildCompileArguments(options) == std::vector<std::string>{"cmake", "--build", (root / "build").string(), "--config", "Debug"});
+    CHECK(wokiext::BuildCompileArguments(options) == std::vector<std::string>{"cmake", "--build", (root / "build").generic_string(), "--config", "Debug"});
 }
 
 TEST_CASE("parser rejects duplicate singleton options") {

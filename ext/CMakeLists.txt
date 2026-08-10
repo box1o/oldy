@@ -67,9 +67,21 @@ if(WIN32 AND EXISTS "${CDEPS_ROOT}/wasmtime-c-api/lib/wasmtime.dll")
     )
 endif()
 
-install(TARGETS wokiext
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-)
+if(WIN32)
+    install(TARGETS wokiext
+        RUNTIME_DEPENDENCY_SET wokiext_runtime_dependencies
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    )
+    install(RUNTIME_DEPENDENCY_SET wokiext_runtime_dependencies
+        PRE_EXCLUDE_REGEXES "api-ms-.*" "ext-ms-.*"
+        POST_EXCLUDE_REGEXES ".*[Ss]ystem32/.*\\.dll"
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    )
+else()
+    install(TARGETS wokiext
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    )
+endif()
 install(FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/../cmake/ExtensionProject.cmake
     ${CMAKE_CURRENT_SOURCE_DIR}/../cmake/ExtensionWasm.cmake

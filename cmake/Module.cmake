@@ -77,13 +77,20 @@ function(add_module_test name)
     else()
         include(Catch)
     endif()
+    set(test_temp_dir "${CMAKE_BINARY_DIR}/test-tmp")
+    file(MAKE_DIRECTORY "${test_temp_dir}")
+    set(test_environment "TMPDIR=${test_temp_dir};TEMP=${test_temp_dir};TMP=${test_temp_dir}")
     if(WIN32 AND EXISTS "${CDEPS_ROOT}/wasmtime-c-api/lib/wasmtime.dll")
         catch_discover_tests(${name}
             EXTRA_ARGS --durations yes
             DL_PATHS "${CDEPS_ROOT}/wasmtime-c-api/lib"
+            PROPERTIES ENVIRONMENT "${test_environment}"
         )
     else()
-        catch_discover_tests(${name} EXTRA_ARGS --durations yes)
+        catch_discover_tests(${name}
+            EXTRA_ARGS --durations yes
+            PROPERTIES ENVIRONMENT "${test_environment}"
+        )
     endif()
 
     if(TARGET woki_tests)
