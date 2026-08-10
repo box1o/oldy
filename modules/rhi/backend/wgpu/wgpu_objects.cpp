@@ -954,8 +954,11 @@ u32 WgpuResourceTableImpl::InsertBinding(const BindingResourceDesc& resource) {
     const WGPUBindingResource native_resource = detail::ToWgpu(resource);
 #if defined(WOKI_WGPU_HAS_RESOURCE_TABLE_BINDING_NAMES)
     return wgpuResourceTableInsertBinding(handle_.get(), &native_resource);
-#else
+#elif defined(WOKI_WGPU_HAS_RESOURCE_TABLE_LEGACY_BINDING_NAMES)
     return wgpuResourceTableInsert(handle_.get(), &native_resource);
+#else
+    (void)native_resource;
+    return 0;
 #endif
 }
 
@@ -965,11 +968,13 @@ Result<void> WgpuResourceTableImpl::RemoveBinding(const u32 slot) {
     }
 
 #if defined(WOKI_WGPU_HAS_RESOURCE_TABLE_BINDING_NAMES)
-    const auto status = wgpuResourceTableRemoveBinding(handle_.get(), slot);
+    return FromWgpuStatus(wgpuResourceTableRemoveBinding(handle_.get(), slot), "Failed to remove resource table binding");
+#elif defined(WOKI_WGPU_HAS_RESOURCE_TABLE_LEGACY_BINDING_NAMES)
+    return FromWgpuStatus(wgpuResourceTableRemove(handle_.get(), slot), "Failed to remove resource table binding");
 #else
-    const auto status = wgpuResourceTableRemove(handle_.get(), slot);
+    (void)slot;
+    return Err(ErrorCode::GraphicsResourceCreationFailed, "Resource table binding mutation is unsupported by this WebGPU implementation");
 #endif
-    return FromWgpuStatus(status, "Failed to remove resource table binding");
 }
 
 void WgpuResourceTableImpl::SetLabel(const std::string_view label) {
