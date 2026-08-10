@@ -72,10 +72,10 @@ TEST_CASE("Application event payloads round trip through fixed little endian lay
     CHECK(decoded_position.y == 34);
 
     const std::array<woki::u8, 8> signed_bits{0x00, 0x00, 0x00, 0x80, 0xff, 0xff, 0xff, 0xff};
-    REQUIRE(woki_ext_decode_position_event(signed_bits.data(), signed_bits.size(), &decoded_position) == WOKI_EXT_OK);
+    REQUIRE(woki_ext_decode_position_event(signed_bits.data(), static_cast<std::uint32_t>(signed_bits.size()), &decoded_position) == WOKI_EXT_OK);
     CHECK(decoded_position.x == std::numeric_limits<std::int32_t>::min());
     CHECK(decoded_position.y == -1);
-    const woki::ext::Event guest_position{WOKI_EXT_EVENT_WINDOW_MOVED, signed_bits.data(), signed_bits.size()};
+    const woki::ext::Event guest_position{WOKI_EXT_EVENT_WINDOW_MOVED, signed_bits.data(), static_cast<woki::u32>(signed_bits.size())};
     const auto guest_decoded = guest_position.Get<woki::ext::WindowMovedEvent>();
     CHECK(guest_decoded.x == std::numeric_limits<woki::i32>::min());
     CHECK(guest_decoded.y == -1);

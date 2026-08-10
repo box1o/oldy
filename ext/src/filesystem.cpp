@@ -1,15 +1,7 @@
-#include <cerrno>
-#include <vector>
-#include <cstring>
-
-#ifdef _WIN32
 #include <array>
 #include <random>
 #include <iomanip>
 #include <sstream>
-#else
-#include <stdlib.h>
-#endif
 
 #include "cli_internal.hpp"
 
@@ -83,14 +75,6 @@ std::expected<TemporaryDirectory, std::string> TemporaryDirectory::Create(std::s
     if (error)
         return std::unexpected("Cannot locate the temporary directory: " + error.message());
 
-#ifndef _WIN32
-    std::string pattern = (base / (std::string(prefix) + "XXXXXX")).string();
-    std::vector<char> buffer(pattern.begin(), pattern.end());
-    buffer.push_back('\0');
-    if (char* created = ::mkdtemp(buffer.data()))
-        return TemporaryDirectory(std::filesystem::path(created));
-    return std::unexpected("Cannot create temporary directory: " + std::string(std::strerror(errno)));
-#else
     std::random_device random;
     for (int attempt = 0; attempt < 32; ++attempt) {
         std::array<std::uint32_t, 4> words{random(), random(), random(), random()};
@@ -112,7 +96,6 @@ std::expected<TemporaryDirectory, std::string> TemporaryDirectory::Create(std::s
         error.clear();
     }
     return std::unexpected("Cannot allocate a unique temporary directory");
-#endif
 }
 
 } // namespace wokiext
