@@ -101,6 +101,9 @@ inline constexpr std::size_t kMaxPackageEntries = 10'000u;
     if (!path.is_absolute()) {
         return Err(ErrorCode::InvalidArgument, "Extension " + std::string(name) + " root must be absolute and canonical: " + path.string());
     }
+    if (!SamePath(path, path.lexically_normal())) {
+        return Err(ErrorCode::FileAccessDenied, "Extension " + std::string(name) + " root must be canonical and must not use a symbolic-link alias: " + path.string());
+    }
     const fs::path supplied = fs::absolute(path, error);
     if (error) {
         return Err(ErrorCode::FileReadError, "Failed to resolve extension " + std::string(name) + " root: " + error.message());
@@ -821,9 +824,18 @@ Result<PackageLayout> InstallUnpackedPackage(const fs::path& source_root, const 
         return Err(ErrorCode::InvalidArgument, "Unpacked extension source must not overlap the extension install root.");
     }
     const fs::path supplied_source = fs::absolute(source_root, error);
-    if (error || supplied_source.lexically_normal() != canonical_source) {
+    if (error || !SamePath(source_root, source_root.lexically_normal())) {
         return Err(ErrorCode::FileAccessDenied, "Unpacked extension source must be canonical and must not use a symbolic-link alias.");
     }
+#ifdef _WIN32
+    if (ContainsRootSymlink(supplied_source.lexically_normal())) {
+        return Err(ErrorCode::FileAccessDenied, "Unpacked extension source must be canonical and must not use a symbolic-link alias.");
+    }
+#else
+    if (!SamePath(supplied_source.lexically_normal(), canonical_source)) {
+        return Err(ErrorCode::FileAccessDenied, "Unpacked extension source must be canonical and must not use a symbolic-link alias.");
+    }
+#endif
     const PackageLayout source_layout{
         .install_root = canonical_source,
         .manifest = canonical_source / "manifest.yaml",
