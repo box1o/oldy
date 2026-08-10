@@ -1,6 +1,7 @@
 function(add_module name)
+    set(options NO_INSTALL_HEADERS)
     set(multi_value_args SOURCES HEADERS DEPENDENCIES)
-    cmake_parse_arguments(ARG "" "" "${multi_value_args}" ${ARGN})
+    cmake_parse_arguments(ARG "${options}" "" "${multi_value_args}" ${ARGN})
 
     if(NOT ARG_HEADERS)
         message(FATAL_ERROR "Module '${name}' must define HEADERS")
@@ -38,9 +39,11 @@ function(add_module name)
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     )
 
-    install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/
-        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-    )
+    if(NOT ARG_NO_INSTALL_HEADERS)
+        install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/
+            DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+        )
+    endif()
 endfunction()
 
 function(add_module_test name)

@@ -1,0 +1,22 @@
+if(NOT DEFINED SOURCE_MANIFEST OR NOT DEFINED PACKAGE_DIR)
+    message(FATAL_ERROR "SOURCE_MANIFEST and PACKAGE_DIR are required")
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/ExtensionManifest.cmake")
+set(package_manifest "${PACKAGE_DIR}/manifest.yaml")
+woki_extension_manifest_wasm("${package_manifest}" package_wasm_relative)
+set(package_wasm "${PACKAGE_DIR}/${package_wasm_relative}")
+if(NOT EXISTS "${package_manifest}" OR NOT EXISTS "${package_wasm}")
+    message(FATAL_ERROR "Extension package is incomplete: ${PACKAGE_DIR}")
+endif()
+
+file(SHA256 "${SOURCE_MANIFEST}" source_manifest_hash)
+file(SHA256 "${package_manifest}" package_manifest_hash)
+if(NOT source_manifest_hash STREQUAL package_manifest_hash)
+    message(FATAL_ERROR "Packaged manifest is stale: ${package_manifest}")
+endif()
+
+file(READ "${package_wasm}" wasm_magic HEX LIMIT 4)
+if(NOT wasm_magic STREQUAL "0061736d")
+    message(FATAL_ERROR "Packaged extension is not a WebAssembly module: ${package_wasm}")
+endif()

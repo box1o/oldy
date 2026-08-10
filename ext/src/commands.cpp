@@ -1,10 +1,10 @@
 #include <string>
-#include <iostream>
 #include <filesystem>
 
-#include <woki/ext/ext.hpp>
+#include <woki/ext/manifest.hpp>
+#include <woki/ext/host/factory.hpp>
 
-#include "wokiext/cli.hpp"
+#include "cli_internal.hpp"
 
 namespace wokiext {
 
@@ -54,82 +54,82 @@ namespace fs = std::filesystem;
     return out;
 }
 
-void PrintCommandJsonObject(std::string_view extension_id, const woki::ext::CommandContribution& command) {
-    std::cout << "{\"extension\":\"" << JsonEscape(extension_id) << "\",\"id\":\"" << JsonEscape(command.id) << "\",\"title\":\"" << JsonEscape(command.title) << "\",\"category\":\"" << JsonEscape(command.category)
-              << "\"}";
+void PrintCommandJsonObject(Context& context, std::string_view extension_id, const woki::ext::CommandContribution& command) {
+    context.diagnostics.Out() << "{\"extension\":\"" << JsonEscape(extension_id) << "\",\"id\":\"" << JsonEscape(command.id) << "\",\"title\":\"" << JsonEscape(command.title) << "\",\"category\":\""
+                              << JsonEscape(command.category) << "\"}";
 }
 
-Status CommandsForPath(const fs::path& path, bool json) {
+Status CommandsForPath(Context& context, const fs::path& path, bool json) {
     const fs::path root = fs::absolute(path).lexically_normal();
     auto manifest = woki::ext::LoadManifest(root / "manifest.yaml");
     if (!manifest) {
-        std::cerr << manifest.error().Message() << '\n';
+        context.diagnostics.Error(manifest.error().Message());
         return Status::Error;
     }
 
     if (json) {
-        std::cout << "[";
+        context.diagnostics.Out() << "[";
         for (std::size_t i = 0; i < manifest->commands.size(); ++i) {
             if (i != 0) {
-                std::cout << ",";
+                context.diagnostics.Out() << ",";
             }
-            PrintCommandJsonObject(manifest->id, manifest->commands[i]);
+            PrintCommandJsonObject(context, manifest->id, manifest->commands[i]);
         }
-        std::cout << "]\n";
+        context.diagnostics.Out() << "]\n";
         return Status::Ok;
     }
 
     for (const woki::ext::CommandContribution& command : manifest->commands) {
-        std::cout << command.id << " " << command.title;
+        context.diagnostics.Out() << command.id << " " << command.title;
         if (!command.category.empty()) {
-            std::cout << " [" << command.category << "]";
+            context.diagnostics.Out() << " [" << command.category << "]";
         }
-        std::cout << '\n';
+        context.diagnostics.Out() << '\n';
     }
     return Status::Ok;
 }
 
 } // namespace
 
-Status Commands(const CommandsOptions& options) {
+Status Commands(Context& context, const CommandsOptions& options) {
     if (!options.path.empty()) {
-        return CommandsForPath(options.path, options.json);
+        return CommandsForPath(context, options.path, options.json);
     }
 
     auto roots = woki::ext::RootsFromBase(options.root);
     if (!roots) {
-        std::cerr << roots.error().Message() << '\n';
+        context.diagnostics.Error(roots.error().Message());
         return Status::Error;
     }
 
-    woki::ext::Manager manager;
-    manager.SetRoots(*roots);
-    auto scanned = manager.Scan();
+    auto manager = woki::ext::CreateExtensionManager();
+    manager->SetRoots(*roots);
+    auto scanned = manager->Scan();
     if (!scanned) {
-        std::cerr << scanned.error().Message() << '\n';
+        context.diagnostics.Error(scanned.error().Message());
         return Status::Error;
     }
 
     if (options.json) {
-        std::cout << "[";
+        context.diagnostics.Out() << "[";
         bool first = true;
-        for (const woki::ext::CommandRecord& record : manager.Commands().Records()) {
+        for (const woki::ext::CommandRecord& record : manager->Commands()) {
             if (!first) {
-                std::cout << ",";
+                context.diagnostics.Out() << ",";
             }
-            PrintCommandJsonObject(record.extension_id, record.command);
+            PrintCommandJsonObject(context, record.extension_id, record.command);
             first = false;
         }
-        std::cout << "]\n";
+        context.diagnostics.Out() << "]\n";
         return Status::Ok;
     }
 
-    for (const woki::ext::CommandRecord& record : manager.Commands().Records()) {
-        std::cout << record.command.id << " " << record.command.title;
+    for (const woki::ext::CommandRecord& record : manager->Commands()) {
+        context.diagnostics.Out() << record.command.id << " " << record.command.title;
         if (!record.command.category.empty()) {
-            std::cout << " [" << record.command.category << "]";
+            context.diagnostics.Out() << " [" << record.command.category << "]";
         }
-        std::cout << '\n';
+        context.diagnostics.Out() << '\n';
     }
     return Status::Ok;
 }

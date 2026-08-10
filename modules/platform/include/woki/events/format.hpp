@@ -273,18 +273,31 @@ inline void AppendEventPayload(std::string& output, const Event& event) {
 
 [[nodiscard]] constexpr bool ShouldForwardToExtensions(EventType type) noexcept {
     switch (type) {
-        case EventType::kAppTick:
-        case EventType::kAppUpdate:
-        case EventType::kAppRender:
-        case EventType::kMouseMoved:
-        case EventType::kFrameBegin:
-        case EventType::kFrameEnd:
-        case EventType::kRenderBegin:
-        case EventType::kRenderEnd:
-        case EventType::kSwapBuffers:
-            return false;
-        default:
+        case EventType::kWindowClosed:
+        case EventType::kWindowResized:
+        case EventType::kWindowFocused:
+        case EventType::kWindowLostFocus:
+        case EventType::kWindowMoved:
+        case EventType::kWindowMinimized:
+        case EventType::kWindowMaximized:
+        case EventType::kWindowRestored:
+        case EventType::kKeyPressed:
+        case EventType::kKeyReleased:
+        case EventType::kKeyTyped:
+        case EventType::kMouseScrolled:
+        case EventType::kMouseButtonPressed:
+        case EventType::kMouseButtonReleased:
+        case EventType::kMouseButtonClicked:
+        case EventType::kMouseEntered:
+        case EventType::kMouseLeft:
+        case EventType::kWindowScaleChanged:
+        case EventType::kViewportResized:
+        case EventType::kAppShutdown:
+        case EventType::kAppSuspend:
+        case EventType::kAppResume:
             return true;
+        default:
+            return false;
     }
 }
 

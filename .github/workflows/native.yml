@@ -123,14 +123,8 @@ jobs:
         shell: bash
         run: |
           package="dist/${{ matrix.artifact }}"
-          mkdir -p "$package/extensions/kitty"
-          if [[ "${{ runner.os }}" == "Windows" ]]; then
-            cmake --install build --prefix "$package"
-          else
-            cmake --install build --prefix "$package"
-          fi
-          cp extensions/kitty/manifest.yaml "$package/extensions/kitty/"
-          cp extensions/kitty/extension.wasm "$package/extensions/kitty/"
+          cmake --install build --prefix "$package" --config Release
+          ctest --test-dir build --output-on-failure -C Release -R '^installed_release_tree$'
 
       - name: Upload package
         if: inputs.package

@@ -93,13 +93,12 @@ if(EMSCRIPTEN)
         "--shell-file" "${CMAKE_SOURCE_DIR}/web/index.html"
     )
 
-    set(_EXT_DIR "${CMAKE_SOURCE_DIR}/extensions")
-    if(EXISTS "${_EXT_DIR}")
-        target_link_options(studio PRIVATE
-            "SHELL:--preload-file ${_EXT_DIR}@/extensions"
-        )
-        target_compile_definitions(studio PRIVATE WOKI_SOURCE_EXTENSIONS_DIR="/extensions")
-    endif()
+    set(_EXT_DIR "${CMAKE_BINARY_DIR}/extension-packages")
+    file(MAKE_DIRECTORY "${_EXT_DIR}")
+    target_link_options(studio PRIVATE
+        "SHELL:--preload-file ${_EXT_DIR}@/extensions"
+    )
+    target_compile_definitions(studio PRIVATE WOKI_SOURCE_EXTENSIONS_DIR="/extensions")
 
     set_target_properties(studio PROPERTIES
         OUTPUT_NAME "studio"
@@ -131,8 +130,18 @@ if(EMSCRIPTEN)
 else()
     message(STATUS "Building studio for native")
 
+    if(APPLE)
+        set(_INSTALLED_STUDIO_DIR "/${CMAKE_INSTALL_BINDIR}/studio.app/Contents/MacOS")
+    else()
+        set(_INSTALLED_STUDIO_DIR "/${CMAKE_INSTALL_BINDIR}")
+    endif()
+    file(RELATIVE_PATH _INSTALLED_EXTENSIONS_FROM_BINDIR
+        "${_INSTALLED_STUDIO_DIR}"
+        "/${CMAKE_INSTALL_DATADIR}/woki/extensions"
+    )
+
     target_compile_definitions(studio PRIVATE
-        WOKI_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+        "WOKI_SOURCE_EXTENSIONS_DIR=(*woki::paths::ExecutablePath()).parent_path() / std::filesystem::path{\"${_INSTALLED_EXTENSIONS_FROM_BINDIR}/$<CONFIG>\"}"
         WOKI_SYSTEM_CONFIG_DIR="${CMAKE_INSTALL_FULL_SYSCONFDIR}/woki"
     )
 
@@ -169,12 +178,32 @@ else()
     endif()
 endif()
 
+if(TARGET woki_extensions)
+    add_dependencies(studio woki_extensions)
+endif()
+
 target_link_libraries(studio PRIVATE ${_DEPS})
 
 install(TARGETS studio
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     BUNDLE  DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
+
+if(NOT EMSCRIPTEN AND TARGET woki_extensions)
+    add_custom_target(studio_extension_stage
+        COMMAND ${CMAKE_COMMAND} -E rm -rf
+            "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_DATADIR}/woki/extensions/$<CONFIG>"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_BINARY_DIR}/extension-packages/$<CONFIG>"
+            "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_DATADIR}/woki/extensions/$<CONFIG>"
+        DEPENDS woki_extensions
+        VERBATIM
+    )
+    add_dependencies(studio studio_extension_stage)
+    install(DIRECTORY "${CMAKE_BINARY_DIR}/extension-packages/$<CONFIG>/"
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/woki/extensions/$<CONFIG>"
+    )
+endif()
 
 if(EXISTS "${_RES_DIR}" AND NOT EMSCRIPTEN)
     install(
@@ -231,4 +260,28 @@ if(EXISTS "${_DEFAULT_CONFIG}" AND NOT EMSCRIPTEN)
             )
         endif()
     endif()
+endif()
+
+if(BUILD_TESTING AND NOT EMSCRIPTEN AND TARGET wokiext AND TARGET woki_extensions)
+    if(APPLE)
+        set(_INSTALLED_STUDIO_RELATIVE "${CMAKE_INSTALL_BINDIR}/studio.app/Contents/MacOS/$<TARGET_FILE_NAME:studio>")
+    else()
+        set(_INSTALLED_STUDIO_RELATIVE "${CMAKE_INSTALL_BINDIR}/$<TARGET_FILE_NAME:studio>")
+    endif()
+    add_test(NAME installed_release_tree
+        COMMAND ${CMAKE_COMMAND}
+            -D BUILD_DIR=${CMAKE_BINARY_DIR}
+            -D TEST_ROOT=${CMAKE_BINARY_DIR}/installed-release-tree-test
+            -D CONFIG=$<CONFIG>
+            -D BINDIR=${CMAKE_INSTALL_BINDIR}
+            -D DATADIR=${CMAKE_INSTALL_DATADIR}
+            -D INCLUDEDIR=${CMAKE_INSTALL_INCLUDEDIR}
+            -D WOKIEXT_NAME=$<TARGET_FILE_NAME:wokiext>
+            -D STUDIO_RELATIVE=${_INSTALLED_STUDIO_RELATIVE}
+            -P ${CMAKE_SOURCE_DIR}/cmake/TestInstalledReleaseTree.cmake
+    )
+    file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/installed-release-tree-tmp")
+    set_tests_properties(installed_release_tree PROPERTIES
+        ENVIRONMENT "TMPDIR=${CMAKE_BINARY_DIR}/installed-release-tree-tmp;TEMP=${CMAKE_BINARY_DIR}/installed-release-tree-tmp;TMP=${CMAKE_BINARY_DIR}/installed-release-tree-tmp"
+    )
 endif()

@@ -1,12 +1,10 @@
-#include <iostream>
-
-#include "wokiext/cli.hpp"
+#include "cli_internal.hpp"
 #include "manifest_schema.hpp"
 
 namespace wokiext {
 
-Status Schema() {
-    std::cout << kManifestSchema;
+Status Schema(Context& context) {
+    context.diagnostics.Out() << kManifestSchema;
     return Status::Ok;
 }
 

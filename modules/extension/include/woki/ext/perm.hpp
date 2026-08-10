@@ -1,8 +1,7 @@
 #pragma once
 
-// IWYU pragma: private, include "woki/ext/ext.hpp"
-
 #include <array>
+#include <vector>
 #include <string_view>
 
 #include <woki/core.hpp>
@@ -16,6 +15,17 @@ enum class Permission : u8 {
     Config,
     Events,
 };
+
+struct RequestedCapabilities {
+    std::vector<Permission> permissions;
+};
+
+struct EffectiveCapabilities {
+    std::vector<Permission> permissions;
+};
+
+[[nodiscard]] bool HasPermission(const RequestedCapabilities& capabilities, Permission permission) noexcept;
+[[nodiscard]] bool HasPermission(const EffectiveCapabilities& capabilities, Permission permission) noexcept;
 
 [[nodiscard]] constexpr std::array<Permission, 5> AllPermissions() noexcept {
     return {

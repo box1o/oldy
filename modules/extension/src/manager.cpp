@@ -1,228 +1,312 @@
-#include <string>
+#include <utility>
 #include <optional>
-#include <algorithm>
-#include <filesystem>
 
+#include "woki/ext/limits.hpp"
 #include "woki/ext/manager.hpp"
+#include "woki/ext/runtime.hpp"
+#include "woki/ext/registry.hpp"
+#include "woki/ext/wasm/web_engine.hpp"
+#include "woki/ext/internal/command_index.hpp"
+#include "woki/ext/internal/event_service.hpp"
 
 namespace woki::ext {
 
-namespace {
-
-[[nodiscard]] Result<void> LoadOne(Runtime& runtime, Record& record) {
-    if (record.state != State::PermissionChecked) {
-        return Ok();
+struct ExtensionManager::Impl {
+    explicit Impl(scope<RuntimeEngine> engine)
+        : event_service(std::make_shared<host::EventService>()),
+          runtime(std::move(engine)),
+          capability_policy(createScope<PermissiveCapabilityPolicy>()) {
+        runtime.SetEventService(event_service);
     }
 
-    auto loaded = runtime.Load(record);
-    if (!loaded) {
-        return Err(loaded.error());
+    void DrainEmittedEvents() {
+        event_service->Drain();
     }
-    if (auto initialized = runtime.Initialize(record); !initialized) {
-        return Err(initialized.error());
-    }
-    return Ok();
+
+    std::shared_ptr<host::EventService> event_service;
+    Registry registry;
+    Runtime runtime;
+    scope<CapabilityPolicy> capability_policy;
+    CommandIndex commands;
+    Roots roots;
+};
+
+ExtensionManager::ExtensionManager(scope<RuntimeEngine> engine) noexcept
+    : impl_(createScope<Impl>(std::move(engine))) {}
+
+ExtensionManager::~ExtensionManager() = default;
+
+scope<ExtensionManager> CreateExtensionManager(HostOptions options) {
+    auto manager = scope<ExtensionManager>(new ExtensionManager(wasm::CreateEngine(options.allow_trusted_synchronous_web)));
+    manager->SetEventBus(options.event_bus);
+    return manager;
 }
 
-} // namespace
-
-Manager::Manager(RuntimeBackend* backend) noexcept
-    : runtime_(backend) {}
-
-Manager::Manager(scope<RuntimeBackend> backend) noexcept
-    : runtime_(std::move(backend)) {}
-
-void Manager::SetBackend(RuntimeBackend* backend) noexcept {
-    UnloadAll();
-    runtime_.SetBackend(backend);
+void ExtensionManager::SetCapabilityPolicy(scope<CapabilityPolicy> policy) {
+    impl_->runtime.UnloadAll();
+    impl_->DrainEmittedEvents();
+    impl_->capability_policy = policy == nullptr ? createScope<PermissiveCapabilityPolicy>() : std::move(policy);
 }
 
-void Manager::SetBackend(scope<RuntimeBackend> backend) noexcept {
-    UnloadAll();
-    runtime_.SetBackend(std::move(backend));
+void ExtensionManager::SetEventBus(host::EventBus* bus) noexcept {
+    impl_->event_service->SetBus(bus);
 }
 
-void Manager::SetRoots(Roots roots) {
-    UnloadAll();
-    roots_ = std::move(roots);
-    registry_.SetRoots(roots_);
+void ExtensionManager::SetRoots(Roots roots) {
+    impl_->runtime.UnloadAll();
+    impl_->DrainEmittedEvents();
+    if (roots.config.empty() && !roots.data.empty())
+        roots.config = roots.data.parent_path() / "ext-config";
+    impl_->roots = std::move(roots);
+    impl_->registry.Clear();
+    impl_->commands.Clear();
 }
 
-Result<PackageLayout> Manager::Install(const std::filesystem::path& package_path) {
-    if (roots_.extensions.empty() || roots_.data.empty() || roots_.cache.empty()) {
+Result<PackageLayout> ExtensionManager::Install(const std::filesystem::path& package_path) {
+    if (impl_->roots.extensions.empty() || impl_->roots.data.empty() || impl_->roots.cache.empty() || impl_->roots.config.empty()) {
         auto defaults = DefaultRoots();
-        if (!defaults) {
+        if (!defaults)
             return Err(defaults.error());
-        }
-        SetRoots(std::move(*defaults));
+        Roots completed = impl_->roots;
+        if (completed.extensions.empty())
+            completed.extensions = defaults->extensions;
+        if (completed.data.empty())
+            completed.data = defaults->data;
+        if (completed.cache.empty())
+            completed.cache = defaults->cache;
+        if (completed.config.empty())
+            completed.config = defaults->config;
+        SetRoots(std::move(completed));
     }
-
     std::error_code error;
-    if (std::filesystem::is_directory(package_path, error)) {
+    const bool is_directory = std::filesystem::is_directory(package_path, error);
+    if (error == std::errc::no_such_file_or_directory)
+        return Err(ErrorCode::FileNotFound, "Extension package does not exist: " + package_path.string());
+    if (error)
+        return Err(ErrorCode::FileReadError, "Failed to inspect extension package '" + package_path.string() + "': " + error.message());
+    if (is_directory)
         return InstallUnpacked(package_path);
-    }
-
-    auto installed = InstallArchive(package_path, roots_);
-    if (!installed) {
-        return Err(installed.error());
-    }
-
-    auto scanned = Scan();
-    if (!scanned) {
-        return Err(scanned.error());
-    }
-
-    return installed;
+    return InstallArchive(package_path, impl_->roots);
 }
 
-Result<PackageLayout> Manager::InstallUnpacked(const std::filesystem::path& source_root) {
-    if (roots_.extensions.empty() || roots_.data.empty() || roots_.cache.empty()) {
+Result<PackageLayout> ExtensionManager::InstallUnpacked(const std::filesystem::path& source_root) {
+    if (impl_->roots.extensions.empty() || impl_->roots.data.empty() || impl_->roots.cache.empty() || impl_->roots.config.empty()) {
         auto defaults = DefaultRoots();
-        if (!defaults) {
+        if (!defaults)
             return Err(defaults.error());
-        }
-        SetRoots(std::move(*defaults));
+        Roots completed = impl_->roots;
+        if (completed.extensions.empty())
+            completed.extensions = defaults->extensions;
+        if (completed.data.empty())
+            completed.data = defaults->data;
+        if (completed.cache.empty())
+            completed.cache = defaults->cache;
+        if (completed.config.empty())
+            completed.config = defaults->config;
+        SetRoots(std::move(completed));
     }
-
-    auto installed = InstallUnpackedPackage(source_root, roots_);
-    if (!installed) {
-        return Err(installed.error());
-    }
-
-    auto scanned = Scan();
-    if (!scanned) {
-        return Err(scanned.error());
-    }
-
-    return installed;
+    return InstallUnpackedPackage(source_root, impl_->roots);
 }
 
-Result<void> Manager::Scan() {
-    UnloadAll();
-    commands_.Clear();
-    auto scanned = registry_.Scan();
-    if (!scanned) {
+Result<void> ExtensionManager::Scan() {
+    Roots next_roots = impl_->roots;
+    if (next_roots.extensions.empty() || next_roots.data.empty() || next_roots.cache.empty() || next_roots.config.empty()) {
+        auto defaults = DefaultRoots();
+        if (!defaults)
+            return Err(defaults.error());
+        if (next_roots.extensions.empty())
+            next_roots.extensions = defaults->extensions;
+        if (next_roots.data.empty())
+            next_roots.data = defaults->data;
+        if (next_roots.cache.empty())
+            next_roots.cache = defaults->cache;
+        if (next_roots.config.empty())
+            next_roots.config = defaults->config;
+    }
+    Registry next_registry;
+    if (auto scanned = next_registry.Scan(next_roots); !scanned)
         return Err(scanned.error());
+    CommandIndex next_commands;
+    for (const ExtensionPackage& package : next_registry.Packages()) {
+        if (auto indexed = next_commands.Add(package.Id(), package.GetManifest().commands); !indexed)
+            return Err(indexed.error());
     }
-
-    for (const Record& record : registry_.Records()) {
-        if (record.state != State::Failed) {
-            commands_.Register(record.id, record.manifest.commands);
-        }
-    }
+    impl_->runtime.UnloadAll();
+    impl_->DrainEmittedEvents();
+    impl_->roots = std::move(next_roots);
+    impl_->registry = std::move(next_registry);
+    impl_->commands = std::move(next_commands);
     return Ok();
 }
 
-Result<void> Manager::ScanSource(const std::filesystem::path& source_root) {
-    UnloadAll();
-    commands_.Clear();
-    auto scanned = registry_.ScanSource(source_root);
-    if (!scanned) {
+Result<void> ExtensionManager::ScanSource(const std::filesystem::path& source_root) {
+    Roots next_roots = impl_->roots;
+    if (next_roots.data.empty() || next_roots.cache.empty() || next_roots.config.empty()) {
+        auto defaults = DefaultRoots();
+        if (!defaults)
+            return Err(defaults.error());
+        if (next_roots.data.empty())
+            next_roots.data = defaults->data;
+        if (next_roots.cache.empty())
+            next_roots.cache = defaults->cache;
+        if (next_roots.config.empty())
+            next_roots.config = defaults->config;
+    }
+    Registry next_registry;
+    if (auto scanned = next_registry.ScanSource(source_root, next_roots); !scanned)
         return Err(scanned.error());
+    CommandIndex next_commands;
+    for (const ExtensionPackage& package : next_registry.Packages()) {
+        if (auto indexed = next_commands.Add(package.Id(), package.GetManifest().commands); !indexed)
+            return Err(indexed.error());
     }
-
-    for (const Record& record : registry_.Records()) {
-        if (record.state != State::Failed) {
-            commands_.Register(record.id, record.manifest.commands);
-        }
-    }
+    impl_->runtime.UnloadAll();
+    impl_->DrainEmittedEvents();
+    impl_->roots = std::move(next_roots);
+    impl_->registry = std::move(next_registry);
+    impl_->commands = std::move(next_commands);
     return Ok();
 }
 
-Result<void> Manager::Load(std::string_view id) {
-    Record* record = Find(id);
-    if (record == nullptr) {
+Result<void> ExtensionManager::Load(std::string_view id) {
+    const ExtensionPackage* package = Find(id);
+    if (package == nullptr)
         return Err(ErrorCode::FileNotFound, "Extension '" + std::string(id) + "' is not registered. Run Scan() first.");
+    auto grants = impl_->capability_policy->Grant(package->GetManifest());
+    if (!grants) {
+        impl_->runtime.RecordFailure(package->Id(), grants.error());
+        return Err(grants.error());
     }
-    if (record->state != State::PermissionChecked) {
-        return Err(ErrorCode::ValidationInvalidState, "Extension '" + std::string(id) + "' is not loadable from its current state.");
-    }
-
-    auto loaded = runtime_.Load(*record);
-    if (!loaded) {
-        return Err(loaded.error());
-    }
-    return runtime_.Initialize(*record);
+    auto loaded = impl_->runtime.Load(*package, std::move(*grants));
+    impl_->DrainEmittedEvents();
+    return loaded;
 }
 
-Result<void> Manager::LoadAll() {
+Result<void> ExtensionManager::LoadAll() {
     std::string failures;
-    std::optional<ErrorCode> error_code;
-    for (Record& record : registry_.Records()) {
-        auto loaded = LoadOne(runtime_, record);
-        if (!loaded) {
-            if (!failures.empty()) {
-                failures += "; ";
-            }
-            failures += record.id + ": " + std::string(loaded.error().Message());
-            if (!error_code) {
-                error_code = loaded.error().Code();
-            }
-        }
-    }
-    if (error_code) {
-        return Err(*error_code, "One or more extensions failed to load: " + failures);
-    }
-    return Ok();
-}
-
-void Manager::Tick(f64 delta_ms) {
-    for (Record& record : registry_.Records()) {
-        runtime_.Tick(record, delta_ms);
-    }
-}
-
-void Manager::DispatchEvent(u32 event_type, std::span<const u8> payload) {
-    for (Record& record : registry_.Records()) {
-        if (!HasPermission(record.manifest, Permission::Events)) {
+    std::optional<ErrorCode> code;
+    for (const ExtensionPackage& package : impl_->registry.Packages()) {
+        if (impl_->runtime.IsActive(package.Id()))
             continue;
-        }
-        runtime_.DispatchEvent(record, event_type, payload);
+        auto grants = impl_->capability_policy->Grant(package.GetManifest());
+        if (!grants)
+            impl_->runtime.RecordFailure(package.Id(), grants.error());
+        auto loaded = grants ? impl_->runtime.Load(package, std::move(*grants)) : Result<void>(Err(grants.error()));
+        if (loaded)
+            continue;
+        if (!failures.empty())
+            failures += "; ";
+        failures += package.Id() + ": " + std::string(loaded.error().Message());
+        if (!code)
+            code = loaded.error().Code();
     }
+    impl_->DrainEmittedEvents();
+    return code ? Err(*code, "One or more extensions failed to load: " + failures) : Ok();
 }
 
-Result<void> Manager::ExecuteCommand(std::string_view command_id, std::span<const u8> payload) {
-    return command_dispatcher_.Execute(commands_, runtime_, registry_.Records(), command_id, payload);
+Result<void> ExtensionManager::ActivateStartup() {
+    std::string failures;
+    std::optional<ErrorCode> code;
+    for (const ExtensionPackage& package : impl_->registry.Packages()) {
+        if (!package.GetManifest().activation.startup || impl_->runtime.IsActive(package.Id()))
+            continue;
+        auto loaded = Load(package.Id());
+        if (loaded)
+            continue;
+        if (!failures.empty())
+            failures += "; ";
+        failures += package.Id() + ": " + std::string(loaded.error().Message());
+        if (!code)
+            code = loaded.error().Code();
+    }
+    return code ? Err(*code, "One or more startup extensions failed to activate: " + failures) : Ok();
 }
 
-void Manager::Unload(std::string_view id) {
-    Record* record = Find(id);
-    if (record == nullptr) {
+void ExtensionManager::Tick(f64 delta_ms) {
+    for (const ExtensionPackage& package : impl_->registry.Packages()) {
+        if (package.GetManifest().activation.tick && impl_->runtime.IsActive(package.Id()))
+            impl_->runtime.Tick(package.Id(), delta_ms);
+    }
+    impl_->DrainEmittedEvents();
+}
+
+void ExtensionManager::DispatchEvent(u32 event_type, std::span<const u8> payload) {
+    if (payload.size() > limits::kMaxEventBytes)
         return;
+    std::optional<ApplicationEventType> known;
+    for (const ApplicationEventType event : AllApplicationEventTypes()) {
+        if (static_cast<u32>(event) == event_type) {
+            known = event;
+            break;
+        }
     }
-    runtime_.Unload(*record);
-}
-
-void Manager::UnloadAll() {
-    for (Record& record : registry_.Records()) {
-        runtime_.Unload(record);
+    if (!known && (event_type & host::kExtensionEventNamespace) == 0)
+        return;
+    for (const ExtensionPackage& package : impl_->registry.Packages()) {
+        if (known) {
+            if (!ActivatesOn(package.GetManifest(), *known))
+                continue;
+            if (!impl_->runtime.IsActive(package.Id()) && !Load(package.Id()))
+                continue;
+        } else if (!impl_->runtime.IsActive(package.Id()))
+            continue;
+        if (impl_->runtime.HasGrant(package.Id(), Permission::Events) && impl_->runtime.IsSubscribed(package.Id(), event_type))
+            impl_->runtime.DispatchEvent(package.Id(), event_type, payload);
     }
+    impl_->DrainEmittedEvents();
 }
 
-const std::vector<Record>& Manager::Records() const noexcept {
-    return registry_.Records();
-}
-
-const CommandRegistry& Manager::Commands() const noexcept {
-    return commands_;
-}
-
-Record* Manager::Find(std::string_view id) noexcept {
-    auto& records = registry_.Records();
-    const auto it = std::ranges::find(records, id, &Record::id);
-    if (it == records.end()) {
-        return nullptr;
+void ExtensionManager::DispatchNamedEvent(std::string_view topic, std::span<const u8> payload) {
+    if (!host::IsValidEventTopic(topic) || payload.size() > limits::kMaxEventBytes)
+        return;
+    for (const ExtensionPackage& package : impl_->registry.Packages()) {
+        if (impl_->runtime.IsActive(package.Id()) && impl_->runtime.HasGrant(package.Id(), Permission::Events) && impl_->runtime.IsSubscribed(package.Id(), topic))
+            impl_->runtime.DispatchNamedEvent(package.Id(), topic, payload);
     }
-    return &*it;
+    impl_->DrainEmittedEvents();
 }
 
-const Record* Manager::Find(std::string_view id) const noexcept {
-    const auto& records = registry_.Records();
-    const auto it = std::ranges::find(records, id, &Record::id);
-    if (it == records.end()) {
-        return nullptr;
+Result<void> ExtensionManager::ExecuteCommand(std::string_view command_id, std::span<const u8> payload) {
+    const CommandRecord* command = impl_->commands.Find(command_id);
+    if (command == nullptr)
+        return Err(ErrorCode::FileNotFound, "Extension command '" + std::string(command_id) + "' is not registered.");
+    if (!impl_->runtime.IsActive(command->extension_id)) {
+        if (auto loaded = Load(command->extension_id); !loaded)
+            return Err(loaded.error());
     }
-    return &*it;
+    auto dispatched = impl_->runtime.DispatchCommand(command->extension_id, command_id, payload);
+    impl_->DrainEmittedEvents();
+    return dispatched;
+}
+
+void ExtensionManager::Unload(std::string_view id) {
+    impl_->runtime.Unload(id);
+    impl_->DrainEmittedEvents();
+}
+
+void ExtensionManager::UnloadAll() {
+    impl_->runtime.UnloadAll();
+    impl_->DrainEmittedEvents();
+}
+
+std::span<const ExtensionPackage> ExtensionManager::Packages() const noexcept {
+    return impl_->registry.Packages();
+}
+
+std::span<const DiscoveryFailure> ExtensionManager::Failures() const noexcept {
+    return impl_->registry.Failures();
+}
+
+std::span<const ExtensionStatus> ExtensionManager::Statuses() const noexcept {
+    return impl_->runtime.Statuses();
+}
+
+std::span<const CommandRecord> ExtensionManager::Commands() const noexcept {
+    return impl_->commands.Records();
+}
+
+const ExtensionPackage* ExtensionManager::Find(std::string_view id) const noexcept {
+    return impl_->registry.Find(id);
 }
 
 } // namespace woki::ext

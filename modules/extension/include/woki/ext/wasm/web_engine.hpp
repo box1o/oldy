@@ -1,25 +1,27 @@
 #pragma once
 
-// IWYU pragma: private, include "woki/ext/ext.hpp"
+// Host implementation detail. Use CreateExtensionManager from the public API.
 
-#include "backend.hpp"
+#include "../runtime.hpp"
 
 namespace woki::ext::wasm {
 
 /// Engine implementation that runs wasm through browser WebAssembly on Emscripten.
 ///
-/// This keeps `wasm::Backend` as the only runtime backend used by Studio while
-/// allowing the actual engine to be swapped per platform.
-class WebEngine final : public Engine {
+/// Calls are synchronous and cannot interrupt a looping guest. See
+/// docs/web-runtime-isolation.md for the Worker conversion boundary.
+class WebEngine final : public RuntimeEngine {
 public:
-    [[nodiscard]] Result<void> Load(Record& record, host::HostApi& host) override;
-    [[nodiscard]] Result<u32> ApiVersion(Record& record) override;
-    [[nodiscard]] Result<i32> Init(Record& record) override;
-    [[nodiscard]] Result<void> Tick(Record& record, f64 delta_ms) override;
-    [[nodiscard]] Result<void> Event(Record& record, u32 event_type, std::span<const u8> payload) override;
-    [[nodiscard]] Result<i32> Command(Record& record, std::string_view command_id, std::span<const u8> payload) override;
-    void Discard(Record& record) override;
-    void Unload(Record& record) override;
+    explicit WebEngine(bool allow_trusted_synchronous_execution = false) noexcept;
+
+    [[nodiscard]] Result<scope<RuntimeInstance>> Create(const ExtensionPackage& package, host::HostApi host) override;
+
+private:
+#ifdef __EMSCRIPTEN__
+    bool allow_trusted_synchronous_execution_;
+#endif
 };
+
+[[nodiscard]] scope<RuntimeEngine> CreateEngine(bool allow_trusted_synchronous_web = false);
 
 } // namespace woki::ext::wasm

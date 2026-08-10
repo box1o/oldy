@@ -1,6 +1,6 @@
 #pragma once
 
-// IWYU pragma: private, include "woki/ext/ext.hpp"
+// Host implementation detail. This header is not installed.
 
 #include <filesystem>
 

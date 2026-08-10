@@ -12,6 +12,8 @@ file(GLOB_RECURSE HEADERS CONFIGURE_DEPENDS
 
 file(GLOB_RECURSE SDK_HEADERS CONFIGURE_DEPENDS
     sdk/*.h
+    sdk/*.hpp
+    sdk/*.def
 )
 
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
@@ -53,14 +55,34 @@ if(NOT EMSCRIPTEN AND WOKI_EXTENSION_WITH_WASMTIME)
 endif()
 
 add_module(extension
+    NO_INSTALL_HEADERS
     SOURCES ${EXTENSION_SOURCES}
     HEADERS ${HEADERS} ${SDK_HEADERS}
     DEPENDENCIES ${EXTENSION_DEPS}
 )
 
+install(FILES
+    include/woki/ext/application_event.hpp
+    include/woki/ext/command.hpp
+    include/woki/ext/ext.hpp
+    include/woki/ext/manager.hpp
+    include/woki/ext/manifest.hpp
+    include/woki/ext/package.hpp
+    include/woki/ext/perm.hpp
+    include/woki/ext/policy.hpp
+    include/woki/ext/status.hpp
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/woki/ext
+)
+install(FILES
+    include/woki/ext/host/event_bus.hpp
+    include/woki/ext/host/factory.hpp
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/woki/ext/host
+)
+
 target_include_directories(woki_extension
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/sdk>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
 if(NOT EMSCRIPTEN)
@@ -74,8 +96,16 @@ if(NOT EMSCRIPTEN AND WOKI_EXTENSION_WITH_WASMTIME)
 endif()
 
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/sdk/
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/woki
-    FILES_MATCHING PATTERN "*.h"
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/woki/ext/sdk
+    FILES_MATCHING PATTERN "*.h" PATTERN "*.def"
+    PATTERN "woki" EXCLUDE
+    PATTERN "fixtures" EXCLUDE
+    PATTERN "__pycache__" EXCLUDE
+    PATTERN "*.pyc" EXCLUDE
+)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/sdk/woki/ext/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/woki/ext
+    FILES_MATCHING PATTERN "*.hpp"
 )
 
 install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/schema/

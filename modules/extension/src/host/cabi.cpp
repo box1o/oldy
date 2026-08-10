@@ -102,23 +102,20 @@ static_assert(cabi::kInvalid == WOKI_EXT_INVALID);
 
 } // namespace
 
-i32 Log(Record& record, u32 level, const char* message, u32 len) {
-    if (!HasPermission(record.manifest, Permission::Log)) {
+i32 Log(HostApi& host, u32 level, const char* message, u32 len) {
+    if (!host.Allows(Permission::Log)) {
         return cabi::kDenied;
     }
-
     auto text = BoundedString(message, len, kMaxLogBytes, "log message");
     if (!text) {
         return StatusFromError(text.error());
     }
 
-    HostApi host(record);
     host.Log(ParseLogLevel(level), *text);
     return cabi::kOk;
 }
 
-i32 PathData(Record& record, char* out, u32 out_cap) {
-    HostApi host(record);
+i32 PathData(HostApi& host, char* out, u32 out_cap) {
     auto path = host.DataPath();
     if (!path) {
         return StatusFromError(path.error());
@@ -126,8 +123,7 @@ i32 PathData(Record& record, char* out, u32 out_cap) {
     return CopyString(path->string(), out, out_cap);
 }
 
-i32 PathCache(Record& record, char* out, u32 out_cap) {
-    HostApi host(record);
+i32 PathCache(HostApi& host, char* out, u32 out_cap) {
     auto path = host.CachePath();
     if (!path) {
         return StatusFromError(path.error());
@@ -135,15 +131,15 @@ i32 PathCache(Record& record, char* out, u32 out_cap) {
     return CopyString(path->string(), out, out_cap);
 }
 
-i32 FileRead(Record& record, const char* rel_path, u8* out, u32* inout_len) {
+i32 FileRead(HostApi& host, const char* rel_path, u8* out, u32* inout_len) {
     auto path = BoundedCString(rel_path, kMaxPathBytes, "path");
     if (!path) {
         return StatusFromError(path.error());
     }
-    return FileRead(record, path->data(), static_cast<u32>(path->size()), out, inout_len);
+    return FileRead(host, path->data(), static_cast<u32>(path->size()), out, inout_len);
 }
 
-i32 FileRead(Record& record, const char* rel_path, u32 rel_path_len, u8* out, u32* inout_len) {
+i32 FileRead(HostApi& host, const char* rel_path, u32 rel_path_len, u8* out, u32* inout_len) {
     if (inout_len == nullptr) {
         return cabi::kInvalid;
     }
@@ -152,7 +148,6 @@ i32 FileRead(Record& record, const char* rel_path, u32 rel_path_len, u8* out, u3
         return StatusFromError(path.error());
     }
 
-    HostApi host(record);
     auto data = host.ReadFile(std::filesystem::path(std::string(*path)));
     if (!data) {
         return StatusFromError(data.error());
@@ -170,15 +165,15 @@ i32 FileRead(Record& record, const char* rel_path, u32 rel_path_len, u8* out, u3
     return cabi::kOk;
 }
 
-i32 FileWrite(Record& record, const char* rel_path, const u8* data, u32 len) {
+i32 FileWrite(HostApi& host, const char* rel_path, const u8* data, u32 len) {
     auto path = BoundedCString(rel_path, kMaxPathBytes, "path");
     if (!path) {
         return StatusFromError(path.error());
     }
-    return FileWrite(record, path->data(), static_cast<u32>(path->size()), data, len);
+    return FileWrite(host, path->data(), static_cast<u32>(path->size()), data, len);
 }
 
-i32 FileWrite(Record& record, const char* rel_path, u32 rel_path_len, const u8* data, u32 len) {
+i32 FileWrite(HostApi& host, const char* rel_path, u32 rel_path_len, const u8* data, u32 len) {
     if (data == nullptr && len != 0) {
         return cabi::kInvalid;
     }
@@ -191,7 +186,6 @@ i32 FileWrite(Record& record, const char* rel_path, u32 rel_path_len, const u8* 
         return StatusFromError(path.error());
     }
 
-    HostApi host(record);
     auto written = host.WriteFile(std::filesystem::path(std::string(*path)), std::span<const u8>(data, len));
     if (!written) {
         return StatusFromError(written.error());
@@ -199,15 +193,15 @@ i32 FileWrite(Record& record, const char* rel_path, u32 rel_path_len, const u8* 
     return cabi::kOk;
 }
 
-i32 FileAppend(Record& record, const char* rel_path, const u8* data, u32 len) {
+i32 FileAppend(HostApi& host, const char* rel_path, const u8* data, u32 len) {
     auto path = BoundedCString(rel_path, kMaxPathBytes, "path");
     if (!path) {
         return StatusFromError(path.error());
     }
-    return FileAppend(record, path->data(), static_cast<u32>(path->size()), data, len);
+    return FileAppend(host, path->data(), static_cast<u32>(path->size()), data, len);
 }
 
-i32 FileAppend(Record& record, const char* rel_path, u32 rel_path_len, const u8* data, u32 len) {
+i32 FileAppend(HostApi& host, const char* rel_path, u32 rel_path_len, const u8* data, u32 len) {
     if (data == nullptr && len != 0) {
         return cabi::kInvalid;
     }
@@ -220,7 +214,6 @@ i32 FileAppend(Record& record, const char* rel_path, u32 rel_path_len, const u8*
         return StatusFromError(path.error());
     }
 
-    HostApi host(record);
     auto appended = host.AppendFile(std::filesystem::path(std::string(*path)), std::span<const u8>(data, len));
     if (!appended) {
         return StatusFromError(appended.error());
@@ -228,13 +221,12 @@ i32 FileAppend(Record& record, const char* rel_path, u32 rel_path_len, const u8*
     return cabi::kOk;
 }
 
-i32 ConfigGet(Record& record, const char* key, char* out, u32 out_cap) {
+i32 ConfigGet(HostApi& host, const char* key, char* out, u32 out_cap) {
     auto config_key = BoundedCString(key, kMaxConfigKeyBytes, "config key");
     if (!config_key) {
         return StatusFromError(config_key.error());
     }
 
-    HostApi host(record);
     auto value = host.ReadConfig(*config_key);
     if (!value) {
         return StatusFromError(value.error());
@@ -242,7 +234,7 @@ i32 ConfigGet(Record& record, const char* key, char* out, u32 out_cap) {
     return CopyString(*value, out, out_cap);
 }
 
-i32 ConfigSet(Record& record, const char* key, const char* value, u32 len) {
+i32 ConfigSet(HostApi& host, const char* key, const char* value, u32 len) {
     auto config_key = BoundedCString(key, kMaxConfigKeyBytes, "config key");
     if (!config_key) {
         return StatusFromError(config_key.error());
@@ -252,12 +244,45 @@ i32 ConfigSet(Record& record, const char* key, const char* value, u32 len) {
         return StatusFromError(config_value.error());
     }
 
-    HostApi host(record);
     auto written = host.WriteConfig(*config_key, *config_value);
     if (!written) {
         return StatusFromError(written.error());
     }
     return cabi::kOk;
+}
+
+i32 EventSubscribe(HostApi& host, u32 event_type) {
+    auto subscribed = host.SubscribeEvent(event_type);
+    return subscribed ? cabi::kOk : StatusFromError(subscribed.error());
+}
+
+i32 EventEmit(HostApi& host, u32 event_type, const u8* payload, u32 len) {
+    if (payload == nullptr && len != 0)
+        return cabi::kInvalid;
+    if (len > limits::kMaxEventBytes)
+        return cabi::kNoSpace;
+    auto emitted = host.EmitEvent(event_type, std::span<const u8>(payload, len));
+    return emitted ? cabi::kOk : StatusFromError(emitted.error());
+}
+
+i32 EventSubscribeNamed(HostApi& host, const char* name, u32 name_len) {
+    auto topic = BoundedString(name, name_len, limits::kMaxEventTopicBytes, "event topic");
+    if (!topic)
+        return StatusFromError(topic.error());
+    auto subscribed = host.SubscribeNamedEvent(*topic);
+    return subscribed ? cabi::kOk : StatusFromError(subscribed.error());
+}
+
+i32 EventEmitNamed(HostApi& host, const char* name, u32 name_len, const u8* payload, u32 len) {
+    auto topic = BoundedString(name, name_len, limits::kMaxEventTopicBytes, "event topic");
+    if (!topic)
+        return StatusFromError(topic.error());
+    if (payload == nullptr && len != 0)
+        return cabi::kInvalid;
+    if (len > limits::kMaxEventBytes)
+        return cabi::kNoSpace;
+    auto emitted = host.EmitNamedEvent(*topic, std::span<const u8>(payload, len));
+    return emitted ? cabi::kOk : StatusFromError(emitted.error());
 }
 
 } // namespace woki::ext::host::cabi

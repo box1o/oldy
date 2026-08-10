@@ -9,3 +9,15 @@ world extension {
 
   export lifecycle;
 }
+
+/// The world for a guest whose manifest contributes commands.
+world extension-with-commands {
+  import logging;
+  import paths;
+  import storage;
+  import config;
+  import events;
+
+  export lifecycle;
+  export commands;
+}

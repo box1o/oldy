@@ -1,5 +1,6 @@
 #include <cctype>
 #include <string>
+#include <fstream>
 #include <algorithm>
 #include <filesystem>
 #include <string_view>
@@ -59,19 +60,68 @@ namespace fs = std::filesystem;
     return command_id.size() > extension_id.size() && command_id.starts_with(extension_id) && command_id[extension_id.size()] == '.' && IsValidId(command_id);
 }
 
-[[nodiscard]] bool IsSemverish(std::string_view version) noexcept {
-    if (version.empty()) {
+[[nodiscard]] bool IsNumericIdentifier(std::string_view value) noexcept {
+    if (value.empty() || (value.size() > 1 && value.front() == '0')) {
+        return false;
+    }
+    return std::ranges::all_of(value, [](unsigned char ch) { return std::isdigit(ch) != 0; });
+}
+
+[[nodiscard]] bool IsSemverIdentifier(std::string_view value) noexcept {
+    return !value.empty() && std::ranges::all_of(value, [](unsigned char ch) { return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '-'; });
+}
+
+[[nodiscard]] bool IsSemverIdentifierList(std::string_view value, bool strict_numeric) noexcept {
+    while (!value.empty()) {
+        const std::size_t separator = value.find('.');
+        const std::string_view identifier = value.substr(0, separator);
+        const bool numeric = !identifier.empty() && std::ranges::all_of(identifier, [](unsigned char ch) { return std::isdigit(ch) != 0; });
+        if (!IsSemverIdentifier(identifier) || (strict_numeric && numeric && !IsNumericIdentifier(identifier))) {
+            return false;
+        }
+        if (separator == std::string_view::npos) {
+            return true;
+        }
+        value.remove_prefix(separator + 1);
+    }
+    return false;
+}
+
+[[nodiscard]] bool IsSemver(std::string_view version) noexcept {
+    if (version.empty() || version.size() > kMaxManifestVersionBytes) {
         return false;
     }
 
-    bool has_digit = false;
-    return std::ranges::all_of(version, [&has_digit](unsigned char ch) {
-        if (std::isdigit(ch) != 0) {
-            has_digit = true;
-            return true;
+    const std::size_t build_separator = version.find('+');
+    if (build_separator != std::string_view::npos) {
+        if (version.find('+', build_separator + 1) != std::string_view::npos || !IsSemverIdentifierList(version.substr(build_separator + 1), false)) {
+            return false;
         }
-        return std::islower(ch) != 0 || std::isupper(ch) != 0 || ch == '.' || ch == '-' || ch == '+';
-    }) && has_digit;
+        version = version.substr(0, build_separator);
+    }
+
+    const std::size_t prerelease_separator = version.find('-');
+    if (prerelease_separator != std::string_view::npos) {
+        if (!IsSemverIdentifierList(version.substr(prerelease_separator + 1), true)) {
+            return false;
+        }
+        version = version.substr(0, prerelease_separator);
+    }
+
+    for (int component = 0; component < 3; ++component) {
+        const std::size_t separator = version.find('.');
+        if (!IsNumericIdentifier(version.substr(0, separator))) {
+            return false;
+        }
+        if (component == 2) {
+            return separator == std::string_view::npos;
+        }
+        if (separator == std::string_view::npos) {
+            return false;
+        }
+        version.remove_prefix(separator + 1);
+    }
+    return false;
 }
 
 [[nodiscard]] Result<void> ValidateRuntimePath(const fs::path& path) {
@@ -85,8 +135,11 @@ namespace fs = std::filesystem;
     return Ok();
 }
 
-[[nodiscard]] Result<void> ValidateManifestSize(const fs::path& path) {
+[[nodiscard]] Result<std::string> ReadManifest(const fs::path& path) {
     std::error_code error;
+    if (fs::is_symlink(fs::symlink_status(path, error))) {
+        return Err(ErrorCode::FileAccessDenied, "Extension manifest must not be a symbolic link: " + path.string());
+    }
     if (!fs::is_regular_file(path, error)) {
         return Err(ErrorCode::FileNotFound, "Extension manifest is missing. Create manifest.yaml with required fields: id, name, "
                                             "version, apiVersion, runtime.wasm, permissions.");
@@ -99,7 +152,20 @@ namespace fs = std::filesystem;
     if (size > kMaxManifestBytes) {
         return Err(ErrorCode::ValidationOutOfRange, "Manifest exceeds 64 KiB. Remove generated data or move large metadata into assets.");
     }
-    return Ok();
+    std::ifstream input(path, std::ios::binary);
+    if (!input.good()) {
+        return Err(ErrorCode::FileReadError, "Failed to open extension manifest: " + path.string());
+    }
+    std::string contents(kMaxManifestBytes + 1, '\0');
+    input.read(contents.data(), static_cast<std::streamsize>(contents.size()));
+    contents.resize(static_cast<std::size_t>(input.gcount()));
+    if (contents.size() > kMaxManifestBytes) {
+        return Err(ErrorCode::ValidationOutOfRange, "Manifest exceeds 64 KiB. Remove generated data or move large metadata into assets.");
+    }
+    if (input.bad()) {
+        return Err(ErrorCode::FileReadError, "Failed to read extension manifest: " + path.string());
+    }
+    return Ok(std::move(contents));
 }
 
 [[nodiscard]] Result<std::string> RequiredString(const YAML::Node& root, const char* key, std::string_view example) {
@@ -160,6 +226,9 @@ namespace fs = std::filesystem;
     if (!permissions.IsSequence()) {
         return Err(ErrorCode::ParseTypeMismatch, WrongTypeMessage("permissions", "a sequence", "permissions:\n  - log"));
     }
+    if (permissions.size() > AllPermissions().size()) {
+        return Err(ErrorCode::ValidationOutOfRange, "Manifest exceeds the number of supported permissions.");
+    }
 
     std::vector<Permission> parsed;
     parsed.reserve(permissions.size());
@@ -181,6 +250,47 @@ namespace fs = std::filesystem;
     return Ok(std::move(parsed));
 }
 
+[[nodiscard]] Result<ActivationMetadata> ParseActivation(const YAML::Node& root) {
+    const YAML::Node activation = root["activation"];
+    if (!activation)
+        return Ok(ActivationMetadata{});
+    if (!activation.IsMap())
+        return Err(ErrorCode::ParseTypeMismatch, WrongTypeMessage("activation", "a map", "activation:\n  startup: true"));
+
+    ActivationMetadata parsed;
+    for (const auto& [key, target] : {std::pair{"startup", &parsed.startup}, std::pair{"tick", &parsed.tick}}) {
+        const YAML::Node value = activation[key];
+        if (!value)
+            continue;
+        if (!value.IsScalar())
+            return Err(ErrorCode::ParseTypeMismatch, WrongTypeMessage(std::string("activation.") + key, "a boolean", std::string(key) + ": true"));
+        try {
+            *target = value.as<bool>();
+        } catch (const YAML::Exception&) {
+            return Err(ErrorCode::ParseTypeMismatch, WrongTypeMessage(std::string("activation.") + key, "a boolean", std::string(key) + ": true"));
+        }
+    }
+
+    const YAML::Node events = activation["events"];
+    if (!events)
+        return Ok(std::move(parsed));
+    if (!events.IsSequence())
+        return Err(ErrorCode::ParseTypeMismatch, WrongTypeMessage("activation.events", "a sequence", "events:\n  - window.resized"));
+    if (events.size() > kMaxActivationEvents)
+        return Err(ErrorCode::ValidationOutOfRange, "Manifest exceeds the number of supported application activation events.");
+    for (const YAML::Node& event_node : events) {
+        if (!event_node.IsScalar())
+            return Err(ErrorCode::ParseTypeMismatch, "Each activation event must be a named string, for example 'window.resized'.");
+        auto event = ParseApplicationEventType(event_node.as<std::string>());
+        if (!event)
+            return Err(event.error());
+        if (std::ranges::find(parsed.events, *event) != parsed.events.end())
+            return Err(ErrorCode::ValidationInvalidState, "Manifest contains duplicate activation event: " + std::string(ToString(*event)));
+        parsed.events.push_back(*event);
+    }
+    return Ok(std::move(parsed));
+}
+
 [[nodiscard]] Result<void> RejectUnknownFields(const YAML::Node& map, std::initializer_list<std::string_view> allowed, std::string_view field) {
     for (const auto& entry : map) {
         if (!entry.first.IsScalar()) {
@@ -195,7 +305,7 @@ namespace fs = std::filesystem;
 }
 
 [[nodiscard]] Result<void> ValidateKnownFields(const YAML::Node& root) {
-    auto known = RejectUnknownFields(root, {"id", "name", "version", "apiVersion", "runtime", "permissions", "contributes"}, {});
+    auto known = RejectUnknownFields(root, {"id", "name", "version", "apiVersion", "runtime", "permissions", "activation", "contributes"}, {});
     if (!known) {
         return known;
     }
@@ -203,6 +313,10 @@ namespace fs = std::filesystem;
         if (auto valid = RejectUnknownFields(runtime, {"wasm"}, "runtime"); !valid) {
             return valid;
         }
+    }
+    if (const YAML::Node activation = root["activation"]; activation && activation.IsMap()) {
+        if (auto valid = RejectUnknownFields(activation, {"startup", "tick", "events"}, "activation"); !valid)
+            return valid;
     }
     if (const YAML::Node contributes = root["contributes"]; contributes && contributes.IsMap()) {
         if (auto valid = RejectUnknownFields(contributes, {"commands"}, "contributes"); !valid) {
@@ -236,6 +350,9 @@ namespace fs = std::filesystem;
     }
     if (!commands.IsSequence()) {
         return Err(ErrorCode::ParseTypeMismatch, WrongTypeMessage("contributes.commands", "a sequence", "contributes:\n  commands:\n    - id: woki.hello.say\n      title: Say Hello"));
+    }
+    if (commands.size() > kMaxManifestCommands) {
+        return Err(ErrorCode::ValidationOutOfRange, "Manifest exceeds 256 command contributions.");
     }
 
     std::vector<CommandContribution> parsed;
@@ -279,13 +396,13 @@ namespace fs = std::filesystem;
 } // namespace
 
 Result<Manifest> LoadManifest(const fs::path& path) {
-    auto size = ValidateManifestSize(path);
-    if (!size) {
-        return Err(size.error());
+    auto contents = ReadManifest(path);
+    if (!contents) {
+        return Err(contents.error());
     }
 
     try {
-        const YAML::Node root = YAML::LoadFile(path.string());
+        const YAML::Node root = YAML::Load(*contents);
         if (!root || !root.IsMap()) {
             return Err(ErrorCode::ParseInvalidFormat, "Manifest must be a YAML map. Minimal example:\nid: woki.hello\nname: "
                                                       "Hello\nversion: 0.1.0\napiVersion: 1\nruntime:\n  wasm: "
@@ -332,7 +449,12 @@ Result<Manifest> LoadManifest(const fs::path& path) {
         if (!permissions) {
             return Err(permissions.error());
         }
-        manifest.permissions = std::move(*permissions);
+        manifest.requested_capabilities.permissions = std::move(*permissions);
+
+        auto activation = ParseActivation(root);
+        if (!activation)
+            return Err(activation.error());
+        manifest.activation = std::move(*activation);
 
         auto commands = ParseCommands(root);
         if (!commands) {
@@ -354,25 +476,51 @@ Result<Manifest> LoadManifest(const fs::path& path) {
 }
 
 Result<void> ValidateManifest(const Manifest& manifest) {
-    if (!IsValidId(manifest.id)) {
+    if (manifest.id.size() > kMaxManifestIdBytes || !IsValidId(manifest.id)) {
         return Err(ErrorCode::ValidationInvalidState, "Manifest field 'id' is invalid. Use lowercase reverse-DNS-style segments with "
                                                       "letters, digits, dots, and dashes, for example:\nid: woki.hello");
     }
     if (manifest.name.empty()) {
         return Err(ErrorCode::ParseMissingField, MissingFieldMessage("name", "name: Hello"));
     }
-    if (!IsSemverish(manifest.version)) {
-        return Err(ErrorCode::ValidationInvalidState, "Manifest field 'version' is invalid. Use a semver-like value, for "
+    if (manifest.name.size() > kMaxManifestNameBytes) {
+        return Err(ErrorCode::ValidationOutOfRange, "Manifest field 'name' exceeds 256 bytes.");
+    }
+    if (!IsSemver(manifest.version)) {
+        return Err(ErrorCode::ValidationInvalidState, "Manifest field 'version' is invalid. Use a Semantic Versioning 2.0.0 value, for "
                                                       "example:\nversion: 0.1.0");
     }
     if (manifest.api_version != kApiVersion) {
         return Err(ErrorCode::ValidationInvalidState, "Manifest field 'apiVersion' is unsupported. For this build use:\napiVersion: 1");
     }
+    const auto& permissions = manifest.requested_capabilities.permissions;
+    if (permissions.size() > AllPermissions().size())
+        return Err(ErrorCode::ValidationOutOfRange, "Manifest exceeds the number of supported permissions.");
+    for (std::size_t index = 0; index < permissions.size(); ++index) {
+        if (std::ranges::find(permissions.begin(), permissions.begin() + static_cast<std::ptrdiff_t>(index), permissions[index]) != permissions.begin() + static_cast<std::ptrdiff_t>(index))
+            return Err(ErrorCode::ValidationInvalidState, "Manifest contains duplicate permission: " + std::string(ToString(permissions[index])));
+    }
 
+    if (manifest.activation.events.size() > kMaxActivationEvents)
+        return Err(ErrorCode::ValidationOutOfRange, "Manifest exceeds the number of supported application activation events.");
+    for (std::size_t index = 0; index < manifest.activation.events.size(); ++index) {
+        const auto event = manifest.activation.events[index];
+        if (!std::ranges::any_of(AllApplicationEventTypes(), [event](ApplicationEventType known) { return known == event; }))
+            return Err(ErrorCode::ValidationInvalidState, "Manifest contains an unknown application activation event.");
+        if (std::ranges::find(manifest.activation.events.begin(), manifest.activation.events.begin() + static_cast<std::ptrdiff_t>(index), event)
+            != manifest.activation.events.begin() + static_cast<std::ptrdiff_t>(index))
+            return Err(ErrorCode::ValidationInvalidState, "Manifest contains duplicate activation event: " + std::string(ToString(event)));
+    }
+    if (!manifest.activation.events.empty() && !HasPermission(manifest, Permission::Events))
+        return Err(ErrorCode::ValidationInvalidState, "Manifest activation.events requires the 'events' permission.");
+
+    if (manifest.commands.size() > kMaxManifestCommands) {
+        return Err(ErrorCode::ValidationOutOfRange, "Manifest exceeds 256 command contributions.");
+    }
     std::vector<std::string_view> command_ids;
     command_ids.reserve(manifest.commands.size());
     for (const CommandContribution& command : manifest.commands) {
-        if (!IsValidCommandId(manifest.id, command.id)) {
+        if (command.id.size() > kMaxCommandIdBytes || !IsValidCommandId(manifest.id, command.id)) {
             return Err(ErrorCode::ValidationInvalidState, "Manifest command id '" + command.id
                                                               + "' is invalid. Use a lowercase reverse-DNS id prefixed by the extension id, "
                                                                 "for example:\ncontributes:\n  commands:\n    - id: "
@@ -384,12 +532,17 @@ Result<void> ValidateManifest(const Manifest& manifest) {
                                                            "contributes:\n  commands:\n    - id: "
                                                          + command.id + "\n      title: Example");
         }
+        if (command.title.size() > kMaxCommandTitleBytes || command.category.size() > kMaxCommandCategoryBytes) {
+            return Err(ErrorCode::ValidationOutOfRange, "Manifest command text exceeds its size limit: " + command.id);
+        }
         if (std::ranges::find(command_ids, std::string_view(command.id)) != command_ids.end()) {
             return Err(ErrorCode::ValidationInvalidState, "Manifest contains duplicate command id: " + command.id);
         }
         command_ids.push_back(command.id);
     }
 
+    if (manifest.wasm_path.generic_string().size() > kMaxRuntimePathBytes)
+        return Err(ErrorCode::ValidationOutOfRange, "Manifest field 'runtime.wasm' exceeds 4096 bytes.");
     return ValidateRuntimePath(manifest.wasm_path);
 }
 
@@ -405,7 +558,15 @@ Result<void> ValidateManifestForPackage(const Manifest& manifest, std::string_vi
 }
 
 bool HasPermission(const Manifest& manifest, Permission permission) noexcept {
-    return std::ranges::find(manifest.permissions, permission) != manifest.permissions.end();
+    return HasPermission(manifest.requested_capabilities, permission);
+}
+
+bool ActivatesOn(const Manifest& manifest, ApplicationEventType event) noexcept {
+    return std::ranges::find(manifest.activation.events, event) != manifest.activation.events.end();
+}
+
+bool IsValidExtensionId(std::string_view id) noexcept {
+    return id.size() <= kMaxManifestIdBytes && IsValidId(id);
 }
 
 } // namespace woki::ext

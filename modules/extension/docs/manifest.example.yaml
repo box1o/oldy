@@ -8,6 +8,13 @@ permissions:
   - log
 # Optional:
 #  - events
+# activation defaults to no startup, ticks, or application events.
+# Contributed commands always activate their extension lazily.
+# activation:
+#   startup: true
+#   tick: true
+#   events:
+#     - window.resized # Also requires the events permission.
 # contributes:
 #   commands:
 #     - id: woki.hello.say

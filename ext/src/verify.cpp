@@ -1,9 +1,10 @@
-#include <iostream>
 #include <filesystem>
 
-#include <woki/ext/ext.hpp>
+#include <woki/ext/package.hpp>
+#include <woki/ext/manifest.hpp>
+#include <woki/ext/wasm/guest_module.hpp>
 
-#include "wokiext/cli.hpp"
+#include "cli_internal.hpp"
 
 namespace wokiext {
 
@@ -17,51 +18,51 @@ namespace fs = std::filesystem;
         return woki::Err(manifest.error());
     }
 
-    auto layout = woki::ext::ResolvePackageLayout(*manifest, root.parent_path(), root / ".data", root / ".cache");
-    if (!layout) {
-        return woki::Err(layout.error());
-    }
-
-    layout->install_root = root;
-    layout->manifest = root / "manifest.yaml";
-    layout->wasm = (root / manifest->wasm_path).lexically_normal();
-    return layout;
+    const fs::path state = root.parent_path() / ".woki-verify-state" / manifest->id;
+    return woki::Ok(woki::ext::PackageLayout{
+        .install_root = root,
+        .manifest = root / "manifest.yaml",
+        .wasm = (root / manifest->wasm_path).lexically_normal(),
+        .data_root = state / "data",
+        .config_root = state / "config",
+        .cache_root = state / "cache",
+    });
 }
 
 } // namespace
 
-Status Verify(const PathOptions& options) {
+Status Verify(Context& context, const PathOptions& options) {
     const fs::path root = fs::absolute(options.path).lexically_normal();
     if (!fs::is_directory(root)) {
-        std::cerr << "Verify expects an unpacked extension directory: " << root << '\n';
+        context.diagnostics.Err() << "Verify expects an unpacked extension directory: " << root << '\n';
         return Status::Error;
     }
 
     auto manifest = woki::ext::LoadManifest(root / "manifest.yaml");
     if (!manifest) {
-        std::cerr << manifest.error().Message() << '\n';
+        context.diagnostics.Error(manifest.error().Message());
         return Status::Error;
     }
 
     auto layout = SourceLayout(root);
     if (!layout) {
-        std::cerr << layout.error().Message() << '\n';
+        context.diagnostics.Error(layout.error().Message());
         return Status::Error;
     }
 
     auto valid = woki::ext::ValidatePackageLayout(*layout);
     if (!valid) {
-        std::cerr << valid.error().Message() << '\n';
+        context.diagnostics.Error(valid.error().Message());
         return Status::Error;
     }
 
     auto guest = woki::ext::wasm::ValidateGuestModule(layout->wasm, *manifest);
     if (!guest) {
-        std::cerr << guest.error().Message() << '\n';
+        context.diagnostics.Error(guest.error().Message());
         return Status::Error;
     }
 
-    std::cout << "Verified extension: " << root << '\n';
+    context.diagnostics.Out() << "Verified extension: " << root << '\n';
     return Status::Ok;
 }
 
