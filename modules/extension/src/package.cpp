@@ -78,6 +78,21 @@ inline constexpr std::size_t kMaxPackageEntries = 10'000u;
 #endif
 }
 
+#ifdef _WIN32
+[[nodiscard]] bool ContainsRootSymlink(const fs::path& path) {
+    fs::path current;
+    std::error_code error;
+    for (const fs::path& component : path) {
+        current /= component;
+        const fs::file_status status = fs::symlink_status(current, error);
+        if (!error && fs::is_symlink(status))
+            return true;
+        error.clear();
+    }
+    return false;
+}
+#endif
+
 [[nodiscard]] Result<fs::path> CanonicalRoot(const fs::path& path, std::string_view name) {
     if (path.empty()) {
         return Err(ErrorCode::InvalidArgument, "Extension " + std::string(name) + " root must not be empty.");
@@ -95,9 +110,18 @@ inline constexpr std::size_t kMaxPackageEntries = 10'000u;
     if (error) {
         return Err(ErrorCode::FileReadError, "Failed to canonicalize extension " + std::string(name) + " root: " + error.message());
     }
-    if (!SamePath(supplied, absolute) || !SamePath(canonical, absolute)) {
+    if (!SamePath(supplied, absolute)) {
         return Err(ErrorCode::FileAccessDenied, "Extension " + std::string(name) + " root must be canonical and must not use a symbolic-link alias: " + path.string());
     }
+#ifdef _WIN32
+    if (ContainsRootSymlink(absolute)) {
+        return Err(ErrorCode::FileAccessDenied, "Extension " + std::string(name) + " root must be canonical and must not use a symbolic-link alias: " + path.string());
+    }
+#else
+    if (!SamePath(canonical, absolute)) {
+        return Err(ErrorCode::FileAccessDenied, "Extension " + std::string(name) + " root must be canonical and must not use a symbolic-link alias: " + path.string());
+    }
+#endif
     return Ok(canonical);
 }
 
