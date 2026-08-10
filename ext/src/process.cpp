@@ -4,7 +4,6 @@
 #include <system_error>
 
 #ifdef _WIN32
-#include <process.h>
 #include <windows.h>
 #else
 #include <spawn.h>
@@ -35,6 +34,31 @@ namespace {
     return result;
 }
 
+[[nodiscard]] std::wstring QuoteArgument(std::wstring_view argument) {
+    if (!argument.empty() && argument.find_first_of(L" \t\n\v\"") == std::wstring_view::npos)
+        return std::wstring(argument);
+
+    std::wstring quoted{L'"'};
+    std::size_t backslashes = 0;
+    for (const wchar_t ch : argument) {
+        if (ch == L'\\') {
+            ++backslashes;
+            continue;
+        }
+        if (ch == L'"') {
+            quoted.append(backslashes * 2 + 1, L'\\');
+            quoted.push_back(ch);
+        } else {
+            quoted.append(backslashes, L'\\');
+            quoted.push_back(ch);
+        }
+        backslashes = 0;
+    }
+    quoted.append(backslashes * 2, L'\\');
+    quoted.push_back(L'"');
+    return quoted;
+}
+
 } // namespace
 #endif
 
@@ -45,9 +69,7 @@ bool SystemProcessRunner::Run(std::span<const std::string> arguments, Diagnostic
     }
 #ifdef _WIN32
     std::vector<std::wstring> wide_arguments;
-    std::vector<const wchar_t*> argv;
     wide_arguments.reserve(arguments.size());
-    argv.reserve(arguments.size() + 1);
     for (const std::string& argument : arguments) {
         wide_arguments.push_back(Utf8ToWide(argument));
         if (wide_arguments.back().empty() && !argument.empty()) {
@@ -55,12 +77,26 @@ bool SystemProcessRunner::Run(std::span<const std::string> arguments, Diagnostic
             return false;
         }
     }
-    for (const std::wstring& argument : wide_arguments)
-        argv.push_back(argument.c_str());
-    argv.push_back(nullptr);
-    const intptr_t status = _wspawnvp(_P_WAIT, argv.front(), argv.data());
-    if (status == -1) {
-        diagnostics.Err() << "Failed to start " << arguments.front() << ": " << std::error_code(errno, std::generic_category()).message() << '\n';
+    std::wstring command_line;
+    for (const std::wstring& argument : wide_arguments) {
+        if (!command_line.empty())
+            command_line.push_back(L' ');
+        command_line += QuoteArgument(argument);
+    }
+    STARTUPINFOW startup{};
+    startup.cb = static_cast<DWORD>(sizeof(startup));
+    PROCESS_INFORMATION process{};
+    if (CreateProcessW(nullptr, command_line.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &startup, &process) == 0) {
+        diagnostics.Err() << "Failed to start " << arguments.front() << ": " << std::error_code(static_cast<int>(GetLastError()), std::system_category()).message() << '\n';
+        return false;
+    }
+    WaitForSingleObject(process.hProcess, INFINITE);
+    DWORD status = 1;
+    const bool got_status = GetExitCodeProcess(process.hProcess, &status) != 0;
+    CloseHandle(process.hThread);
+    CloseHandle(process.hProcess);
+    if (!got_status) {
+        diagnostics.Err() << "Failed to read exit status from " << arguments.front() << '\n';
         return false;
     }
     if (status != 0) {

@@ -40,11 +40,6 @@ bool IsSafeRelativePath(const std::filesystem::path& path) {
     }
 
     const std::string portable = path.generic_string();
-#ifdef _WIN32
-    if (path.native().contains(L'\\')) {
-        return false;
-    }
-#endif
     if (portable.empty() || portable.size() > 4096 || portable.front() == '/' || portable.back() == '/' || portable.contains('\0') || portable.contains('\\') || portable.contains(':') || portable.contains("//")) {
         return false;
     }

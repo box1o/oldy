@@ -128,6 +128,12 @@ namespace fs = std::filesystem;
     if (path.empty()) {
         return Err(ErrorCode::ParseMissingField, MissingFieldMessage("runtime.wasm", "runtime:\n  wasm: extension.wasm"));
     }
+#ifdef _WIN32
+    if (path.native().contains(L'\\')) {
+        return Err(ErrorCode::ValidationInvalidState, "Manifest field 'runtime.wasm' must be a portable relative path without '.', '..', or backslashes. Use a file inside the package, "
+                                                      "for example:\nruntime:\n  wasm: extension.wasm");
+    }
+#endif
     if (!IsSafeRelativePath(path)) {
         return Err(ErrorCode::ValidationInvalidState, "Manifest field 'runtime.wasm' must be a portable relative path without '.', '..', or backslashes. Use a file inside the package, "
                                                       "for example:\nruntime:\n  wasm: extension.wasm");

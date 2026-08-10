@@ -697,6 +697,11 @@ Result<fs::path> HostApi::ResolveDataFile(const fs::path& relative_path) const {
     if (context_.data_root.empty()) {
         return Err(ErrorCode::InvalidState, "Extension data root is not configured.");
     }
+#ifdef _WIN32
+    if (relative_path.native().contains(L'\\')) {
+        return Err(ErrorCode::InvalidArgument, "Extension storage path must be a portable relative path without '.', '..', or backslashes.");
+    }
+#endif
     if (!IsSafeRelativePath(relative_path)) {
         return Err(ErrorCode::InvalidArgument, "Extension storage path must be a portable relative path without '.', '..', or backslashes.");
     }
