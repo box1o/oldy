@@ -65,6 +65,19 @@ inline constexpr std::size_t kMaxPackageEntries = 10'000u;
     return is_prefix(first, second) || is_prefix(second, first);
 }
 
+[[nodiscard]] bool SamePath(const fs::path& first, const fs::path& second) {
+#ifdef _WIN32
+    std::wstring left = first.native();
+    std::wstring right = second.native();
+    const auto normalize = [](wchar_t ch) { return ch == L'/' ? L'\\' : static_cast<wchar_t>(std::towlower(ch)); };
+    std::ranges::transform(left, left.begin(), normalize);
+    std::ranges::transform(right, right.begin(), normalize);
+    return left == right;
+#else
+    return first == second;
+#endif
+}
+
 [[nodiscard]] Result<fs::path> CanonicalRoot(const fs::path& path, std::string_view name) {
     if (path.empty()) {
         return Err(ErrorCode::InvalidArgument, "Extension " + std::string(name) + " root must not be empty.");
@@ -82,7 +95,7 @@ inline constexpr std::size_t kMaxPackageEntries = 10'000u;
     if (error) {
         return Err(ErrorCode::FileReadError, "Failed to canonicalize extension " + std::string(name) + " root: " + error.message());
     }
-    if (supplied != absolute || canonical != absolute) {
+    if (!SamePath(supplied, absolute) || !SamePath(canonical, absolute)) {
         return Err(ErrorCode::FileAccessDenied, "Extension " + std::string(name) + " root must be canonical and must not use a symbolic-link alias: " + path.string());
     }
     return Ok(canonical);

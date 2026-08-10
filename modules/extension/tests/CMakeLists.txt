@@ -17,8 +17,12 @@ target_compile_definitions(extension_tests PRIVATE
 )
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
-find_program(WOKI_CONTRACT_CLANG NAMES clang REQUIRED)
-find_program(WOKI_CONTRACT_CLANGXX NAMES clang++ REQUIRED)
+set(_woki_contract_llvm_hints)
+if(DEFINED ENV{WOKI_LLVM_PREFIX})
+    list(APPEND _woki_contract_llvm_hints "$ENV{WOKI_LLVM_PREFIX}/bin")
+endif()
+find_program(WOKI_CONTRACT_CLANG NAMES clang HINTS ${_woki_contract_llvm_hints} REQUIRED)
+find_program(WOKI_CONTRACT_CLANGXX NAMES clang++ HINTS ${_woki_contract_llvm_hints} REQUIRED)
 set(WOKI_CONTRACT_COMMAND
     "${Python3_EXECUTABLE}"
     "${CMAKE_CURRENT_SOURCE_DIR}/../sdk/check_contract.py"

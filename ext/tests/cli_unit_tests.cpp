@@ -111,7 +111,7 @@ TEST_CASE("build arguments are deterministic and preserve path boundaries") {
     CHECK(configure[7] == "-DCMAKE_BUILD_TYPE=Debug");
     CHECK(configure[9] == "-DWOKI_CMAKE_DIR=/cmake modules");
     CHECK(configure[10] == "-DWOKI_SDK_DIR=/sdk path");
-    CHECK(configure[11] == "-DWOKI_EXTENSION_PACKAGE_DIR=" + (root / "build/packages").string());
+    CHECK(configure[11] == "-DWOKI_EXTENSION_PACKAGE_DIR=" + (root / "build/packages").generic_string());
 
     CHECK(wokiext::BuildCompileArguments(options) == std::vector<std::string>{"cmake", "--build", (root / "build").string(), "--config", "Debug"});
 }
@@ -146,9 +146,11 @@ TEST_CASE("temporary directories are private and removed by scope") {
         auto temporary = wokiext::TemporaryDirectory::Create("wokiext-permissions-");
         REQUIRE(temporary);
         path = temporary->Path();
+#ifndef _WIN32
         const auto permissions = std::filesystem::status(path).permissions();
         CHECK((permissions & std::filesystem::perms::group_all) == std::filesystem::perms::none);
         CHECK((permissions & std::filesystem::perms::others_all) == std::filesystem::perms::none);
+#endif
     }
     CHECK_FALSE(std::filesystem::exists(path));
 }

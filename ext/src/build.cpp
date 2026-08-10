@@ -23,7 +23,7 @@ namespace {
 
 [[nodiscard]] std::string PathArgument(const std::filesystem::path& path) {
 #ifdef _WIN32
-    const std::u8string value = path.u8string();
+    const std::u8string value = path.generic_u8string();
     return {reinterpret_cast<const char*>(value.data()), value.size()};
 #else
     return path.string();

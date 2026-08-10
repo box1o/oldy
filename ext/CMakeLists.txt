@@ -62,6 +62,9 @@ if(WIN32 AND EXISTS "${CDEPS_ROOT}/wasmtime-c-api/lib/wasmtime.dll")
             "$<TARGET_FILE_DIR:wokiext>"
         VERBATIM
     )
+    install(FILES "${CDEPS_ROOT}/wasmtime-c-api/lib/wasmtime.dll"
+        DESTINATION ${CMAKE_INSTALL_BINDIR}
+    )
 endif()
 
 install(TARGETS wokiext
