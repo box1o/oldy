@@ -1,6 +1,8 @@
-#include "entry.hpp"
+#include <woki/core.hpp>
+
+#include "core/entry/entry.hpp"
 
 int main(int argc, char* argv[]) {
     slog::Configure();
-    return studio::RunApplication(studio::CreateApplication(argc, argv));
+    return studio::Run(argc, argv);
 }

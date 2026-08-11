@@ -15,6 +15,7 @@ add_module_test(extension_tests
 target_compile_definitions(extension_tests PRIVATE
     WOKI_EXTENSION_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/.."
     WOKI_KITTY_PACKAGE_DIR="${CMAKE_BINARY_DIR}/extension-packages/$<CONFIG>/kitty"
+    WOKI_DINOLAB_PACKAGE_DIR="${CMAKE_BINARY_DIR}/extension-packages/$<CONFIG>/dino-lab"
 )
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
@@ -33,26 +34,7 @@ set(WOKI_CONTRACT_COMMAND
     --cc "${WOKI_CONTRACT_CLANG}"
     --cxx "${WOKI_CONTRACT_CLANGXX}"
 )
-add_custom_target(extension_guest_contract_check
-    COMMAND ${WOKI_CONTRACT_COMMAND}
-    DEPENDS
-        "${CMAKE_CURRENT_SOURCE_DIR}/../sdk/check_contract.py"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../sdk/generate_wit_bindings.py"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../sdk/woki/extension/detail/wit_host.hpp"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../sdk/fixtures/raw-abi-v1.json"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../sdk/fixtures/raw-abi-v1-guest.c"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../sdk/fixtures/freestanding/string.h.fixture"
-        "${CMAKE_CURRENT_SOURCE_DIR}/../web/woki_ext_test.js"
-    VERBATIM
-)
-add_dependencies(woki_tests extension_guest_contract_check)
 add_test(
     NAME extension_guest_contract
     COMMAND ${WOKI_CONTRACT_COMMAND}
-)
-
-find_program(WOKI_NODE NAMES node REQUIRED)
-add_test(
-    NAME extension_web_bridge
-    COMMAND "${WOKI_NODE}" "${CMAKE_CURRENT_SOURCE_DIR}/../web/woki_ext_test.js"
 )

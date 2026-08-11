@@ -16,5 +16,5 @@ execute_process(
     ERROR_VARIABLE verify_error
 )
 if(NOT verify_result EQUAL 0)
-    message(FATAL_ERROR "Kitty package verification failed (${verify_result})\n${verify_output}${verify_error}")
+    message(FATAL_ERROR "Extension package verification failed (${verify_result})\n${verify_output}${verify_error}")
 endif()

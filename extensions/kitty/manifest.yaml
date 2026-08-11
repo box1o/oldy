@@ -9,7 +9,6 @@ libraries:
   - ecs
 permissions:
   - log
-  - events
 activation:
   startup: true
   tick: true

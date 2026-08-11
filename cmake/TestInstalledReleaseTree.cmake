@@ -35,11 +35,13 @@ foreach(required IN ITEMS
     "${prefix}/${INCLUDEDIR}/woki/ext/sdk/ext.h"
     "${prefix}/${INCLUDEDIR}/woki/extension.hpp"
     "${prefix}/${INCLUDEDIR}/woki/ext/ext.hpp"
-    "${prefix}/${INCLUDEDIR}/woki/extension.hpp"
     "${prefix}/${INCLUDEDIR}/woki/math/guest.hpp"
     "${prefix}/${INCLUDEDIR}/woki/ecs/guest.hpp"
     "${prefix}/${DATADIR}/woki/extensions/${CONFIG}/kitty/manifest.yaml"
     "${prefix}/${DATADIR}/woki/extensions/${CONFIG}/kitty/extension.wasm"
+    "${prefix}/${DATADIR}/woki/extensions/${CONFIG}/dino-lab/manifest.yaml"
+    "${prefix}/${DATADIR}/woki/extensions/${CONFIG}/dino-lab/extension.wasm"
+    "${prefix}/${DATADIR}/woki/extensions/${CONFIG}/dino-lab/assets/field-guide.txt"
 )
     if(NOT EXISTS "${required}")
         message(FATAL_ERROR "Installed release tree is missing ${required}")

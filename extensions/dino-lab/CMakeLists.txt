@@ -1,0 +1,20 @@
+cmake_minimum_required(VERSION 3.25)
+
+if(WOKI_REPO_ROOT)
+    set(WOKI_CMAKE_DIR "${WOKI_REPO_ROOT}/cmake")
+elseif(NOT WOKI_CMAKE_DIR)
+    message(FATAL_ERROR "Configure with wokiext build or set WOKI_CMAKE_DIR")
+endif()
+
+include("${WOKI_CMAKE_DIR}/ExtensionProject.cmake")
+project(woki_extension LANGUAGES CXX)
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+include("${WOKI_CMAKE_DIR}/ExtensionWasm.cmake")
+add_wokiext(extension
+    LANGUAGE CXX
+    MANIFEST manifest.yaml
+    SOURCES src/extension.cpp
+    ASSETS assets/field-guide.txt
+)

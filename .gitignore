@@ -85,4 +85,5 @@ Testing/
 .hidden/
 .context/
 .rewrite/
-.bin/
+/wokiext
+/woki-studio

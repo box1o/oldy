@@ -72,24 +72,18 @@ function(add_module_test name)
         )
     endif()
 
-    if(EXISTS "${CDEPS_ROOT}/catch2-src/extras/Catch.cmake")
-        include("${CDEPS_ROOT}/catch2-src/extras/Catch.cmake")
-    else()
-        include(Catch)
-    endif()
     set(test_temp_dir "${CMAKE_BINARY_DIR}/test-tmp")
     file(MAKE_DIRECTORY "${test_temp_dir}")
     set(test_environment "TMPDIR=${test_temp_dir};TEMP=${test_temp_dir};TMP=${test_temp_dir}")
+    add_test(NAME ${name}
+        COMMAND $<TARGET_FILE:${name}> --durations yes
+    )
+    set_tests_properties(${name} PROPERTIES
+        ENVIRONMENT "${test_environment}"
+    )
     if(WIN32 AND EXISTS "${CDEPS_ROOT}/wasmtime-c-api/lib/wasmtime.dll")
-        catch_discover_tests(${name}
-            EXTRA_ARGS --durations yes
-            DL_PATHS "${CDEPS_ROOT}/wasmtime-c-api/lib"
-            PROPERTIES ENVIRONMENT "${test_environment}"
-        )
-    else()
-        catch_discover_tests(${name}
-            EXTRA_ARGS --durations yes
-            PROPERTIES ENVIRONMENT "${test_environment}"
+        set_tests_properties(${name} PROPERTIES
+            ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${CDEPS_ROOT}/wasmtime-c-api/lib"
         )
     endif()
 

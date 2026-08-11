@@ -1,0 +1,8 @@
+# Dino Lab Field Guide
+
+- Triceratops: sturdy and calm.
+- Velociraptor: fast and curious.
+- Brachiosaurus: tall and gentle.
+
+Use the registered Dino Lab commands to spawn dinosaurs, make the herd roar,
+inspect status, change simulation speed, save the park, or reset it.

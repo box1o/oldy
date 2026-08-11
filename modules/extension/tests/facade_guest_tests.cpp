@@ -208,15 +208,52 @@ TEST_CASE("Staged Kitty package executes through Wasmtime when available") {
     auto instance = engine.Create(package, FacadeHost(package, service, permissions));
     REQUIRE(instance);
     REQUIRE((*instance)->Initialize());
-    const std::array<woki::u8, 8> resized{0x80, 0x07, 0, 0, 0x38, 0x04, 0, 0};
-    REQUIRE((*instance)->DispatchEvent(WOKI_EXT_EVENT_WINDOW_RESIZED, resized));
-    const std::array<woki::u8, 6> key_pressed{69, 0, 0, 0, 0, 0};
-    REQUIRE((*instance)->DispatchEvent(WOKI_EXT_EVENT_KEY_PRESSED, key_pressed));
     CHECK((*instance)->DispatchCommand("woki.kitty.pet", {}));
     CHECK((*instance)->Tick(16.0));
     CHECK((*instance)->DispatchCommand("woki.kitty.complex", {}));
     CHECK_FALSE((*instance)->DispatchCommand("woki.kitty.unknown", {}));
     (*instance)->Unload();
+}
+
+TEST_CASE("Staged Dino Lab package exercises services, events, ticks, and every command") {
+    const fs::path package_root = WOKI_DINOLAB_PACKAGE_DIR;
+    REQUIRE(fs::is_regular_file(package_root / "extension.wasm"));
+    REQUIRE(fs::is_regular_file(package_root / "assets" / "field-guide.txt"));
+    auto manifest = woki::ext::LoadManifest(package_root / "manifest.yaml");
+    REQUIRE(manifest);
+    REQUIRE(manifest->commands.size() == 6);
+
+    const fs::path runtime_root = FacadeTempRoot("dinolab-runtime");
+    const auto permissions = manifest->requested_capabilities.permissions;
+    const std::string id = manifest->id;
+    auto package_result = woki::ext::ExtensionPackage::Create(id, std::move(*manifest),
+        {package_root, package_root / "manifest.yaml", package_root / "extension.wasm", runtime_root / "data", runtime_root / "config", runtime_root / "cache"});
+    REQUIRE(package_result);
+    auto package = std::move(*package_result);
+    auto service = std::make_shared<woki::ext::host::EventService>();
+    woki::ext::wasm::WasmtimeEngine engine;
+    auto instance = engine.Create(package, FacadeHost(package, service, permissions));
+    REQUIRE(instance);
+    REQUIRE((*instance)->Initialize());
+
+    REQUIRE((*instance)->Tick(16.0));
+    const std::array<woki::u8, 8> resized{0x00, 0x05, 0, 0, 0xd0, 0x02, 0, 0};
+    REQUIRE((*instance)->DispatchEvent(WOKI_EXT_EVENT_WINDOW_RESIZED, resized));
+    REQUIRE((*instance)->DispatchNamedEvent("woki.dinolab.feed", {}));
+    const std::array<woki::u8, 1> velociraptor{1u};
+    CHECK((*instance)->DispatchCommand("woki.dinolab.spawn", velociraptor));
+    CHECK((*instance)->DispatchCommand("woki.dinolab.roar", {}));
+    CHECK((*instance)->DispatchCommand("woki.dinolab.status", {}));
+    CHECK((*instance)->DispatchCommand("woki.dinolab.speed", {}));
+    CHECK((*instance)->DispatchCommand("woki.dinolab.save", {}));
+    CHECK((*instance)->DispatchCommand("woki.dinolab.reset", {}));
+    CHECK_FALSE((*instance)->DispatchCommand("woki.dinolab.unknown", {}));
+    (*instance)->Unload();
+
+    CHECK(fs::is_regular_file(runtime_root / "data" / "park.bin"));
+    CHECK(fs::is_regular_file(runtime_root / "data" / "audit.bin"));
+    CHECK(fs::is_regular_file(runtime_root / "config" / "default_species"));
+    CHECK(fs::is_regular_file(runtime_root / "config" / "simulation_speed"));
 }
 
 #endif
