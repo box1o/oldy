@@ -31,6 +31,11 @@ public:
         (void)event;
     }
 
+    virtual void ObserveEvent(Context& ctx, const events::Event& event) {
+        (void)ctx;
+        (void)event;
+    }
+
     virtual void OnUi(Context& ctx) {
         (void)ctx;
     }

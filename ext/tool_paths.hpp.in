@@ -6,7 +6,9 @@ namespace wokiext {
 
 inline constexpr std::string_view kSourceCMakeDir = R"woki_path(@CMAKE_CURRENT_SOURCE_DIR@/../cmake)woki_path";
 inline constexpr std::string_view kSourceSdkDir = R"woki_path(@CMAKE_CURRENT_SOURCE_DIR@/../modules/extension/sdk)woki_path";
+inline constexpr std::string_view kSourceTemplateDir = R"woki_path(@CMAKE_CURRENT_SOURCE_DIR@/templates)woki_path";
 inline constexpr std::string_view kInstallCMakeDirFromBin = R"woki_path(@WOKI_INSTALL_CMAKE_DIR_FROM_BINDIR@)woki_path";
 inline constexpr std::string_view kInstallSdkDirFromBin = R"woki_path(@WOKI_INSTALL_SDK_DIR_FROM_BINDIR@)woki_path";
+inline constexpr std::string_view kInstallTemplateDirFromBin = R"woki_path(@WOKI_INSTALL_TEMPLATE_DIR_FROM_BINDIR@)woki_path";
 
 } // namespace wokiext

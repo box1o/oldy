@@ -1,6 +1,7 @@
 add_module_test(ecs_tests
     SOURCES
         entity_tests.cpp
+        guest_registry_tests.cpp
         registry_tests.cpp
     LIBRARIES
         woki::ecs

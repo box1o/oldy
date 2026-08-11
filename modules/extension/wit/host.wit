@@ -64,14 +64,10 @@ interface events {
   /// sdk/events.h. Numeric fields are encoded little-endian.
   type event-id = u32;
 
-  /// Subscription state belongs to this runtime session. Event type 0 is a
-  /// wildcard; no events are delivered before an explicit subscription.
-  subscribe: func(event-type: event-id) -> status;
   /// Payloads are limited to 64 KiB.
   /// Guest event types must have bit 31 set (0x80000000).
   emit: func(event-type: event-id, payload: list<u8>) -> status;
   /// Collision-free extension topics use lowercase reverse-DNS names.
-  subscribe-named: func(topic: string) -> status;
   /// The topic must be prefixed by the emitting extension id and a dot.
   emit-named: func(topic: string, payload: list<u8>) -> status;
 }

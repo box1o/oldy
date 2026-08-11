@@ -10,6 +10,7 @@
 #include <woki/ext/limits.hpp>
 #include <woki/ext/host/api.hpp>
 #include <woki/ext/host/cabi.hpp>
+#include <woki/ext/application_event.hpp>
 #include <woki/ext/internal/event_service.hpp>
 
 namespace {
@@ -26,7 +27,7 @@ using woki::ext::host::HostApi;
 }
 
 [[nodiscard]] HostApi MakeHost(const fs::path& root, std::vector<Permission> permissions) {
-    return HostApi({"woki.test", std::move(permissions), root / "data", root / "config", root / "cache", {}, {}});
+    return HostApi({"woki.test", std::move(permissions), root / "data", root / "config", root / "cache", {}});
 }
 
 } // namespace
@@ -217,20 +218,16 @@ public:
 
 } // namespace
 
-TEST_CASE("HostApi records session subscriptions and queues validated guest events") {
+TEST_CASE("HostApi keeps subscription imports as permission-checked no-ops and queues guest events") {
     using namespace woki::ext::host;
-    auto session = std::make_shared<EventSession>();
     auto service = std::make_shared<EventService>();
     RecordingEventBus bus;
     service->SetBus(&bus);
-    HostApi host({"woki.test", {Permission::Events}, {}, {}, {}, session, service});
+    HostApi host({"woki.test", {Permission::Events}, {}, {}, {}, service});
 
     REQUIRE(host.SubscribeEvent(17));
     REQUIRE(host.SubscribeEvent(17));
-    REQUIRE(session->IsSubscribed(17));
-    REQUIRE_FALSE(session->IsSubscribed(18));
     REQUIRE(host.SubscribeEvent(kWildcardEventType));
-    REQUIRE(session->IsSubscribed(18));
 
     const std::array<woki::u8, 2> payload{4, 5};
     REQUIRE_FALSE(host.EmitEvent(17, payload));
@@ -244,24 +241,20 @@ TEST_CASE("HostApi records session subscriptions and queues validated guest even
     REQUIRE(bus.events[0].origin.kind == EventOriginKind::Extension);
     REQUIRE(bus.events[0].origin.extension_id == "woki.test");
 
-    HostApi denied({"woki.denied", {}, {}, {}, {}, std::make_shared<EventSession>(), service});
+    HostApi denied({"woki.denied", {}, {}, {}, {}, service});
     REQUIRE(cabi::EventSubscribe(denied, 1) == cabi::kDenied);
     REQUIRE(cabi::EventEmit(denied, kExtensionEventNamespace | 1, nullptr, 0) == cabi::kDenied);
 }
 
 TEST_CASE("named events preserve exact topics validate ownership and queue in order") {
     using namespace woki::ext::host;
-    auto session = std::make_shared<EventSession>();
     auto service = std::make_shared<EventService>();
     RecordingEventBus bus;
     service->SetBus(&bus);
-    HostApi host({"org.example.tool", {Permission::Events}, {}, {}, {}, session, service});
+    HostApi host({"org.example.tool", {Permission::Events}, {}, {}, {}, service});
 
     REQUIRE(cabi::EventSubscribeNamed(host, "org.example.first", 17) == cabi::kOk);
     REQUIRE(cabi::EventSubscribeNamed(host, "org.example.second", 18) == cabi::kOk);
-    CHECK(session->IsSubscribed("org.example.first"));
-    CHECK(session->IsSubscribed("org.example.second"));
-    CHECK_FALSE(session->IsSubscribed("org.example.third"));
 
     const std::array<woki::u8, 1> first{1};
     const std::array<woki::u8, 1> second{2};

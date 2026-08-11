@@ -52,11 +52,10 @@ inline constexpr std::size_t kMaxPackageEntries = 10'000u;
 }
 
 [[nodiscard]] bool SameManifest(const Manifest& left, const Manifest& right) {
-    return left.id == right.id && left.name == right.name && left.version == right.version && left.api_version == right.api_version && left.wasm_path == right.wasm_path
+    return left.id == right.id && left.name == right.name && left.version == right.version && left.api_version == right.api_version && left.wasm_path == right.wasm_path && left.libraries == right.libraries
            && left.requested_capabilities.permissions == right.requested_capabilities.permissions && left.activation.startup == right.activation.startup && left.activation.tick == right.activation.tick
-           && left.activation.events == right.activation.events && std::ranges::equal(left.commands, right.commands, [](const CommandContribution& first, const CommandContribution& second) {
-                  return first.id == second.id && first.title == second.title && first.category == second.category;
-              });
+           && std::ranges::equal(left.commands, right.commands,
+               [](const CommandContribution& first, const CommandContribution& second) { return first.id == second.id && first.title == second.title && first.category == second.category; });
 }
 
 [[nodiscard]] bool PathsOverlap(const fs::path& first, const fs::path& second) {

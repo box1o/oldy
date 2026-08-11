@@ -223,11 +223,30 @@ std::filesystem::path FindSdkDir(const std::filesystem::path& executable) {
     return {};
 }
 
+std::filesystem::path FindTemplateDir(const std::filesystem::path& executable) {
+    const std::filesystem::path executable_path = ExecutablePath(executable);
+    if (!executable_path.empty()) {
+        const std::filesystem::path installed = (executable_path.parent_path() / kInstallTemplateDirFromBin).lexically_normal();
+        if (std::filesystem::is_directory(installed / "c") && std::filesystem::is_directory(installed / "cpp"))
+            return installed;
+    }
+
+    const std::filesystem::path source{kSourceTemplateDir};
+    if (std::filesystem::is_directory(source / "c") && std::filesystem::is_directory(source / "cpp"))
+        return source.lexically_normal();
+    return {};
+}
+
 std::vector<std::string> BuildConfigureArguments(const BuildOptions& options, const std::filesystem::path& module_dir, const std::filesystem::path& sdk_dir) {
     const auto root = std::filesystem::absolute(options.path).lexically_normal();
     const auto build_dir = root / "build";
-    return {"cmake", "-G", "Ninja", "-B", PathArgument(build_dir), "-S", PathArgument(root), "-DCMAKE_BUILD_TYPE=" + options.config, "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON", "-DWOKI_CMAKE_DIR=" + PathArgument(module_dir),
-        "-DWOKI_SDK_DIR=" + PathArgument(sdk_dir), "-DWOKI_EXTENSION_PACKAGE_DIR=" + PathArgument(build_dir / "packages")};
+    std::vector<std::string> arguments{"cmake"};
+#if defined(_WIN32)
+    arguments.insert(arguments.end(), {"-G", "Ninja"});
+#endif
+    arguments.insert(arguments.end(), {"-B", PathArgument(build_dir), "-S", PathArgument(root), "-DCMAKE_BUILD_TYPE=" + options.config, "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+                                          "-DWOKI_CMAKE_DIR=" + PathArgument(module_dir), "-DWOKI_SDK_DIR=" + PathArgument(sdk_dir), "-DWOKI_EXTENSION_PACKAGE_DIR=" + PathArgument(build_dir / "packages")});
+    return arguments;
 }
 
 std::vector<std::string> BuildCompileArguments(const BuildOptions& options) {

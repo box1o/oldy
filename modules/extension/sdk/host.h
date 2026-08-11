@@ -40,16 +40,16 @@ WOKI_IMPORT(WOKI_EXT_IMPORT_MODULE, "host_config_set")
 int32_t host_config_set(const char* key, const char* value, uint32_t len);
 
 WOKI_IMPORT(WOKI_EXT_IMPORT_MODULE, "host_event_subscribe")
-// Subscriptions belong to the current runtime session. Type 0 is wildcard;
-// without an explicit subscription no events are delivered.
+// Compatibility no-op. The events manifest permission delivers all public
+// application events; subscriptions do not filter delivery.
 int32_t host_event_subscribe(woki_ext_event_type_t type);
 WOKI_IMPORT(WOKI_EXT_IMPORT_MODULE, "host_event_emit")
 // Emitted types must include WOKI_EXT_EVENT_NAMESPACE. Delivery is queued
 // until the current guest callback returns.
 int32_t host_event_emit(woki_ext_event_type_t type, const uint8_t* payload, uint32_t len);
 
-// Named topics are collision-free reverse-DNS strings. Subscriptions may name
-// any valid topic; emissions must be owned by the extension id namespace.
+// Named topics are collision-free reverse-DNS strings. The subscription call
+// is a compatibility no-op; emissions must be owned by the extension id.
 WOKI_IMPORT(WOKI_EXT_IMPORT_MODULE, "host_event_subscribe_named")
 int32_t host_event_subscribe_named(const char* name, uint32_t name_len);
 WOKI_IMPORT(WOKI_EXT_IMPORT_MODULE, "host_event_emit_named")

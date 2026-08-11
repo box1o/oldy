@@ -18,6 +18,10 @@ file(RELATIVE_PATH WOKI_INSTALL_SDK_DIR_FROM_BINDIR
     "/${CMAKE_INSTALL_BINDIR}"
     "/${CMAKE_INSTALL_INCLUDEDIR}"
 )
+file(RELATIVE_PATH WOKI_INSTALL_TEMPLATE_DIR_FROM_BINDIR
+    "/${CMAKE_INSTALL_BINDIR}"
+    "/${CMAKE_INSTALL_DATADIR}/woki/templates/extensions"
+)
 configure_file(tool_paths.hpp.in generated/tool_paths.hpp @ONLY)
 
 add_library(wokiext_cli STATIC
@@ -54,6 +58,8 @@ target_compile_features(wokiext PRIVATE cxx_std_23)
 target_include_directories(wokiext PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 apply_compiler_options(wokiext)
 target_link_libraries(wokiext PRIVATE wokiext_cli)
+include(DeveloperLink)
+woki_add_developer_link(wokiext)
 
 if(WIN32 AND EXISTS "${CDEPS_ROOT}/wasmtime-c-api/lib/wasmtime.dll")
     add_custom_command(TARGET wokiext POST_BUILD
@@ -85,12 +91,26 @@ endif()
 install(FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/../cmake/ExtensionProject.cmake
     ${CMAKE_CURRENT_SOURCE_DIR}/../cmake/ExtensionWasm.cmake
+    ${CMAKE_CURRENT_SOURCE_DIR}/../cmake/ExtensionGuestLibraries.cmake
     ${CMAKE_CURRENT_SOURCE_DIR}/../cmake/ExtensionManifest.cmake
     ${CMAKE_CURRENT_SOURCE_DIR}/../cmake/ExtensionInputHash.cmake
     ${CMAKE_CURRENT_SOURCE_DIR}/../cmake/CheckExtensionState.cmake
     ${CMAKE_CURRENT_SOURCE_DIR}/../cmake/StageExtensionPackage.cmake
     ${CMAKE_CURRENT_SOURCE_DIR}/../cmake/VerifyExtensionPackage.cmake
     DESTINATION ${CMAKE_INSTALL_DATADIR}/woki/cmake
+)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../cmake/guest-include/
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/woki/cmake/guest-include
+)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/templates/
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/woki/templates/extensions
+)
+install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/../modules/extension/sdk/woki/extension.hpp
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/woki
+)
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../modules/extension/sdk/woki/extension/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/woki/extension
+    FILES_MATCHING PATTERN "*.hpp"
 )
 
 if(BUILD_TESTING)
@@ -109,6 +129,12 @@ if(BUILD_TESTING)
         add_dependencies(woki_tests wokiext_cli_unit_tests)
     endif()
     add_test(NAME wokiext_cli_unit COMMAND wokiext_cli_unit_tests)
+    add_test(NAME wokiext_developer_link
+        COMMAND ${CMAKE_COMMAND}
+            -D LINK=${CMAKE_SOURCE_DIR}/.bin/$<TARGET_FILE_NAME:wokiext>
+            -D TARGET=$<TARGET_FILE:wokiext>
+            -P ${CMAKE_SOURCE_DIR}/cmake/TestDeveloperLink.cmake
+    )
     set_tests_properties(wokiext_cli_unit PROPERTIES
         ENVIRONMENT "TMPDIR=${CMAKE_CURRENT_BINARY_DIR}/test-tmp;TEMP=${CMAKE_CURRENT_BINARY_DIR}/test-tmp;TMP=${CMAKE_CURRENT_BINARY_DIR}/test-tmp"
     )

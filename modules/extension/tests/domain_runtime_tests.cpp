@@ -157,7 +157,7 @@ TEST_CASE("Runtime reports a missing engine without mutating packages") {
 TEST_CASE("Host API owns stable context independent of package storage") {
     const auto root = std::filesystem::temp_directory_path() / "woki_host_context_test";
     std::filesystem::remove_all(root);
-    woki::ext::host::HostApi host({"woki.test", {woki::ext::Permission::Storage, woki::ext::Permission::Config, woki::ext::Permission::Paths}, root / "data", root / "config", root / "cache", {}, {}});
+    woki::ext::host::HostApi host({"woki.test", {woki::ext::Permission::Storage, woki::ext::Permission::Config, woki::ext::Permission::Paths}, root / "data", root / "config", root / "cache", {}});
     const std::array<woki::u8, 3> bytes{1, 2, 3};
     REQUIRE(host.WriteFile("nested/value.bin", bytes).has_value());
     REQUIRE(host.ReadFile("nested/value.bin")->size() == bytes.size());
@@ -169,10 +169,10 @@ TEST_CASE("Host API owns stable context independent of package storage") {
 
 TEST_CASE("Host API enforces permissions and path containment") {
     const auto root = std::filesystem::temp_directory_path() / "woki_host_denied_test";
-    woki::ext::host::HostApi host({"woki.test", {}, root / "data", root / "config", root / "cache", {}, {}});
+    woki::ext::host::HostApi host({"woki.test", {}, root / "data", root / "config", root / "cache", {}});
     REQUIRE_FALSE(host.DataPath().has_value());
     REQUIRE_FALSE(host.ReadFile("value.bin").has_value());
-    woki::ext::host::HostApi storage({"woki.test", {woki::ext::Permission::Storage}, root / "data", root / "config", root / "cache", {}, {}});
+    woki::ext::host::HostApi storage({"woki.test", {woki::ext::Permission::Storage}, root / "data", root / "config", root / "cache", {}});
     REQUIRE_FALSE(storage.ReadFile("../escape").has_value());
 }
 

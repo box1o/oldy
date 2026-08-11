@@ -65,7 +65,10 @@ void ExtensionLayer::OnEvent(Context& ctx, events::Event& event) {
             ExecuteRegisteredCommands();
         }
     }
+}
 
+void ExtensionLayer::ObserveEvent(Context& ctx, const events::Event& event) {
+    (void)ctx;
     DispatchEventToExtensions(event);
 }
 

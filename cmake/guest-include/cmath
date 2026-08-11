@@ -1,0 +1,113 @@
+#pragma once
+
+namespace std {
+namespace __woki_math {
+
+template <typename T> constexpr T pi = static_cast<T>(3.14159265358979323846264338327950288L);
+template <typename T> constexpr T half_pi = pi<T> / static_cast<T>(2);
+template <typename T> constexpr T two_pi = pi<T> * static_cast<T>(2);
+template <typename T> constexpr T ln2 = static_cast<T>(0.693147180559945309417232121458176568L);
+
+template <typename T>
+T reduce_angle(T value) noexcept {
+    if (!__builtin_isfinite(value))
+        return value - value;
+    value -= __builtin_trunc(value / two_pi<T>) * two_pi<T>;
+    if (value > pi<T>) value -= two_pi<T>;
+    if (value < -pi<T>) value += two_pi<T>;
+    return value;
+}
+
+template <typename T>
+T sine(T value) noexcept {
+    value = reduce_angle(value);
+    const T squared = value * value;
+    T term = value;
+    T result = term;
+    for (unsigned n = 1; n < 8; ++n) {
+        term *= -squared / static_cast<T>((2u * n) * (2u * n + 1u));
+        result += term;
+    }
+    return result;
+}
+
+template <typename T>
+T arctangent(T value) noexcept {
+    const bool negative = value < T{};
+    if (negative) value = -value;
+    const bool reciprocal = value > static_cast<T>(1);
+    if (reciprocal) value = static_cast<T>(1) / value;
+    const T result = value / (static_cast<T>(1) + static_cast<T>(0.280872) * value * value);
+    const T adjusted = reciprocal ? half_pi<T> - result : result;
+    return negative ? -adjusted : adjusted;
+}
+
+template <typename T>
+T exponential(T value) noexcept {
+    if (__builtin_isnan(value)) return value;
+    if (value > static_cast<T>(700)) return static_cast<T>(__builtin_huge_val());
+    if (value < static_cast<T>(-745)) return T{};
+    int power{};
+    while (value > ln2<T>) { value -= ln2<T>; ++power; }
+    while (value < -ln2<T>) { value += ln2<T>; --power; }
+    T term{1};
+    T result{1};
+    for (unsigned n = 1; n < 20; ++n) {
+        term *= value / static_cast<T>(n);
+        result += term;
+    }
+    while (power > 0) { result *= static_cast<T>(2); --power; }
+    while (power < 0) { result *= static_cast<T>(0.5); ++power; }
+    return result;
+}
+
+template <typename T>
+T logarithm(T value) noexcept {
+    if (__builtin_isnan(value) || value < T{}) return static_cast<T>(__builtin_nan(""));
+    if (value == T{}) return static_cast<T>(-__builtin_huge_val());
+    if (__builtin_isinf(value)) return value;
+    int power{};
+    while (value >= static_cast<T>(2)) { value *= static_cast<T>(0.5); ++power; }
+    while (value < static_cast<T>(1)) { value *= static_cast<T>(2); --power; }
+    const T ratio = (value - static_cast<T>(1)) / (value + static_cast<T>(1));
+    const T squared = ratio * ratio;
+    T term = ratio;
+    T result = term;
+    for (unsigned denominator = 3; denominator < 32; denominator += 2) {
+        term *= squared;
+        result += term / static_cast<T>(denominator);
+    }
+    return static_cast<T>(2) * result + static_cast<T>(power) * ln2<T>;
+}
+
+} // namespace __woki_math
+
+template <typename T> constexpr T fabs(T value) noexcept { return value < T{} ? -value : value; }
+template <typename T> T sqrt(T value) noexcept { return __builtin_sqrt(value); }
+template <typename T> T sin(T value) noexcept { return __woki_math::sine(value); }
+template <typename T> T cos(T value) noexcept { return __woki_math::sine(value + __woki_math::half_pi<T>); }
+template <typename T> T tan(T value) noexcept { return sin(value) / cos(value); }
+template <typename T> T atan(T value) noexcept { return __woki_math::arctangent(value); }
+template <typename T> T atan2(T y, T x) noexcept {
+    if (x > T{}) return atan(y / x);
+    if (x < T{} && y >= T{}) return atan(y / x) + __woki_math::pi<T>;
+    if (x < T{}) return atan(y / x) - __woki_math::pi<T>;
+    return y > T{} ? __woki_math::half_pi<T> : (y < T{} ? -__woki_math::half_pi<T> : T{});
+}
+template <typename T> T asin(T value) noexcept { return atan2(value, sqrt(static_cast<T>(1) - value * value)); }
+template <typename T> T acos(T value) noexcept { return __woki_math::half_pi<T> - asin(value); }
+template <typename T> T exp(T value) noexcept { return __woki_math::exponential(value); }
+template <typename T> T log(T value) noexcept { return __woki_math::logarithm(value); }
+template <typename T> T pow(T base, T exponent) noexcept {
+    if (base >= T{}) return exp(exponent * log(base));
+    const T integral = __builtin_trunc(exponent);
+    if (integral != exponent) return static_cast<T>(__builtin_nan(""));
+    T result = exp(exponent * log(-base));
+    return static_cast<long long>(integral) & 1LL ? -result : result;
+}
+template <typename T> T ceil(T value) noexcept { return __builtin_ceil(value); }
+template <typename T> T floor(T value) noexcept { return __builtin_floor(value); }
+template <typename T> T round(T value) noexcept { return __builtin_round(value); }
+template <typename T> T trunc(T value) noexcept { return __builtin_trunc(value); }
+
+} // namespace std

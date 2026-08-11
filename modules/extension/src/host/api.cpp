@@ -686,11 +686,9 @@ Result<void> HostApi::WriteConfig(std::string_view key, std::string_view value) 
 }
 
 Result<void> HostApi::SubscribeEvent(u32 event_type) const {
+    (void)event_type;
     if (auto allowed = Require(Permission::Events); !allowed)
         return Err(allowed.error());
-    if (context_.event_session == nullptr)
-        return Err(ErrorCode::InvalidState, "Extension event session is not configured.");
-    context_.event_session->Subscribe(event_type);
     return Ok();
 }
 
@@ -711,9 +709,6 @@ Result<void> HostApi::SubscribeNamedEvent(std::string_view topic) const {
         return Err(allowed.error());
     if (!IsValidEventTopic(topic))
         return Err(ErrorCode::InvalidArgument, "Named event topic must be a lowercase reverse-DNS name.");
-    if (context_.event_session == nullptr)
-        return Err(ErrorCode::InvalidState, "Extension event session is not configured.");
-    context_.event_session->Subscribe(std::string(topic));
     return Ok();
 }
 

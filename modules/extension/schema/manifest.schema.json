@@ -5,24 +5,6 @@
   "type": "object",
   "additionalProperties": false,
   "required": ["id", "name", "version", "apiVersion", "runtime", "permissions"],
-  "allOf": [
-    {
-      "if": {
-        "required": ["activation"],
-        "properties": {
-          "activation": {
-            "required": ["events"],
-            "properties": { "events": { "minItems": 1 } }
-          }
-        }
-      },
-      "then": {
-        "properties": {
-          "permissions": { "contains": { "const": "events" } }
-        }
-      }
-    }
-  ],
   "properties": {
     "id": {
       "type": "string",
@@ -60,27 +42,20 @@
         "enum": ["log", "paths", "storage", "config", "events"]
       }
     },
+    "libraries": {
+      "type": "array",
+      "description": "Curated Woki libraries compiled for and statically linked into the Wasm guest.",
+      "maxItems": 2,
+      "uniqueItems": true,
+      "items": { "type": "string", "enum": ["math", "ecs"] }
+    },
     "activation": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Declarative activation. When omitted, the extension does not activate at startup, on ticks, or for application events; contributed commands still activate it lazily.",
+      "description": "Declarative startup and tick behavior. Extensions requesting the events permission activate on the first supported public application event; contributed commands activate lazily.",
       "properties": {
         "startup": { "type": "boolean", "default": false },
-        "tick": { "type": "boolean", "default": false },
-        "events": {
-          "type": "array",
-          "default": [],
-          "maxItems": 22,
-          "uniqueItems": true,
-          "items": {
-            "type": "string",
-            "enum": [
-              "window.closed", "window.resized", "window.focused", "window.lost-focus", "window.moved", "window.minimized", "window.maximized", "window.restored",
-              "key.pressed", "key.released", "key.typed", "mouse.scrolled", "mouse-button.pressed", "mouse-button.released", "mouse-button.clicked", "mouse.entered", "mouse.left",
-              "window.scale-changed", "viewport.resized", "app.shutdown", "app.suspend", "app.resume"
-            ]
-          }
-        }
+        "tick": { "type": "boolean", "default": false }
       }
     },
     "contributes": {

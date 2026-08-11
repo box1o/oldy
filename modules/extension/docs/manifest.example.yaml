@@ -8,13 +8,14 @@ permissions:
   - log
 # Optional:
 #  - events
-# activation defaults to no startup, ticks, or application events.
-# Contributed commands always activate their extension lazily.
+# libraries:
+#   - math
+#   - ecs
+# Extensions with the events permission activate on the first public application event.
+# Contributed commands also activate their extension lazily.
 # activation:
 #   startup: true
 #   tick: true
-#   events:
-#     - window.resized # Also requires the events permission.
 # contributes:
 #   commands:
 #     - id: woki.hello.say

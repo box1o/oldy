@@ -1,9 +1,8 @@
 #pragma once
 
-#include <woki/ext/detail/type_traits.hpp>
-#include <woki/ext/detail/views_status_log.hpp>
+#include <woki/extension/types.hpp>
 
-namespace woki::ext {
+namespace woki::events {
 
 #define WOKI_CPP_EVENT_empty(name)                                                                                                                                                                                         \
     struct name##Event final {};
@@ -19,8 +18,8 @@ namespace woki::ext {
     };
 #define WOKI_CPP_EVENT_scale(name)                                                                                                                                                                                         \
     struct name##Event final {                                                                                                                                                                                             \
-        float x{};                                                                                                                                                                                                         \
-        float y{};                                                                                                                                                                                                         \
+        f32 x{};                                                                                                                                                                                                           \
+        f32 y{};                                                                                                                                                                                                           \
     };
 #define WOKI_CPP_EVENT_key_pressed(name)                                                                                                                                                                                   \
     struct name##Event final {                                                                                                                                                                                             \
@@ -37,14 +36,14 @@ namespace woki::ext {
     };
 #define WOKI_CPP_EVENT_mouse_scrolled(name)                                                                                                                                                                                \
     struct name##Event final {                                                                                                                                                                                             \
-        float offset_x{};                                                                                                                                                                                                  \
-        float offset_y{};                                                                                                                                                                                                  \
+        f32 offset_x{};                                                                                                                                                                                                    \
+        f32 offset_y{};                                                                                                                                                                                                    \
     };
 #define WOKI_CPP_EVENT_mouse_button(name)                                                                                                                                                                                  \
     struct name##Event final {                                                                                                                                                                                             \
         u8 button{};                                                                                                                                                                                                       \
-        float x{};                                                                                                                                                                                                         \
-        float y{};                                                                                                                                                                                                         \
+        f32 x{};                                                                                                                                                                                                           \
+        f32 y{};                                                                                                                                                                                                           \
     };
 #define WOKI_EXT_EVENT(cpp_name, c_name, name, id, layout) WOKI_CPP_EVENT_##layout(cpp_name)
 #include <woki/ext/sdk/event_schema.def>
@@ -64,9 +63,7 @@ namespace detail {
 template <typename T>
 struct EventTraits;
 
-#define WOKI_CPP_DECODE_empty(out, data)                                                                                                                                                                                   \
-    (void)(data);                                                                                                                                                                                                          \
-    (out) = {}
+#define WOKI_CPP_DECODE_empty(out, data) (void)(out), (void)(data)
 #define WOKI_CPP_DECODE_size(out, data)                                                                                                                                                                                    \
     (out).width = woki_ext_event_read_u32_le(data);                                                                                                                                                                        \
     (out).height = woki_ext_event_read_u32_le((data) + 4u)
@@ -129,7 +126,6 @@ struct EventTraits;
 
 } // namespace detail
 
-/** A non-owning event envelope with typed, allocation-free dispatch. */
 class Event final {
 public:
     constexpr Event(u32 type, const u8* payload, u32 size) noexcept
@@ -142,6 +138,10 @@ public:
           payload_(payload),
           size_(size) {}
 
+    [[nodiscard]] constexpr u32 Type() const noexcept {
+        return type_;
+    }
+
     [[nodiscard]] constexpr bool IsNamed() const noexcept {
         return !topic_.Empty();
     }
@@ -150,12 +150,12 @@ public:
         return topic_;
     }
 
-    [[nodiscard]] constexpr u32 Type() const noexcept {
-        return type_;
-    }
-
     [[nodiscard]] constexpr Bytes Payload() const noexcept {
         return {payload_, size_};
+    }
+
+    [[nodiscard]] constexpr bool Handled() const noexcept {
+        return handled_;
     }
 
     template <typename T>
@@ -163,32 +163,11 @@ public:
         return type_ == detail::EventTraits<T>::kType && size_ == detail::EventTraits<T>::kSize && (size_ == 0u || payload_ != nullptr);
     }
 
-    template <typename T>
-    [[nodiscard]] T Get() const noexcept {
-        T result{};
-        if (Is<T>())
-            detail::EventTraits<T>::Decode(result, payload_);
-        return result;
-    }
-
-    [[nodiscard]] constexpr bool Handled() const noexcept {
-        return handled_;
-    }
-
-    /** Invokes a matching callback; a callback returning bool can mark the event handled. */
-    template <typename T, typename Callable>
-    bool Dispatch(Callable&& callable) noexcept {
-        if (handled_ || !Is<T>())
-            return false;
-        T value = Get<T>();
-        if constexpr (detail::IsSame<decltype(static_cast<Callable&&>(callable)(value)), bool>)
-            handled_ = static_cast<Callable&&>(callable)(value);
-        else
-            static_cast<Callable&&>(callable)(value);
-        return true;
-    }
-
 private:
+    template <typename>
+    friend class DispatcherAccess;
+    friend class EventDispatcher;
+
     u32 type_{};
     StringView topic_{};
     const u8* payload_{};
@@ -196,25 +175,26 @@ private:
     bool handled_{};
 };
 
-/** Allocation-free host event subscription and emission API. */
-class Events final {
+class EventDispatcher final {
 public:
-    template <typename T>
-    [[nodiscard]] Status Subscribe() const noexcept {
-        return Status{host_event_subscribe(detail::EventTraits<T>::kType)};
+    constexpr explicit EventDispatcher(Event& event) noexcept
+        : event_(event) {}
+
+    template <typename T, typename Callable>
+    bool Dispatch(Callable&& callable) noexcept {
+        if (event_.handled_ || !event_.Is<T>())
+            return false;
+        T value{};
+        detail::EventTraits<T>::Decode(value, event_.payload_);
+        if constexpr (requires { static_cast<bool>(static_cast<Callable&&>(callable)(value)); })
+            event_.handled_ = static_cast<bool>(static_cast<Callable&&>(callable)(value));
+        else
+            static_cast<Callable&&>(callable)(value);
+        return true;
     }
 
-    [[nodiscard]] Status SubscribeAll() const noexcept {
-        return Status{host_event_subscribe(WOKI_EXT_EVENT_WILDCARD)};
-    }
-
-    [[nodiscard]] Status Subscribe(StringView stable_name) const noexcept {
-        return Status{host_event_subscribe_named(stable_name.Data(), stable_name.Size())};
-    }
-
-    [[nodiscard]] Status Emit(StringView stable_name, Bytes payload = {}) const noexcept {
-        return Status{host_event_emit_named(stable_name.Data(), stable_name.Size(), payload.Data(), payload.Size())};
-    }
+private:
+    Event& event_;
 };
 
-} // namespace woki::ext
+} // namespace woki::events

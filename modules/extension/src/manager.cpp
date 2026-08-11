@@ -6,6 +6,7 @@
 #include "woki/ext/runtime.hpp"
 #include "woki/ext/registry.hpp"
 #include "woki/ext/wasm/web_engine.hpp"
+#include "woki/ext/application_event.hpp"
 #include "woki/ext/internal/command_index.hpp"
 #include "woki/ext/internal/event_service.hpp"
 
@@ -257,13 +258,13 @@ void ExtensionManager::DispatchEvent(u32 event_type, std::span<const u8> payload
         return;
     for (const ExtensionPackage& package : impl_->registry.Packages()) {
         if (known) {
-            if (!ActivatesOn(package.GetManifest(), *known))
+            if (!HasPermission(package.GetManifest(), Permission::Events))
                 continue;
             if (!impl_->runtime.IsActive(package.Id()) && !Load(package.Id()))
                 continue;
         } else if (!impl_->runtime.IsActive(package.Id()))
             continue;
-        if (impl_->runtime.HasGrant(package.Id(), Permission::Events) && impl_->runtime.IsSubscribed(package.Id(), event_type))
+        if (impl_->runtime.HasGrant(package.Id(), Permission::Events))
             impl_->runtime.DispatchEvent(package.Id(), event_type, payload);
     }
     impl_->DrainEmittedEvents();
@@ -273,7 +274,7 @@ void ExtensionManager::DispatchNamedEvent(std::string_view topic, std::span<cons
     if (!host::IsValidEventTopic(topic) || payload.size() > limits::kMaxEventBytes)
         return;
     for (const ExtensionPackage& package : impl_->registry.Packages()) {
-        if (impl_->runtime.IsActive(package.Id()) && impl_->runtime.HasGrant(package.Id(), Permission::Events) && impl_->runtime.IsSubscribed(package.Id(), topic))
+        if (impl_->runtime.IsActive(package.Id()) && impl_->runtime.HasGrant(package.Id(), Permission::Events))
             impl_->runtime.DispatchNamedEvent(package.Id(), topic, payload);
     }
     impl_->DrainEmittedEvents();

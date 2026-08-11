@@ -256,6 +256,31 @@ namespace fs = std::filesystem;
     return Ok(std::move(parsed));
 }
 
+[[nodiscard]] Result<std::vector<GuestLibrary>> ParseLibraries(const YAML::Node& root) {
+    const YAML::Node libraries = root["libraries"];
+    if (!libraries)
+        return Ok(std::vector<GuestLibrary>{});
+    if (!libraries.IsSequence())
+        return Err(ErrorCode::ParseTypeMismatch, WrongTypeMessage("libraries", "a sequence", "libraries:\n  - math"));
+    if (libraries.size() > kMaxManifestLibraries)
+        return Err(ErrorCode::ValidationOutOfRange, "Manifest exceeds the number of supported guest libraries.");
+
+    std::vector<GuestLibrary> parsed;
+    parsed.reserve(libraries.size());
+    for (const YAML::Node& node : libraries) {
+        if (!node.IsScalar())
+            return Err(ErrorCode::ParseTypeMismatch, "Each manifest library must be a string. Supported libraries are math and ecs.");
+        const std::string name = node.as<std::string>();
+        const auto library = name == "math" ? GuestLibrary::Math : name == "ecs" ? GuestLibrary::Ecs : static_cast<GuestLibrary>(255);
+        if (library != GuestLibrary::Math && library != GuestLibrary::Ecs)
+            return Err(ErrorCode::ValidationInvalidState, "Unknown manifest library '" + name + "'. Supported libraries are math and ecs.");
+        if (std::ranges::find(parsed, library) != parsed.end())
+            return Err(ErrorCode::ValidationInvalidState, "Manifest contains duplicate library: " + name);
+        parsed.push_back(library);
+    }
+    return Ok(std::move(parsed));
+}
+
 [[nodiscard]] Result<ActivationMetadata> ParseActivation(const YAML::Node& root) {
     const YAML::Node activation = root["activation"];
     if (!activation)
@@ -277,23 +302,6 @@ namespace fs = std::filesystem;
         }
     }
 
-    const YAML::Node events = activation["events"];
-    if (!events)
-        return Ok(std::move(parsed));
-    if (!events.IsSequence())
-        return Err(ErrorCode::ParseTypeMismatch, WrongTypeMessage("activation.events", "a sequence", "events:\n  - window.resized"));
-    if (events.size() > kMaxActivationEvents)
-        return Err(ErrorCode::ValidationOutOfRange, "Manifest exceeds the number of supported application activation events.");
-    for (const YAML::Node& event_node : events) {
-        if (!event_node.IsScalar())
-            return Err(ErrorCode::ParseTypeMismatch, "Each activation event must be a named string, for example 'window.resized'.");
-        auto event = ParseApplicationEventType(event_node.as<std::string>());
-        if (!event)
-            return Err(event.error());
-        if (std::ranges::find(parsed.events, *event) != parsed.events.end())
-            return Err(ErrorCode::ValidationInvalidState, "Manifest contains duplicate activation event: " + std::string(ToString(*event)));
-        parsed.events.push_back(*event);
-    }
     return Ok(std::move(parsed));
 }
 
@@ -311,7 +319,7 @@ namespace fs = std::filesystem;
 }
 
 [[nodiscard]] Result<void> ValidateKnownFields(const YAML::Node& root) {
-    auto known = RejectUnknownFields(root, {"id", "name", "version", "apiVersion", "runtime", "permissions", "activation", "contributes"}, {});
+    auto known = RejectUnknownFields(root, {"id", "name", "version", "apiVersion", "runtime", "libraries", "permissions", "activation", "contributes"}, {});
     if (!known) {
         return known;
     }
@@ -321,7 +329,7 @@ namespace fs = std::filesystem;
         }
     }
     if (const YAML::Node activation = root["activation"]; activation && activation.IsMap()) {
-        if (auto valid = RejectUnknownFields(activation, {"startup", "tick", "events"}, "activation"); !valid)
+        if (auto valid = RejectUnknownFields(activation, {"startup", "tick"}, "activation"); !valid)
             return valid;
     }
     if (const YAML::Node contributes = root["contributes"]; contributes && contributes.IsMap()) {
@@ -451,6 +459,11 @@ Result<Manifest> LoadManifest(const fs::path& path) {
         }
         manifest.wasm_path = std::move(*wasm_path);
 
+        auto libraries = ParseLibraries(root);
+        if (!libraries)
+            return Err(libraries.error());
+        manifest.libraries = std::move(*libraries);
+
         auto permissions = ParsePermissions(root);
         if (!permissions) {
             return Err(permissions.error());
@@ -499,6 +512,15 @@ Result<void> ValidateManifest(const Manifest& manifest) {
     if (manifest.api_version != kApiVersion) {
         return Err(ErrorCode::ValidationInvalidState, "Manifest field 'apiVersion' is unsupported. For this build use:\napiVersion: 1");
     }
+    if (manifest.libraries.size() > kMaxManifestLibraries)
+        return Err(ErrorCode::ValidationOutOfRange, "Manifest exceeds the number of supported guest libraries.");
+    for (std::size_t index = 0; index < manifest.libraries.size(); ++index) {
+        const GuestLibrary library = manifest.libraries[index];
+        if (library != GuestLibrary::Math && library != GuestLibrary::Ecs)
+            return Err(ErrorCode::ValidationInvalidState, "Manifest contains an unknown guest library.");
+        if (std::ranges::find(manifest.libraries.begin(), manifest.libraries.begin() + static_cast<std::ptrdiff_t>(index), library) != manifest.libraries.begin() + static_cast<std::ptrdiff_t>(index))
+            return Err(ErrorCode::ValidationInvalidState, "Manifest contains a duplicate guest library.");
+    }
     const auto& permissions = manifest.requested_capabilities.permissions;
     if (permissions.size() > AllPermissions().size())
         return Err(ErrorCode::ValidationOutOfRange, "Manifest exceeds the number of supported permissions.");
@@ -506,19 +528,6 @@ Result<void> ValidateManifest(const Manifest& manifest) {
         if (std::ranges::find(permissions.begin(), permissions.begin() + static_cast<std::ptrdiff_t>(index), permissions[index]) != permissions.begin() + static_cast<std::ptrdiff_t>(index))
             return Err(ErrorCode::ValidationInvalidState, "Manifest contains duplicate permission: " + std::string(ToString(permissions[index])));
     }
-
-    if (manifest.activation.events.size() > kMaxActivationEvents)
-        return Err(ErrorCode::ValidationOutOfRange, "Manifest exceeds the number of supported application activation events.");
-    for (std::size_t index = 0; index < manifest.activation.events.size(); ++index) {
-        const auto event = manifest.activation.events[index];
-        if (!std::ranges::any_of(AllApplicationEventTypes(), [event](ApplicationEventType known) { return known == event; }))
-            return Err(ErrorCode::ValidationInvalidState, "Manifest contains an unknown application activation event.");
-        if (std::ranges::find(manifest.activation.events.begin(), manifest.activation.events.begin() + static_cast<std::ptrdiff_t>(index), event)
-            != manifest.activation.events.begin() + static_cast<std::ptrdiff_t>(index))
-            return Err(ErrorCode::ValidationInvalidState, "Manifest contains duplicate activation event: " + std::string(ToString(event)));
-    }
-    if (!manifest.activation.events.empty() && !HasPermission(manifest, Permission::Events))
-        return Err(ErrorCode::ValidationInvalidState, "Manifest activation.events requires the 'events' permission.");
 
     if (manifest.commands.size() > kMaxManifestCommands) {
         return Err(ErrorCode::ValidationOutOfRange, "Manifest exceeds 256 command contributions.");
@@ -565,10 +574,6 @@ Result<void> ValidateManifestForPackage(const Manifest& manifest, std::string_vi
 
 bool HasPermission(const Manifest& manifest, Permission permission) noexcept {
     return HasPermission(manifest.requested_capabilities, permission);
-}
-
-bool ActivatesOn(const Manifest& manifest, ApplicationEventType event) noexcept {
-    return std::ranges::find(manifest.activation.events, event) != manifest.activation.events.end();
 }
 
 bool IsValidExtensionId(std::string_view id) noexcept {

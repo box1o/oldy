@@ -1,0 +1,7 @@
+#pragma once
+namespace std {
+using size_t = __SIZE_TYPE__;
+using ptrdiff_t = __PTRDIFF_TYPE__;
+}
+using size_t = std::size_t;
+using ptrdiff_t = std::ptrdiff_t;

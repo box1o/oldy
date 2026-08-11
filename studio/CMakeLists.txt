@@ -20,6 +20,9 @@ add_executable(studio
     ${_SOURCES}
 )
 
+include(DeveloperLink)
+woki_add_developer_link(studio)
+
 target_compile_features(studio PRIVATE cxx_std_23)
 apply_compiler_options(studio)
 
@@ -182,6 +185,25 @@ if(TARGET woki_extensions)
 endif()
 
 target_link_libraries(studio PRIVATE ${_DEPS})
+
+if(BUILD_TESTING AND NOT EMSCRIPTEN)
+    add_executable(studio_layer_stack_tests
+        tests/layer_stack_tests.cpp
+        src/core/layer_stack.cpp
+    )
+    target_compile_features(studio_layer_stack_tests PRIVATE cxx_std_23)
+    target_include_directories(studio_layer_stack_tests PRIVATE ${_SRC_DIR})
+    apply_compiler_options(studio_layer_stack_tests)
+    target_link_libraries(studio_layer_stack_tests PRIVATE
+        woki::core
+        woki::platform
+        Catch2::Catch2WithMain
+    )
+    add_test(NAME studio_layer_stack COMMAND studio_layer_stack_tests)
+    if(TARGET woki_tests)
+        add_dependencies(woki_tests studio_layer_stack_tests)
+    endif()
+endif()
 
 install(TARGETS studio
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}

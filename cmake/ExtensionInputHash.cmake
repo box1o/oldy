@@ -7,7 +7,18 @@ function(woki_extension_input_hash source_dir sdk_dir output)
             list(APPEND _project_inputs "${_input}")
         endif()
     endforeach()
-    file(GLOB_RECURSE _sdk_inputs LIST_DIRECTORIES FALSE "${sdk_dir}/*")
+    file(GLOB_RECURSE _sdk_inputs LIST_DIRECTORIES FALSE
+        "${sdk_dir}/woki/extension.hpp"
+        "${sdk_dir}/woki/extension/*"
+        "${sdk_dir}/woki/ext/sdk/*"
+        "${sdk_dir}/woki/math/*"
+        "${sdk_dir}/woki/ecs/guest.hpp"
+    )
+    set(_guest_root "${sdk_dir}/../../")
+    file(GLOB_RECURSE _guest_inputs LIST_DIRECTORIES FALSE
+        "${_guest_root}/core/include/woki/math/*"
+        "${_guest_root}/ecs/include/woki/ecs/guest.hpp"
+    )
     set(_records)
     foreach(_input IN LISTS _project_inputs)
         if(IS_SYMLINK "${_input}")
@@ -24,6 +35,14 @@ function(woki_extension_input_hash source_dir sdk_dir output)
         file(SHA256 "${_input}" _hash)
         file(RELATIVE_PATH _relative "${sdk_dir}" "${_input}")
         list(APPEND _records "sdk/${_relative}=${_hash}")
+    endforeach()
+    foreach(_input IN LISTS _guest_inputs)
+        if(IS_SYMLINK "${_input}")
+            message(FATAL_ERROR "Extension guest library inputs may not be symbolic links: ${_input}")
+        endif()
+        file(SHA256 "${_input}" _hash)
+        file(RELATIVE_PATH _relative "${_guest_root}" "${_input}")
+        list(APPEND _records "guest/${_relative}=${_hash}")
     endforeach()
     list(SORT _records)
     string(JOIN "\n" _content ${_records})

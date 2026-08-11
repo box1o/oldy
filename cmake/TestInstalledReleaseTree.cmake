@@ -21,14 +21,23 @@ foreach(required IN ITEMS
     "${studio}"
     "${prefix}/${DATADIR}/woki/cmake/ExtensionProject.cmake"
     "${prefix}/${DATADIR}/woki/cmake/ExtensionWasm.cmake"
+    "${prefix}/${DATADIR}/woki/cmake/ExtensionGuestLibraries.cmake"
+    "${prefix}/${DATADIR}/woki/cmake/guest-include/cstddef"
     "${prefix}/${DATADIR}/woki/cmake/ExtensionManifest.cmake"
     "${prefix}/${DATADIR}/woki/cmake/ExtensionInputHash.cmake"
     "${prefix}/${DATADIR}/woki/cmake/CheckExtensionState.cmake"
     "${prefix}/${DATADIR}/woki/cmake/StageExtensionPackage.cmake"
     "${prefix}/${DATADIR}/woki/cmake/VerifyExtensionPackage.cmake"
+    "${prefix}/${DATADIR}/woki/templates/extensions/c/CMakeLists.txt.in"
+    "${prefix}/${DATADIR}/woki/templates/extensions/c/src/extension.c.in"
+    "${prefix}/${DATADIR}/woki/templates/extensions/cpp/CMakeLists.txt.in"
+    "${prefix}/${DATADIR}/woki/templates/extensions/cpp/src/extension.cpp.in"
     "${prefix}/${INCLUDEDIR}/woki/ext/sdk/ext.h"
-    "${prefix}/${INCLUDEDIR}/woki/ext/plugin.hpp"
+    "${prefix}/${INCLUDEDIR}/woki/extension.hpp"
     "${prefix}/${INCLUDEDIR}/woki/ext/ext.hpp"
+    "${prefix}/${INCLUDEDIR}/woki/extension.hpp"
+    "${prefix}/${INCLUDEDIR}/woki/math/guest.hpp"
+    "${prefix}/${INCLUDEDIR}/woki/ecs/guest.hpp"
     "${prefix}/${DATADIR}/woki/extensions/${CONFIG}/kitty/manifest.yaml"
     "${prefix}/${DATADIR}/woki/extensions/${CONFIG}/kitty/extension.wasm"
 )
@@ -58,6 +67,10 @@ execute_process(
 )
 if(NOT create_result EQUAL 0)
     message(FATAL_ERROR "Installed wokiext create failed\n${create_output}${create_error}")
+endif()
+file(READ "${project_parent}/relocated-extension/src/extension.cpp" relocated_source)
+if(NOT relocated_source MATCHES "#include <woki/extension.hpp>" OR relocated_source MATCHES "Context")
+    message(FATAL_ERROR "Installed wokiext did not render the installed C++ component template")
 endif()
 execute_process(
     COMMAND "${CMAKE_COMMAND}" -E env --unset=WOKI_CMAKE_DIR --unset=WOKI_SDK_DIR

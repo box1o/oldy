@@ -37,6 +37,8 @@ add_custom_target(extension_guest_contract_check
     COMMAND ${WOKI_CONTRACT_COMMAND}
     DEPENDS
         "${CMAKE_CURRENT_SOURCE_DIR}/../sdk/check_contract.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../sdk/generate_wit_bindings.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../sdk/woki/extension/detail/wit_host.hpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/../sdk/fixtures/raw-abi-v1.json"
         "${CMAKE_CURRENT_SOURCE_DIR}/../sdk/fixtures/raw-abi-v1-guest.c"
         "${CMAKE_CURRENT_SOURCE_DIR}/../sdk/fixtures/freestanding/string.h.fixture"

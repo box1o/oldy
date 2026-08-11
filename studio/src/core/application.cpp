@@ -64,8 +64,8 @@ Context Application::BuildContext() {
     WOKI_ASSERT(window_ != nullptr);
 
     return Context{
-        .window = *window_,
-        .running = is_running_,
+        .window = window_.get(),
+        .running = &is_running_,
     };
 }
 

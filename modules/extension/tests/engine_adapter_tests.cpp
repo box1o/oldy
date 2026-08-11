@@ -56,7 +56,7 @@ void WriteBytes(const fs::path& path, std::initializer_list<unsigned char> bytes
 }
 
 [[nodiscard]] woki::ext::host::HostApi MakeHost(const woki::ext::ExtensionPackage& package) {
-    return woki::ext::host::HostApi({package.Id(), package.GetManifest().requested_capabilities.permissions, package.Layout().data_root, package.Layout().config_root, package.Layout().cache_root, {}, {}});
+    return woki::ext::host::HostApi({package.Id(), package.GetManifest().requested_capabilities.permissions, package.Layout().data_root, package.Layout().config_root, package.Layout().cache_root, {}});
 }
 #endif
 
@@ -173,7 +173,7 @@ __attribute__((export_name("ext_on_unload"))) void ext_on_unload(void) {
     (*second)->Unload();
 }
 
-TEST_CASE("Wasmtime event imports use HostApi session subscriptions and queued emission") {
+TEST_CASE("Wasmtime event subscription imports are compatible no-ops and emission is queued") {
     const fs::path root = TempRoot("wasmtime_events");
     Compile(root, R"c(
 __attribute__((import_module("woki_host"), import_name("host_event_subscribe"))) extern int host_event_subscribe(unsigned);
@@ -206,11 +206,10 @@ __attribute__((export_name("ext_free"))) void ext_free(unsigned ptr, unsigned le
         "--export=ext_alloc --export=ext_free");
 
     auto package = MakePackage(root, "woki.events", {woki::ext::Permission::Events});
-    auto session = std::make_shared<woki::ext::host::EventSession>();
     auto service = std::make_shared<woki::ext::host::EventService>();
     RecordingBus bus;
     service->SetBus(&bus);
-    woki::ext::host::HostApi host({package.Id(), package.GetManifest().requested_capabilities.permissions, package.Layout().data_root, package.Layout().config_root, package.Layout().cache_root, session, service});
+    woki::ext::host::HostApi host({package.Id(), package.GetManifest().requested_capabilities.permissions, package.Layout().data_root, package.Layout().config_root, package.Layout().cache_root, service});
 
     woki::ext::wasm::WasmtimeEngine engine;
     auto instance = engine.Create(package, std::move(host));
@@ -218,8 +217,6 @@ __attribute__((export_name("ext_free"))) void ext_free(unsigned ptr, unsigned le
     INFO(instance_error);
     REQUIRE(instance);
     REQUIRE((*instance)->Initialize());
-    REQUIRE(session->IsSubscribed(77));
-    REQUIRE_FALSE(session->IsSubscribed(78));
     REQUIRE((*instance)->Tick(2.0));
     REQUIRE(bus.events.empty());
     service->Drain();

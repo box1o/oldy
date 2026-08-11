@@ -21,6 +21,7 @@ public:
     void OnDetach(Context& ctx) override;
     void OnUpdate(Context& ctx, f64 delta_ms) override;
     void OnEvent(Context& ctx, events::Event& event) override;
+    void ObserveEvent(Context& ctx, const events::Event& event) override;
 
 private:
     void LoadInstalledExtensions();

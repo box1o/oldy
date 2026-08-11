@@ -9,11 +9,9 @@
 
 #include "../perm.hpp"
 #include "../package.hpp"
-#include "../internal/event_service.hpp"
 
 namespace woki::ext::host {
 
-class EventSession;
 class EventService;
 
 enum class LogLevel : u8 {
@@ -29,7 +27,6 @@ struct Context {
     std::filesystem::path data_root;
     std::filesystem::path config_root;
     std::filesystem::path cache_root;
-    std::shared_ptr<EventSession> event_session;
     std::shared_ptr<EventService> event_service;
 };
 

@@ -4,14 +4,15 @@ version: 0.1.0
 apiVersion: 1
 runtime:
   wasm: extension.wasm
+libraries:
+  - math
+  - ecs
 permissions:
   - log
   - events
 activation:
   startup: true
-  events:
-    - window.resized
-    - key.pressed
+  tick: true
 contributes:
   commands:
     - id: woki.kitty.pet

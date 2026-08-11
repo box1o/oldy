@@ -1,0 +1,7 @@
+#pragma once
+namespace std {
+template <typename T> concept integral = __is_integral(T);
+template <typename T> concept floating_point = __is_floating_point(T);
+template <typename T> concept signed_integral = integral<T> && __is_signed(T);
+template <typename T> concept unsigned_integral = integral<T> && !__is_signed(T);
+}

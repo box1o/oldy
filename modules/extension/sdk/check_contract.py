@@ -199,9 +199,7 @@ def check_signatures() -> None:
         "append: func(path: string, data: list<u8>) -> status;",
         "get: func(key: string) -> result<string, status>;",
         "set: func(key: string, value: string) -> status;",
-        "subscribe: func(event-type: event-id) -> status;",
         "emit: func(event-type: event-id, payload: list<u8>) -> status;",
-        "subscribe-named: func(topic: string) -> status;",
         "emit-named: func(topic: string, payload: list<u8>) -> status;",
     }
     combined_wit = guest_wit + " " + host_wit
@@ -244,7 +242,7 @@ def check_wit_policy(expected_imports: set[str]) -> None:
         "paths": {"data-dir", "cache-dir"},
         "storage": {"read", "write", "append"},
         "config": {"get", "set"},
-        "events": {"subscribe", "emit", "subscribe-named", "emit-named"},
+        "events": {"emit", "emit-named"},
     }
     if (
         set().union(*(imports for _, imports in capability_imports.values()))
@@ -305,6 +303,7 @@ def check_wit_policy(expected_imports: set[str]) -> None:
 
 
 def check_static_contract() -> None:
+    run([sys.executable, str(SDK / "generate_wit_bindings.py"), "--check"])
     limits = c_defines(SDK / "woki_limits.h")
     permissions = c_defines(SDK / "perm_bits.h")
     types = (SDK / "types.h").read_text()
@@ -536,51 +535,43 @@ _Static_assert(WOKI_EXT_API_VERSION == 1u, "api version");
 _Static_assert(WOKI_EXT_OK == 0 && WOKI_EXT_INVALID == -5, "status");
 """
     cxx_source = r"""
-#include <woki/ext/plugin.hpp>
+#include <woki/extension.hpp>
 static_assert(WOKI_EXT_EVENT_APP_RESUME == 305u);
 static_assert(WOKI_EXT_EVENT_EXTENSION_ID(42u) == 0x8000002au);
 static_assert(WOKI_EXT_API_VERSION == 1u);
 static_assert(WOKI_EXT_MAX_EVENT_LEN == WOKI_EXT_GUEST_BUFFER_SIZE);
-static_assert(woki::ext::StringView("org.example.ready").Size() == 17u);
-static_assert(woki::ext::StringView("same") == woki::ext::StringView("same"));
-static_assert(woki::ext::StringView("same") != woki::ext::StringView("other"));
+static_assert(woki::StringView("org.example.ready").Size() == 17u);
+static_assert(woki::StringView("same") == woki::StringView("same"));
+static_assert(woki::StringView("same") != woki::StringView("other"));
 struct EmptyPlugin {};
 struct OptionalPlugin {
-    void OnLoad(woki::ext::Context&) noexcept {}
-    void OnTick(woki::ext::Context&, double) noexcept {}
-    void OnEvent(woki::ext::Context&, woki::ext::Event&) noexcept {}
-    void OnUnload(woki::ext::Context&) noexcept {}
-    woki::ext::i32 OnCommand(woki::ext::Context&, woki::ext::StringView, woki::ext::Bytes) noexcept { return WOKI_EXT_OK; }
+    woki::Status OnAttach() noexcept { return woki::Status::Success(); }
+    void OnUpdate(woki::f64) noexcept {}
+    void OnEvent(woki::events::Event&) noexcept {}
+    woki::i32 OnCommand(const woki::extension::Command&) noexcept { return WOKI_EXT_OK; }
+    void OnDetach() noexcept {}
 };
 void CheckOptionalCallbacks() {
-    woki::ext::Context context;
-    woki::ext::Event event{WOKI_EXT_EVENT_APP_RESUME, nullptr, 0u};
+    woki::events::Event event{WOKI_EXT_EVENT_APP_RESUME, nullptr, 0u};
     EmptyPlugin empty;
-    (void)woki::ext::detail::Load(empty, context);
-    woki::ext::detail::Tick(empty, context, 1.0);
-    woki::ext::detail::Deliver(empty, context, event);
-    woki::ext::detail::Unload(empty, context);
-    (void)woki::ext::detail::Command(empty, context, {}, {});
+    (void)woki::extension::detail::Attach(empty);
+    woki::extension::detail::Update(empty, 1.0);
+    woki::extension::detail::Deliver(empty, event);
+    (void)woki::extension::detail::Invoke(empty, {{}, {}});
     OptionalPlugin optional;
-    (void)woki::ext::detail::Load(optional, context);
-    woki::ext::detail::Tick(optional, context, 1.0);
-    woki::ext::detail::Deliver(optional, context, event);
-    woki::ext::detail::Unload(optional, context);
-    (void)woki::ext::detail::Command(optional, context, {}, {});
-}
-void CheckMessageBuilding(woki::ext::Context& context) {
-    woki::ext::StringBuilder<64> message{"size: "};
-    message << 800u << 'x' << 600u;
-    (void)context.GetLog().Info(message);
-    (void)context.GetLog().Info("size: ", 800u, 'x', 600u);
+    (void)woki::extension::detail::Attach(optional);
+    woki::extension::detail::Update(optional, 1.0);
+    woki::extension::detail::Deliver(optional, event);
+    (void)woki::extension::detail::Invoke(optional, {{}, {}});
 }
 struct TestPlugin {
-    woki::ext::Status OnLoad(woki::ext::Context&) noexcept { return woki::ext::Status::Success(); }
-    void OnEvent(woki::ext::Context&, woki::ext::Event& event) noexcept {
-        (void)event.Dispatch<woki::ext::MouseScrolledEvent>([](const auto& value) noexcept { return value.offset_y != 0.0f; });
+    woki::Status OnAttach() noexcept { return woki::Status::Success(); }
+    void OnEvent(woki::events::Event& event) noexcept {
+        woki::events::EventDispatcher dispatcher{event};
+        (void)dispatcher.Dispatch<woki::events::MouseScrolledEvent>([](const auto& value) noexcept { return value.offset_y != 0.0f; });
     }
 };
-WOKI_PLUGIN(TestPlugin)
+WOKI_EXTENSION(TestPlugin)
 """
     with tempfile.TemporaryDirectory(prefix="woki-contract-") as temporary:
         temp = Path(temporary)
@@ -599,22 +590,20 @@ WOKI_PLUGIN(TestPlugin)
         cxx_file.write_text(cxx_source)
         second_file.write_text('#include "guest_alloc.h"\n')
         second_cxx_file.write_text(
-            "#include <woki/ext/plugin.hpp>\n"
-            'static_assert(woki::ext::StringView("second.tu").Size() == 9u);\n'
-            "woki::ext::Status FromSecondTranslationUnit() { "
-            "return woki::ext::Status::Success(); }\n"
+            "#include <woki/extension.hpp>\n"
+            'static_assert(woki::StringView("second.tu").Size() == 9u);\n'
+            "woki::Status FromSecondTranslationUnit() { "
+            "return woki::Status::Success(); }\n"
         )
         nontrivial_cxx_file.write_text(
-            "#include <woki/ext/plugin.hpp>\n"
-            "struct NontrivialPlugin { NontrivialPlugin() {} };\n"
-            "WOKI_PLUGIN(NontrivialPlugin)\n"
+            "#include <woki/extension.hpp>\n"
+            "struct NontrivialPlugin { ~NontrivialPlugin() {} };\n"
+            "WOKI_EXTENSION(NontrivialPlugin)\n"
         )
         common = ["-I", str(SDK), "-Wall", "-Wextra", "-Werror", "-pedantic"]
         run([cc, "-std=c17", "-fsyntax-only", *common, str(c_file)])
         run([cxx, "-std=c++23", "-fsyntax-only", *common, str(cxx_file)])
-        run_fails(
-            [cxx, "-std=c++23", "-fsyntax-only", *common, str(nontrivial_cxx_file)]
-        )
+        run([cxx, "-std=c++23", "-fsyntax-only", *common, str(nontrivial_cxx_file)])
         run(
             [
                 cxx,
