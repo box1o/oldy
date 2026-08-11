@@ -106,33 +106,32 @@ before returning a pointer.
 | `config` | `host_config_get`, `host_config_set` |
 | `events` | `host_event_subscribe`, `host_event_emit`, `host_event_subscribe_named`, `host_event_emit_named` |
 
-Manifest v1 has one `events` permission, so it grants both receive
-(`host_event_subscribe`) and emit (`host_event_emit`). A future manifest version
-may split these grants; hosts must not infer that split in v1.
+Manifest v1 has one `events` permission, so it grants receipt of every ABI v1
+public application event and allows event emission. A future manifest version
+may split these grants; hosts must not infer that split in v1. The legacy
+`host_event_subscribe` and `host_event_subscribe_named` imports remain
+permission-checked compatibility no-ops. Their arguments are validated where
+applicable, but they do not filter delivery.
 
-Event subscriptions are session-local and are discarded on unload. There is no
-default subscription: a guest receives nothing until it subscribes. Type `0`
-(`WOKI_EXT_EVENT_WILDCARD`) is the explicit wildcard for numeric application
-and compatibility events. Named topics require exact named subscriptions.
-`woki_ext_subscribe_all_events()` subscribes to the numeric wildcard. Duplicate
-subscriptions are idempotent. Guest emissions must set bit 31
+Guest emissions must set bit 31
 (`WOKI_EXT_EVENT_NAMESPACE`); use `WOKI_EXT_EVENT_EXTENSION_ID(local_id)` or
 `woki_ext_extension_event_id(local_id)` to construct an ID. Type `0` and
 host-space types are rejected. The
 host copies and queues emitted payloads, then publishes them to its event bus
 with extension origin metadata after the current guest callback returns.
 
-New extension-defined events use exact named topics. `host_event_subscribe_named`
-subscribes to a lowercase reverse-DNS topic and `host_event_emit_named` emits a
-topic plus payload. Emitted topics must begin with the extension manifest id and
+New extension-defined events use exact named topics. The compatibility
+`host_event_subscribe_named` call only validates a lowercase reverse-DNS topic;
+`host_event_emit_named` emits a topic plus payload. Emitted topics must begin with the extension manifest id and
 a dot, for example `org.example.tool.ready`. Topic names are at most 255 bytes;
 empty names, malformed labels, non-ASCII bytes, and embedded NULs are rejected.
 Hosts deliver named events through the optional `ext_on_event_named` export.
 Numeric extension IDs remain available only for raw compatibility and should
 not be used for new events because they cannot provide collision-free identity.
-The Manager routes a high-bit numeric event only to already active sessions
-with a matching numeric or wildcard subscription and the `events` grant. Such
-events never activate a package. Unknown host-space numeric IDs are ignored.
+The Manager routes a high-bit numeric event to every already active session
+with the effective `events` grant. Such events never activate a package.
+Unknown host-space numeric IDs are ignored. Named events follow the same
+active-session and effective-grant rule.
 
 ### Application events
 
@@ -140,6 +139,11 @@ Known application events are binary, not JSON. Every integer and IEEE-754
 `float` field is little-endian and fields have no implicit padding. Decoders in
 `sdk/events.h` require the exact payload length, allocate no memory, and return
 `WOKI_EXT_INVALID` for malformed input.
+
+An inactive package requesting `events` is activated when the first supported
+public application event arrives. The event is delivered after activation only
+when capability policy grants `events`; all later public application events are
+delivered under the same effective grant.
 
 | Constant | ID | Payload bytes |
 |----------|---:|---------------|

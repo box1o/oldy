@@ -165,6 +165,7 @@ permissions:
 )");
     WriteFile(source / "extension.wasm", "");
     WriteFile(source / "assets" / "icon.txt", "icon");
+    WriteFile(source / ".woki-state", "internal build metadata");
 
     const woki::ext::Roots roots{
         .extensions = root / "extensions",
@@ -178,6 +179,7 @@ permissions:
     REQUIRE(fs::is_regular_file(installed->manifest));
     REQUIRE(fs::is_regular_file(installed->wasm));
     REQUIRE(fs::is_regular_file(installed->install_root / "assets" / "icon.txt"));
+    REQUIRE_FALSE(fs::exists(installed->install_root / ".woki-state"));
 }
 
 TEST_CASE("Extension package installer rejects a source overlapping its install root") {
@@ -396,6 +398,44 @@ permissions:
     REQUIRE(installed.error().Message().contains("unsupported"));
 }
 
+TEST_CASE("Extension package installer rejects unpacked symlinks without installing their targets") {
+    const fs::path root = MakeTempDir("install_unpacked_symlink");
+    const fs::path source = root / "source";
+    fs::create_directories(source / "assets");
+    WriteFile(source / "manifest.yaml", "id: woki.hello\nname: Hello\nversion: 1.0.0\napiVersion: 1\nruntime:\n  wasm: extension.wasm\npermissions: []\n");
+    WriteFile(source / "extension.wasm", "module");
+    WriteFile(root / "outside-secret", "must-not-be-installed");
+    std::error_code error;
+    fs::create_symlink(root / "outside-secret", source / "assets" / "secret", error);
+    if (error)
+        SKIP("File symlinks are unavailable");
+    const woki::ext::Roots roots{root / "extensions", root / "data", root / "cache", root / "config"};
+
+    const auto installed = woki::ext::InstallUnpackedPackage(source, roots);
+    REQUIRE_FALSE(installed);
+    REQUIRE(installed.error().Message().contains("symlink"));
+    REQUIRE_FALSE(fs::exists(roots.extensions / "woki.hello"));
+    for (const fs::directory_entry& entry : fs::directory_iterator(roots.extensions))
+        REQUIRE_FALSE(entry.path().filename().string().ends_with(".installing"));
+    REQUIRE(fs::file_size(root / "outside-secret") == 21);
+}
+
+TEST_CASE("Extension package installer enforces the single-file limit before commit") {
+    const fs::path root = MakeTempDir("install_unpacked_file_limit");
+    const fs::path source = root / "source";
+    fs::create_directories(source / "assets");
+    WriteFile(source / "manifest.yaml", "id: woki.hello\nname: Hello\nversion: 1.0.0\napiVersion: 1\nruntime:\n  wasm: extension.wasm\npermissions: []\n");
+    WriteFile(source / "extension.wasm", "module");
+    WriteFile(source / "assets" / "oversized.bin", "x");
+    fs::resize_file(source / "assets" / "oversized.bin", 64u * 1024u * 1024u + 1u);
+    const woki::ext::Roots roots{root / "extensions", root / "data", root / "cache", root / "config"};
+
+    const auto installed = woki::ext::InstallUnpackedPackage(source, roots);
+    REQUIRE_FALSE(installed);
+    REQUIRE(installed.error().Code() == woki::ErrorCode::ValidationOutOfRange);
+    REQUIRE_FALSE(fs::exists(roots.extensions / "woki.hello"));
+}
+
 TEST_CASE("Extension package installer explicitly rejects native and signature payloads") {
     const fs::path root = MakeTempDir("install_policy_entries");
     const fs::path source = root / "source";
@@ -425,7 +465,11 @@ void WriteZipPackage(const fs::path& archive_path, const fs::path& source_root) 
     struct archive* writer = archive_write_new();
     REQUIRE(writer != nullptr);
     REQUIRE(archive_write_set_format_zip(writer) == ARCHIVE_OK);
-    REQUIRE(archive_write_open_filename(writer, archive_path.string().c_str()) == ARCHIVE_OK);
+#ifdef _WIN32
+    REQUIRE(archive_write_open_filename_w(writer, archive_path.c_str()) == ARCHIVE_OK);
+#else
+    REQUIRE(archive_write_open_filename(writer, archive_path.c_str()) == ARCHIVE_OK);
+#endif
 
     for (const fs::directory_entry& entry : fs::recursive_directory_iterator(source_root, fs::directory_options::skip_permission_denied)) {
         const fs::path relative = fs::relative(entry.path(), source_root);
@@ -586,6 +630,23 @@ permissions:
     SKIP("Archive installation is native-only");
 #endif
 }
+
+#if defined(_WIN32) && !defined(__EMSCRIPTEN__)
+TEST_CASE("Extension package installer opens Unicode archive paths on Windows") {
+    const fs::path root = MakeTempDir("install_unicode_archive");
+    const fs::path source = root / "source";
+    fs::create_directories(source);
+    WriteFile(source / "manifest.yaml", "id: woki.hello\nname: Hello\nversion: 1.0.0\napiVersion: 1\nruntime:\n  wasm: extension.wasm\npermissions: []\n");
+    WriteFile(source / "extension.wasm", "module");
+    const fs::path archive_path = root / fs::path{L"hello-\u03bb.wokiext"};
+    WriteZipPackage(archive_path, source);
+    const woki::ext::Roots roots{root / "extensions", root / "data", root / "cache", root / "config"};
+
+    const auto installed = woki::ext::InstallArchive(archive_path, roots);
+    REQUIRE(installed);
+    REQUIRE(fs::is_regular_file(installed->wasm));
+}
+#endif
 
 TEST_CASE("Extension package installer rejects zip archives with unsupported entries") {
 #ifndef __EMSCRIPTEN__

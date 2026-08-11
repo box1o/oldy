@@ -6,7 +6,7 @@ set(SOURCE_MANIFEST "${SOURCE_DIR}/manifest.yaml")
 include("${CMAKE_CURRENT_LIST_DIR}/VerifyExtensionPackage.cmake")
 
 set(PROJECT_DIR "${SOURCE_DIR}")
-set(STATE_FILE "${PACKAGE_DIR}.state")
+set(STATE_FILE "${PACKAGE_DIR}/.woki-state")
 include("${CMAKE_CURRENT_LIST_DIR}/CheckExtensionState.cmake")
 
 execute_process(

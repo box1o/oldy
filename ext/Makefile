@@ -19,7 +19,7 @@ install: build
 
 test: build
 	@cmake --build $(BUILD_DIR) --target woki_extensions -j$(NUM_JOBS)
-	@$(BUILD_DIR)/ext/wokiext verify ../extensions/kitty
+	@$(BUILD_DIR)/ext/wokiext verify $(BUILD_DIR)/extension-packages/$(BUILD_TYPE)/kitty
 
 clean:
 	@rm -rf $(BUILD_DIR)

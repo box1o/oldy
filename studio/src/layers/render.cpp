@@ -5,7 +5,8 @@
 namespace woki {
 
 void RenderLayer::OnAttach(Context& ctx) {
-    if (!renderer_.Initialize(ctx.window)) {
+    WOKI_ASSERT(ctx.window != nullptr);
+    if (!renderer_.Initialize(*ctx.window)) {
         slog::Warn("RenderLayer running without RHI renderer");
     }
 }

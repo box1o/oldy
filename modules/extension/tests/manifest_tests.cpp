@@ -77,7 +77,28 @@ contributes:
     REQUIRE(manifest->commands.front().category == "Examples");
 }
 
-TEST_CASE("Extension manifest parses explicit activation and defaults to lazy only") {
+TEST_CASE("Extension manifest loads curated guest libraries") {
+    const fs::path root = MakeTempDir("guest_libraries");
+    WriteFile(root / "manifest.yaml", std::string(kValidManifest) + "libraries: [math, ecs]\n");
+    auto manifest = woki::ext::LoadManifest(root / "manifest.yaml");
+    REQUIRE(manifest);
+    REQUIRE(manifest->libraries == std::vector{woki::ext::GuestLibrary::Math, woki::ext::GuestLibrary::Ecs});
+}
+
+TEST_CASE("Extension manifest rejects invalid guest libraries") {
+    const fs::path root = MakeTempDir("invalid_guest_libraries");
+    WriteFile(root / "manifest.yaml", std::string(kValidManifest) + "libraries: [native]\n");
+    auto manifest = woki::ext::LoadManifest(root / "manifest.yaml");
+    REQUIRE_FALSE(manifest);
+    CHECK(manifest.error().Message().contains("math and ecs"));
+
+    WriteFile(root / "manifest.yaml", std::string(kValidManifest) + "libraries: [math, math]\n");
+    manifest = woki::ext::LoadManifest(root / "manifest.yaml");
+    REQUIRE_FALSE(manifest);
+    CHECK(manifest.error().Message().contains("duplicate library"));
+}
+
+TEST_CASE("Extension manifest parses startup and tick activation") {
     const fs::path root = MakeTempDir("activation");
     WriteFile(root / "manifest.yaml", R"(
 id: woki.hello
@@ -90,34 +111,25 @@ permissions: [events]
 activation:
   startup: true
   tick: true
-  events: [window.resized, app.resume]
 )");
     auto manifest = woki::ext::LoadManifest(root / "manifest.yaml");
     REQUIRE(manifest);
     CHECK(manifest->activation.startup);
     CHECK(manifest->activation.tick);
-    CHECK(woki::ext::ActivatesOn(*manifest, woki::ext::ApplicationEventType::WindowResized));
-    CHECK(woki::ext::ActivatesOn(*manifest, woki::ext::ApplicationEventType::AppResume));
 
     WriteFile(root / "manifest.yaml", kValidManifest);
     manifest = woki::ext::LoadManifest(root / "manifest.yaml");
     REQUIRE(manifest);
     CHECK_FALSE(manifest->activation.startup);
     CHECK_FALSE(manifest->activation.tick);
-    CHECK(manifest->activation.events.empty());
 }
 
-TEST_CASE("Extension manifest rejects invalid activation metadata") {
+TEST_CASE("Extension manifest rejects removed activation event subsets") {
     const fs::path root = MakeTempDir("invalid_activation");
     WriteFile(root / "manifest.yaml", std::string(kValidManifest) + "activation:\n  events: [window.resized]\n");
     auto manifest = woki::ext::LoadManifest(root / "manifest.yaml");
     REQUIRE_FALSE(manifest);
-    CHECK(manifest.error().Message().contains("events' permission"));
-
-    WriteFile(root / "manifest.yaml", std::string(kValidManifest) + "activation:\n  events: [not.an-event]\n");
-    manifest = woki::ext::LoadManifest(root / "manifest.yaml");
-    REQUIRE_FALSE(manifest);
-    CHECK(manifest.error().Message().contains("not.an-event"));
+    CHECK(manifest.error().Message().contains("activation.events"));
 }
 
 TEST_CASE("Extension manifest rejects command ids outside the extension namespace") {
@@ -274,6 +286,7 @@ TEST_CASE("Extension manifest rejects runtime paths with dot components") {
         .name = "Hello",
         .version = "0.1.0",
         .wasm_path = "nested/./extension.wasm",
+        .libraries = {},
         .requested_capabilities = {},
         .activation = {},
         .commands = {},
@@ -304,6 +317,7 @@ TEST_CASE("Extension manifest enforces Semantic Versioning 2.0.0") {
         .id = "woki.hello",
         .name = "Hello",
         .version = "1.2.3-alpha.1+build.7",
+        .libraries = {},
         .requested_capabilities = {},
         .activation = {},
         .commands = {},
@@ -341,6 +355,7 @@ TEST_CASE("Extension manifest enforces field size limits") {
         .id = "woki.hello",
         .name = std::string(woki::ext::kMaxManifestNameBytes + 1, 'x'),
         .version = "1.0.0",
+        .libraries = {},
         .requested_capabilities = {},
         .activation = {},
         .commands = {},
@@ -355,6 +370,7 @@ TEST_CASE("Extension manifest programmatic validation matches schema constraints
         .id = "woki.hello",
         .name = "Hello",
         .version = "1.0.0",
+        .libraries = {},
         .requested_capabilities = {{woki::ext::Permission::Log}},
         .activation = {},
         .commands = {{"woki.hello.run", "Run", "Tools"}},
@@ -381,6 +397,7 @@ TEST_CASE("Extension manifest parser and schema agree on scalar and collection b
     CHECK(schema.find("\"maxLength\": 4096") != std::string::npos);
     CHECK(schema.find("\"maxItems\": 5") != std::string::npos);
     CHECK(schema.find("\"uniqueItems\": true") != std::string::npos);
+    CHECK(schema.find("\"events\": {") == std::string::npos);
 
     const fs::path root = MakeTempDir("schema_boundaries");
     WriteFile(root / "manifest.yaml", R"(

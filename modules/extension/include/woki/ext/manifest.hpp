@@ -9,7 +9,6 @@
 
 #include "perm.hpp"
 #include "command.hpp"
-#include "application_event.hpp"
 
 namespace woki::ext {
 
@@ -23,12 +22,16 @@ inline constexpr std::size_t kMaxManifestCommands = 256u;
 inline constexpr std::size_t kMaxCommandIdBytes = 255u;
 inline constexpr std::size_t kMaxCommandTitleBytes = 256u;
 inline constexpr std::size_t kMaxCommandCategoryBytes = 128u;
-inline constexpr std::size_t kMaxActivationEvents = AllApplicationEventTypes().size();
+inline constexpr std::size_t kMaxManifestLibraries = 2u;
+
+enum class GuestLibrary : u8 {
+    Math,
+    Ecs,
+};
 
 struct ActivationMetadata {
     bool startup{};
     bool tick{};
-    std::vector<ApplicationEventType> events;
 };
 
 struct Manifest {
@@ -37,6 +40,7 @@ struct Manifest {
     std::string version;
     u32 api_version{kApiVersion};
     std::filesystem::path wasm_path{"extension.wasm"};
+    std::vector<GuestLibrary> libraries;
     RequestedCapabilities requested_capabilities;
     ActivationMetadata activation;
     std::vector<CommandContribution> commands;
@@ -47,6 +51,5 @@ struct Manifest {
 [[nodiscard]] Result<void> ValidateManifestForPackage(const Manifest& manifest, std::string_view package_id);
 [[nodiscard]] bool IsValidExtensionId(std::string_view id) noexcept;
 [[nodiscard]] bool HasPermission(const Manifest& manifest, Permission permission) noexcept;
-[[nodiscard]] bool ActivatesOn(const Manifest& manifest, ApplicationEventType event) noexcept;
 
 } // namespace woki::ext

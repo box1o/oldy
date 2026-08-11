@@ -60,6 +60,8 @@ void LayerStack::DispatchEvent(Context& ctx, events::Event& event) {
             break;
         }
     }
+    for (auto& layer : layers_)
+        layer->ObserveEvent(ctx, event);
 }
 
 void LayerStack::DrawUi(Context& ctx) {

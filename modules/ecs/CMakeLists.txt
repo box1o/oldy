@@ -9,6 +9,7 @@ add_module(ecs
         include/woki/ecs.hpp
         include/woki/ecs/entity.hpp
         include/woki/ecs/registry.hpp
+        include/woki/ecs/guest.hpp
     DEPENDENCIES
         woki::core
 )

@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <string_view>
 #include <system_error>
+#include <unordered_map>
 
 #include "wokiext/cli.hpp"
 
@@ -22,7 +23,10 @@ struct CreateOptions {
     std::string id;
     std::filesystem::path out_dir;
     std::string lang{"cpp"};
+    std::filesystem::path executable;
 };
+
+using TemplateReplacements = std::unordered_map<std::string, std::string>;
 
 struct BuildOptions {
     std::filesystem::path path;
@@ -205,6 +209,9 @@ void PrintUsage(Diagnostics& diagnostics, std::string_view executable);
 [[nodiscard]] std::filesystem::path BuiltPackagePath(const BuildOptions& options);
 [[nodiscard]] std::filesystem::path FindCMakeModuleDir(const std::filesystem::path& executable);
 [[nodiscard]] std::filesystem::path FindSdkDir(const std::filesystem::path& executable);
+[[nodiscard]] std::filesystem::path FindTemplateDir(const std::filesystem::path& executable);
+[[nodiscard]] std::expected<std::string, std::string> RenderTemplate(std::string_view contents, const TemplateReplacements& replacements);
+[[nodiscard]] std::expected<void, std::string> InstantiateTemplates(const std::filesystem::path& template_dir, const std::filesystem::path& destination, const TemplateReplacements& replacements);
 [[nodiscard]] Status Create(Context& context, const CreateOptions& options);
 [[nodiscard]] Status Build(Context& context, const BuildOptions& options);
 [[nodiscard]] Status Verify(Context& context, const PathOptions& options);

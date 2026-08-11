@@ -10,11 +10,27 @@ file(MAKE_DIRECTORY "${relocated_cmake}" "${relocated_sdk}")
 file(COPY
     "${WOKI_CMAKE_DIR}/ExtensionProject.cmake"
     "${WOKI_CMAKE_DIR}/ExtensionWasm.cmake"
+    "${WOKI_CMAKE_DIR}/ExtensionGuestLibraries.cmake"
     "${WOKI_CMAKE_DIR}/ExtensionManifest.cmake"
     DESTINATION "${relocated_cmake}"
 )
+file(COPY "${WOKI_CMAKE_DIR}/guest-include" DESTINATION "${relocated_cmake}")
 file(MAKE_DIRECTORY "${relocated_sdk}/woki")
 file(COPY "${WOKI_SDK_DIR}/woki/ext" DESTINATION "${relocated_sdk}/woki")
+file(COPY
+    "${WOKI_SDK_DIR}/woki/extension.hpp"
+    "${WOKI_SDK_DIR}/woki/extension"
+    DESTINATION "${relocated_sdk}/woki"
+)
+if(EXISTS "${WOKI_CMAKE_DIR}/../modules/core/include/woki/math")
+    set(math_include "${WOKI_CMAKE_DIR}/../modules/core/include")
+    set(ecs_include "${WOKI_CMAKE_DIR}/../modules/ecs/include")
+else()
+    set(math_include "${WOKI_CMAKE_DIR}/../../../include")
+    set(ecs_include "${math_include}")
+endif()
+file(COPY "${math_include}/woki/math" DESTINATION "${relocated_sdk}/woki")
+file(COPY "${ecs_include}/woki/ecs" DESTINATION "${relocated_sdk}/woki")
 file(GLOB sdk_root_files "${WOKI_SDK_DIR}/*.h" "${WOKI_SDK_DIR}/*.def")
 file(COPY ${sdk_root_files} DESTINATION "${relocated_sdk}")
 
@@ -35,11 +51,13 @@ foreach(language IN ITEMS C CXX)
     file(MAKE_DIRECTORY "${source_dir}/src" "${source_dir}/assets")
     if(language STREQUAL "CXX")
         set(wasm_relative "bin/custom-guest.wasm")
+        set(libraries_text "libraries:\n- math\n- ecs\n")
     else()
         set(wasm_relative "extension.wasm")
+        set(libraries_text "")
     endif()
     file(WRITE "${source_dir}/manifest.yaml"
-        "id: woki.test.external.${language_lower}\nname: External ${language}\nversion: 1.0.0\napiVersion: 1\nruntime:\n  wasm: ${wasm_relative}\npermissions:\n  - log\n")
+        "id: woki.test.external.${language_lower}\nname: External ${language}\nversion: 1.0.0\napiVersion: 1\nruntime:\n  wasm: ${wasm_relative}\npermissions:\n- log\n${libraries_text}")
     file(WRITE "${source_dir}/assets/data.txt" "${language} asset\n")
 
     if(language STREQUAL "CXX")
@@ -54,8 +72,8 @@ foreach(language IN ITEMS C CXX)
         set(unused_compiler "-DWOKI_WASM_COMPILER=${TEST_ROOT}/missing-clang++")
     endif()
     if(language STREQUAL "CXX")
-        file(WRITE "${source_dir}/src/plugin.cpp" "#include <woki/ext/plugin.hpp>\nclass Guest { public: woki::ext::Status OnLoad(woki::ext::Context& context) { return context.GetLog().Info(\"external C++\"); } };\nWOKI_PLUGIN(Guest)\n")
-        file(WRITE "${source_dir}/src/events.cpp" "#include <woki/ext/plugin.hpp>\nstatic_assert(woki::ext::StringView(\"woki.test.external.event\").Size() == 24u);\n")
+        file(WRITE "${source_dir}/src/plugin.cpp" "#include <woki/extension.hpp>\nfloat guest_library_probe(float);\nclass Guest { public: woki::Status OnAttach() noexcept { return slog::Info(\"external C++\"); } void OnUpdate(woki::f64 delta) noexcept { value_ = guest_library_probe(static_cast<float>(delta)); } private: float value_{}; };\nWOKI_EXTENSION(Guest)\n")
+        file(WRITE "${source_dir}/src/events.cpp" "#include <woki/extension.hpp>\n#include <woki/math/guest.hpp>\n#include <woki/ecs/guest.hpp>\nstruct Position { woki::math::vec3<float> value; };\nstatic_assert(sizeof(woki::math::vec2<float>) == sizeof(float) * 2);\nstatic_assert(woki::math::infinity<float> > 1.0f);\nfloat guest_library_probe(float angle) { woki::guest::Registry<4> registry; woki::guest::ComponentPool<Position, 4> positions; auto entity = registry.Create(); auto* position = positions.Emplace(entity, Position{{3.0f, 4.0f, 0.0f}}); woki::math::quat<float> rotation{{0.0f, 0.0f, 1.0f}, angle}; return position->value.normalized().x + rotation.w; }\nstatic_assert(woki::StringView(\"woki.test.external.event\").Size() == 24u);\n")
     else()
         file(WRITE "${source_dir}/src/plugin.c"
             "#include <woki/ext/sdk/ext.h>\nWOKI_EXPORT(\"ext_api_version\") uint32_t ext_api_version(void) { return WOKI_EXT_API_VERSION; }\nWOKI_EXPORT(\"ext_init\") int32_t ext_init(void) { return 0; }\nWOKI_EXPORT(\"ext_on_tick\") void ext_on_tick(double value) { (void)value; }\n")
@@ -92,6 +110,13 @@ foreach(language IN ITEMS C CXX)
             message(FATAL_ERROR "External ${language} ${source}${extension} was mentioned in ${source_mention_count} Release compile commands, expected 1\n${release_output}${release_error}")
         endif()
     endforeach()
+    if(language STREQUAL "CXX")
+        foreach(library IN ITEMS math ecs)
+            if(NOT "${release_output}${release_error}" MATCHES "libguest_woki_${library}\\.a")
+                message(FATAL_ERROR "External CXX build did not link the guest-compiled ${library} archive\n${release_output}${release_error}")
+            endif()
+        endforeach()
+    endif()
 
     set(package_dir "${build_dir}/package/Release")
     if(NOT EXISTS "${package_dir}/${wasm_relative}" OR
@@ -142,7 +167,42 @@ foreach(language IN ITEMS C CXX)
     endif()
 endforeach()
 
+# A service omitted from manifest permissions must fail during the build rather than
+# surviving until package verification or runtime instantiation.
+set(permission_probe "${source_dir}/src/plugin.cpp")
+file(READ "${permission_probe}" permission_probe_original)
+string(REPLACE
+    "return slog::Info(\"external C++\");"
+    "const auto configured = woki::config::Set(\"probe\", \"denied\"); return configured ? slog::Info(\"external C++\") : configured;"
+    permission_probe_denied
+    "${permission_probe_original}"
+)
+if(permission_probe_denied STREQUAL permission_probe_original)
+    message(FATAL_ERROR "Could not inject the manifest permission link probe")
+endif()
+file(WRITE "${permission_probe}" "${permission_probe_denied}")
+execute_process(
+    COMMAND "${CMAKE_COMMAND}" --build "${build_dir}" --config Release --clean-first
+    RESULT_VARIABLE permission_probe_result
+    OUTPUT_VARIABLE permission_probe_output
+    ERROR_VARIABLE permission_probe_error
+)
+file(WRITE "${permission_probe}" "${permission_probe_original}")
+if(permission_probe_result EQUAL 0)
+    message(FATAL_ERROR "A config service built without the config manifest permission\n${permission_probe_output}${permission_probe_error}")
+endif()
+execute_process(
+    COMMAND "${CMAKE_COMMAND}" --build "${build_dir}" --config Release
+    RESULT_VARIABLE permission_restore_result
+    OUTPUT_QUIET
+    ERROR_QUIET
+)
+if(NOT permission_restore_result EQUAL 0)
+    message(FATAL_ERROR "External CXX project did not recover after the permission-link probe")
+endif()
+
 set(hash_package "${TEST_ROOT}/hash-package")
+file(WRITE "${hash_package}.state" "legacy-sidecar")
 execute_process(
     COMMAND "${CMAKE_COMMAND}"
         -D SOURCE_DIR=${package_dir}
@@ -157,6 +217,9 @@ execute_process(
 if(NOT hash_stage_result EQUAL 0)
     message(FATAL_ERROR "Could not stage package for SDK content-hash test")
 endif()
+if(EXISTS "${hash_package}.state")
+    message(FATAL_ERROR "Legacy package state sidecar was not removed during migration")
+endif()
 set(sdk_hash_probe "${relocated_sdk}/woki/ext/sdk/ext.h")
 file(READ "${sdk_hash_probe}" sdk_hash_probe_contents)
 file(APPEND "${sdk_hash_probe}" "\n/* changed SDK content */\n")
@@ -164,7 +227,7 @@ execute_process(
     COMMAND "${CMAKE_COMMAND}"
         -D PROJECT_DIR=${source_dir}
         -D SDK_DIR=${relocated_sdk}
-        -D STATE_FILE=${hash_package}.state
+        -D STATE_FILE=${hash_package}/.woki-state
         -P "${WOKI_CMAKE_DIR}/CheckExtensionState.cmake"
     RESULT_VARIABLE stale_sdk_result
     OUTPUT_QUIET
@@ -174,6 +237,21 @@ file(WRITE "${sdk_hash_probe}" "${sdk_hash_probe_contents}")
 if(stale_sdk_result EQUAL 0)
     message(FATAL_ERROR "SDK content changes did not invalidate the staged package")
 endif()
+file(WRITE "${relocated_sdk}/unrelated.hpp" "// not part of the Woki extension SDK\n")
+execute_process(
+    COMMAND "${CMAKE_COMMAND}"
+        -D PROJECT_DIR=${source_dir}
+        -D SDK_DIR=${relocated_sdk}
+        -D STATE_FILE=${hash_package}/.woki-state
+        -P "${WOKI_CMAKE_DIR}/CheckExtensionState.cmake"
+    RESULT_VARIABLE unrelated_sdk_result
+    OUTPUT_QUIET
+    ERROR_QUIET
+)
+file(REMOVE "${relocated_sdk}/unrelated.hpp")
+if(NOT unrelated_sdk_result EQUAL 0)
+    message(FATAL_ERROR "Unrelated installation headers invalidated the extension package")
+endif()
 
 set(failed_source "${TEST_ROOT}/failed-stage-source")
 set(preserved_destination "${TEST_ROOT}/preserved-package")
@@ -181,7 +259,7 @@ file(MAKE_DIRECTORY "${failed_source}" "${preserved_destination}")
 file(COPY "${package_dir}/" DESTINATION "${failed_source}")
 file(WRITE "${failed_source}/${wasm_relative}" "not wasm")
 file(WRITE "${preserved_destination}/sentinel" "preserved")
-file(WRITE "${preserved_destination}.state" "preserved-state")
+file(WRITE "${preserved_destination}/.woki-state" "preserved-state")
 execute_process(
     COMMAND "${CMAKE_COMMAND}"
         -D SOURCE_DIR=${failed_source}
@@ -196,7 +274,7 @@ execute_process(
     ERROR_QUIET
 )
 file(READ "${preserved_destination}/sentinel" preserved_package_contents)
-file(READ "${preserved_destination}.state" preserved_state_contents)
+file(READ "${preserved_destination}/.woki-state" preserved_state_contents)
 if(failed_stage_result EQUAL 0 OR NOT preserved_package_contents STREQUAL "preserved" OR NOT preserved_state_contents STREQUAL "preserved-state")
     message(FATAL_ERROR "failed staging did not preserve the existing package and state")
 endif()

@@ -1,4 +1,4 @@
-package woki:extension@1.0.0;
+package woki:extension@2.0.0;
 
 interface types {
   /// Raw ABI v1 status: 0 success, -1 error, -2 denied, -3 no-space,
@@ -8,6 +8,8 @@ interface types {
 
 interface logging {
   use types.{status};
+
+  /// Available only with the `log` manifest permission.
 
   enum level {
     debug,
@@ -23,6 +25,8 @@ interface logging {
 interface paths {
   use types.{status};
 
+  /// Available only with the `paths` manifest permission.
+
   /// Returned paths, including their terminating NUL in raw ABI v1, are
   /// limited to 4096 UTF-8 bytes.
   data-dir: func() -> result<string, status>;
@@ -31,6 +35,8 @@ interface paths {
 
 interface storage {
   use types.{status};
+
+  /// Available only with the `storage` manifest permission.
 
   /// Paths are limited to 4096 bytes and file operations to 16 MiB.
   read: func(path: string) -> result<list<u8>, status>;
@@ -41,6 +47,8 @@ interface storage {
 interface config {
   use types.{status};
 
+  /// Available only with the `config` manifest permission.
+
   /// Keys are limited to 128 bytes and values to 64 KiB.
   get: func(key: string) -> result<string, status>;
   set: func(key: string, value: string) -> status;
@@ -49,18 +57,17 @@ interface config {
 interface events {
   use types.{status};
 
+  /// Available only with the `events` manifest permission. Raw ABI guests may
+  /// import this interface only when that permission is declared.
+
   /// Stable raw ABI v1 event IDs are the WOKI_EXT_EVENT_* constants in
   /// sdk/events.h. Numeric fields are encoded little-endian.
   type event-id = u32;
 
-  /// Subscription state belongs to this runtime session. Event type 0 is a
-  /// wildcard; no events are delivered before an explicit subscription.
-  subscribe: func(event-type: event-id) -> status;
   /// Payloads are limited to 64 KiB.
   /// Guest event types must have bit 31 set (0x80000000).
   emit: func(event-type: event-id, payload: list<u8>) -> status;
   /// Collision-free extension topics use lowercase reverse-DNS names.
-  subscribe-named: func(topic: string) -> status;
   /// The topic must be prefixed by the emitting extension id and a dot.
   emit-named: func(topic: string, payload: list<u8>) -> status;
 }

@@ -14,7 +14,6 @@ namespace {
 struct Runtime::Session {
     std::string extension_id;
     scope<RuntimeInstance> instance;
-    std::shared_ptr<host::EventSession> events;
     EffectiveCapabilities grants;
 };
 
@@ -49,14 +48,20 @@ Result<void> Runtime::Load(const ExtensionPackage& package, EffectiveCapabilitie
         return Err(valid.error());
     }
 
-    auto events = std::make_shared<host::EventSession>();
-    host::Context context{package.Id(), grants.permissions, package.Layout().data_root, package.Layout().config_root, package.Layout().cache_root, events, event_service_};
+    const std::size_t event_checkpoint = event_service_ == nullptr ? 0 : event_service_->Checkpoint();
+    const auto discard_activation_events = [this, event_checkpoint] {
+        if (event_service_ != nullptr)
+            event_service_->DiscardAfter(event_checkpoint);
+    };
+    host::Context context{package.Id(), grants.permissions, package.Layout().data_root, package.Layout().config_root, package.Layout().cache_root, event_service_};
     auto instance = engine_->Create(package, host::HostApi(std::move(context)));
     if (!instance) {
+        discard_activation_events();
         statuses_.push_back({package.Id(), ExtensionState::Failed, instance.error().Code(), std::string(instance.error().Message())});
         return Err(instance.error());
     }
     if (*instance == nullptr) {
+        discard_activation_events();
         const Error error(ErrorCode::InvalidState, "Extension runtime engine returned a null instance.");
         statuses_.push_back({package.Id(), ExtensionState::Failed, error.Code(), std::string(error.Message())});
         return Err(error);
@@ -64,10 +69,11 @@ Result<void> Runtime::Load(const ExtensionPackage& package, EffectiveCapabilitie
     auto initialized = (*instance)->Initialize();
     if (!initialized) {
         (*instance)->Unload();
+        discard_activation_events();
         statuses_.push_back({package.Id(), ExtensionState::Failed, initialized.error().Code(), std::string(initialized.error().Message())});
         return Err(initialized.error());
     }
-    sessions_.push_back(createScope<Session>(Session{package.Id(), std::move(*instance), std::move(events), std::move(grants)}));
+    sessions_.push_back(createScope<Session>(Session{package.Id(), std::move(*instance), std::move(grants)}));
     statuses_.push_back({package.Id(), ExtensionState::Active, ErrorCode::Success, {}});
     return Ok();
 }
@@ -186,16 +192,6 @@ void Runtime::UnloadAll() noexcept {
 
 bool Runtime::IsActive(std::string_view extension_id) const noexcept {
     return std::ranges::any_of(sessions_, [extension_id](const auto& session) { return session->extension_id == extension_id; });
-}
-
-bool Runtime::IsSubscribed(std::string_view extension_id, u32 event_type) const noexcept {
-    const auto it = std::ranges::find_if(sessions_, [extension_id](const auto& session) { return session->extension_id == extension_id; });
-    return it != sessions_.end() && (*it)->events->IsSubscribed(event_type);
-}
-
-bool Runtime::IsSubscribed(std::string_view extension_id, std::string_view topic) const noexcept {
-    const auto it = std::ranges::find_if(sessions_, [extension_id](const auto& session) { return session->extension_id == extension_id; });
-    return it != sessions_.end() && (*it)->events->IsSubscribed(topic);
 }
 
 bool Runtime::HasGrant(std::string_view extension_id, Permission permission) const noexcept {

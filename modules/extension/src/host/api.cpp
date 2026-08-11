@@ -42,28 +42,6 @@ namespace fs = std::filesystem;
     return std::ranges::all_of(key, [](char ch) { return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '-' || ch == '.'; });
 }
 
-#ifdef _WIN32
-[[nodiscard]] Result<void> EnsureDirectory(const fs::path& path) {
-    if (path.empty()) {
-        return Err(ErrorCode::InvalidArgument, "Extension storage root must not be empty.");
-    }
-    std::error_code error;
-    fs::create_directories(path, error);
-    if (error) {
-        return Err(ErrorCode::FileWriteError, error.message());
-    }
-    return Ok();
-}
-
-[[nodiscard]] Result<void> EnsureParentDirectory(const fs::path& path) {
-    const fs::path parent = path.parent_path();
-    if (parent.empty()) {
-        return Ok();
-    }
-    return EnsureDirectory(parent);
-}
-#endif
-
 [[nodiscard]] Result<void> RejectSymlinks(const fs::path& root, const fs::path& relative_path) {
     fs::path current = root;
     for (auto part = relative_path.begin();;) {
@@ -96,6 +74,15 @@ public:
     WindowsFile(WindowsFile&& other) noexcept
         : value_(std::exchange(other.value_, INVALID_HANDLE_VALUE)) {}
 
+    WindowsFile& operator=(WindowsFile&& other) noexcept {
+        if (this != &other) {
+            if (value_ != INVALID_HANDLE_VALUE)
+                CloseHandle(value_);
+            value_ = std::exchange(other.value_, INVALID_HANDLE_VALUE);
+        }
+        return *this;
+    }
+
     ~WindowsFile() {
         if (value_ != INVALID_HANDLE_VALUE)
             CloseHandle(value_);
@@ -108,6 +95,55 @@ public:
 private:
     HANDLE value_;
 };
+
+class WindowsDirectoryGuard final {
+public:
+    void Add(WindowsFile handle) {
+        handles_.push_back(std::move(handle));
+    }
+
+private:
+    std::vector<WindowsFile> handles_;
+};
+
+[[nodiscard]] Result<WindowsDirectoryGuard> OpenWindowsDirectoryPath(const fs::path& path, bool create) {
+    if (path.empty())
+        return Err(ErrorCode::InvalidArgument, "Extension storage root must not be empty.");
+    std::error_code path_error;
+    const fs::path absolute = fs::absolute(path, path_error).lexically_normal();
+    if (path_error)
+        return Err(ErrorCode::FileReadError, path_error.message());
+
+    WindowsDirectoryGuard guard;
+    fs::path current = absolute.root_path();
+    for (const fs::path& component : absolute.relative_path()) {
+        current /= component;
+        if (create && CreateDirectoryW(current.c_str(), nullptr) == 0 && GetLastError() != ERROR_ALREADY_EXISTS)
+            return Err(ErrorCode::FileWriteError, "Failed to create extension storage directory component.");
+        HANDLE handle = CreateFileW(current.c_str(), FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+        if (handle == INVALID_HANDLE_VALUE) {
+            const DWORD error = GetLastError();
+            return Err(error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND ? ErrorCode::FileNotFound : ErrorCode::FileReadError, "Failed to securely open extension storage directory component.");
+        }
+        FILE_ATTRIBUTE_TAG_INFO attributes{};
+        if (GetFileInformationByHandleEx(handle, FileAttributeTagInfo, &attributes, sizeof(attributes)) == 0 || (attributes.FileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0
+            || (attributes.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0) {
+            CloseHandle(handle);
+            return Err(ErrorCode::FileAccessDenied, "Extension storage path must not traverse reparse points.");
+        }
+        guard.Add(WindowsFile(handle));
+    }
+    return Ok(std::move(guard));
+}
+
+[[nodiscard]] Result<void> EnsureDirectory(const fs::path& path) {
+    auto directory = OpenWindowsDirectoryPath(path, true);
+    return directory ? Ok() : Err(directory.error());
+}
+
+[[nodiscard]] Result<WindowsDirectoryGuard> OpenWindowsParent(const fs::path& path, bool create) {
+    return OpenWindowsDirectoryPath(path.parent_path(), create);
+}
 
 [[nodiscard]] Result<WindowsFile> OpenWindowsFile(const fs::path& path, DWORD access, DWORD creation) {
     HANDLE handle = CreateFileW(path.c_str(), access, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, creation, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
@@ -133,6 +169,9 @@ private:
 }
 
 [[nodiscard]] Result<std::vector<u8>> ReadLockedFile(const fs::path& path, std::size_t limit, std::string_view limit_message) {
+    auto parent = OpenWindowsParent(path, false);
+    if (!parent)
+        return Err(parent.error());
     auto file = OpenWindowsFile(path, GENERIC_READ, OPEN_EXISTING);
     if (!file)
         return Err(file.error());
@@ -161,6 +200,9 @@ private:
 }
 
 [[nodiscard]] Result<void> WriteLockedFile(const fs::path& path, std::span<const u8> data, bool append) {
+    auto parent = OpenWindowsParent(path, true);
+    if (!parent)
+        return Err(parent.error());
     auto file = OpenWindowsFile(path, GENERIC_READ | GENERIC_WRITE, OPEN_ALWAYS);
     if (!file)
         return Err(file.error());
@@ -395,6 +437,25 @@ struct RelativeParent {
     static std::atomic_uint64_t sequence{0};
     const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
 
+#ifdef _WIN32
+    auto guarded_parent = OpenWindowsParent(path, true);
+    if (!guarded_parent)
+        return Err(guarded_parent.error());
+    HANDLE existing = CreateFileW(path.c_str(), FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+    if (existing != INVALID_HANDLE_VALUE) {
+        FILE_ATTRIBUTE_TAG_INFO attributes{};
+        const bool safe = GetFileInformationByHandleEx(existing, FileAttributeTagInfo, &attributes, sizeof(attributes)) != 0
+                          && (attributes.FileAttributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY)) == 0;
+        CloseHandle(existing);
+        if (!safe)
+            return Err(ErrorCode::FileAccessDenied, "Extension config entry must be a regular non-reparse file.");
+    } else {
+        const DWORD open_error = GetLastError();
+        if (open_error != ERROR_FILE_NOT_FOUND && open_error != ERROR_PATH_NOT_FOUND)
+            return Err(ErrorCode::FileReadError, "Failed to securely inspect extension config file.");
+    }
+#endif
+
     for (int attempt = 0; attempt < 32; ++attempt) {
         const fs::path temporary = path.parent_path() / ("." + path.filename().string() + "." + std::to_string(stamp) + "." + std::to_string(sequence.fetch_add(1)) + ".tmp");
 #ifdef _WIN32
@@ -560,12 +621,6 @@ Result<void> HostApi::WriteFile(const fs::path& relative_path, std::span<const u
     }
 
 #ifdef _WIN32
-    auto parent = EnsureParentDirectory(*file);
-    if (!parent)
-        return Err(parent.error());
-#endif
-
-#ifdef _WIN32
     return WriteLockedFile(*file, data, false);
 #else
     return WriteLockedFile(context_.data_root, relative_path, data, false);
@@ -581,12 +636,6 @@ Result<void> HostApi::AppendFile(const fs::path& relative_path, std::span<const 
     if (!file) {
         return Err(file.error());
     }
-
-#ifdef _WIN32
-    auto parent = EnsureParentDirectory(*file);
-    if (!parent)
-        return Err(parent.error());
-#endif
 
 #ifdef _WIN32
     return WriteLockedFile(*file, data, true);
@@ -610,6 +659,8 @@ Result<std::string> HostApi::ReadConfig(std::string_view key) const {
         return Err(data.error());
     if (data->empty())
         return Ok(std::string{});
+    if (std::ranges::find(*data, u8{0}) != data->end())
+        return Err(ErrorCode::ParseInvalidFormat, "Extension config value contains an embedded NUL byte.");
     return Ok(std::string(reinterpret_cast<const char*>(data->data()), data->size()));
 }
 
@@ -617,17 +668,15 @@ Result<void> HostApi::WriteConfig(std::string_view key, std::string_view value) 
     if (value.size() > limits::kMaxConfigValueBytes) {
         return Err(ErrorCode::ValidationOutOfRange, "Extension config value exceeds 64 KiB limit.");
     }
+    if (value.contains('\0')) {
+        return Err(ErrorCode::InvalidArgument, "Extension config value must not contain embedded NUL bytes.");
+    }
 
     auto file = ResolveConfigFile(key);
     if (!file) {
         return Err(file.error());
     }
 
-#ifdef _WIN32
-    auto parent = EnsureParentDirectory(*file);
-    if (!parent)
-        return Err(parent.error());
-#endif
     auto safe = RejectSymlinks(context_.config_root, std::string(key));
     if (!safe) {
         return Err(safe.error());
@@ -637,11 +686,9 @@ Result<void> HostApi::WriteConfig(std::string_view key, std::string_view value) 
 }
 
 Result<void> HostApi::SubscribeEvent(u32 event_type) const {
+    (void)event_type;
     if (auto allowed = Require(Permission::Events); !allowed)
         return Err(allowed.error());
-    if (context_.event_session == nullptr)
-        return Err(ErrorCode::InvalidState, "Extension event session is not configured.");
-    context_.event_session->Subscribe(event_type);
     return Ok();
 }
 
@@ -662,9 +709,6 @@ Result<void> HostApi::SubscribeNamedEvent(std::string_view topic) const {
         return Err(allowed.error());
     if (!IsValidEventTopic(topic))
         return Err(ErrorCode::InvalidArgument, "Named event topic must be a lowercase reverse-DNS name.");
-    if (context_.event_session == nullptr)
-        return Err(ErrorCode::InvalidState, "Extension event session is not configured.");
-    context_.event_session->Subscribe(std::string(topic));
     return Ok();
 }
 

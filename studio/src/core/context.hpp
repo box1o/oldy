@@ -6,8 +6,8 @@
 namespace woki {
 
 struct Context {
-    Window& window;
-    bool& running;
+    Window* window{};
+    bool* running{};
 };
 
 } // namespace woki

@@ -1,63 +1,53 @@
-#include <woki/ext/plugin.hpp>
+#include <woki/extension.hpp>
+#include <woki/ecs/guest.hpp>
+#include <woki/math/guest.hpp>
 
 namespace {
 
-using namespace woki::ext;
-
-[[nodiscard]] bool Equals(StringView value, StringView expected) noexcept {
-    if (value.Size() != expected.Size())
-        return false;
-    for (u32 index = 0; index < value.Size(); ++index)
-        if (value.Data()[index] != expected.Data()[index])
-            return false;
-    return true;
-}
-
-u32 AppendNumber(char* output, u32 used, u32 value) noexcept {
-    char digits[10];
-    u32 count = 0;
-    do {
-        digits[count++] = static_cast<char>('0' + value % 10u);
-        value /= 10u;
-    } while (value != 0u);
-    while (count != 0u)
-        output[used++] = digits[--count];
-    return used;
-}
-
-class Kitty final : public Plugin {
+class Kitty final {
 public:
-    Status OnLoad(Context& context) noexcept {
+    woki::Status OnAttach() noexcept {
         // nf-md-cat U+F011B
-        const Status logged = context.GetLog().Info("\xF3\xB0\x84\x9B kitty says hi!");
-        return logged ? context.GetEvents().Subscribe<WindowResizedEvent>() : logged;
+        entity_ = registry_.Create();
+        if (!entity_ || positions_.Emplace(entity_, Position{}) == nullptr)
+            return woki::Status::NoSpace();
+        return slog::Info("\xF3\xB0\x84\x9B kitty says hi!");
     }
 
-    void OnEvent(Context& context, Event& event) noexcept {
-        event.Dispatch<WindowResizedEvent>([&](WindowResizedEvent resized) noexcept {
-            static constexpr char prefix[] = "kitty saw window resize: ";
-            char message[64];
-            u32 used = 0;
-            while (used < sizeof(prefix) - 1u) {
-                message[used] = prefix[used];
-                ++used;
-            }
-            used = AppendNumber(message, used, resized.width);
-            message[used++] = 'x';
-            used = AppendNumber(message, used, resized.height);
-            (void)context.GetLog().Info({message, used});
-        });
+    void OnUpdate(woki::f64 delta_ms) noexcept {
+        if (Position* position = positions_.Get(entity_))
+            position->value.x += static_cast<float>(delta_ms * 0.001);
     }
 
-    Status OnCommand(Context& context, StringView command, Bytes) noexcept {
-        if (Equals(command, "woki.kitty.pet"))
-            return context.GetLog().Info("\xF3\xB0\x84\x9B *purrr*");
-        if (Equals(command, "woki.kitty.complex"))
-            return context.GetLog().Info("\xF3\xB0\x84\x9B complex command!");
-        return Status::NotFound();
+    void OnEvent(woki::events::Event& event) noexcept {
+        woki::events::EventDispatcher dispatcher{event};
+        dispatcher.Dispatch<woki::events::KeyPressedEvent>([](woki::events::KeyPressedEvent key) noexcept { (void)slog::Info("kitty saw key press: ", key.key, " repeat ", key.repeat_count); });
+        dispatcher.Dispatch<woki::events::WindowResizedEvent>([](woki::events::WindowResizedEvent resized) noexcept { (void)slog::Info("kitty saw window resize: ", resized.width, 'x', resized.height); });
     }
+
+    woki::Status OnCommand(const woki::extension::Command& command) noexcept {
+        if (command.Id() == "woki.kitty.pet")
+            return slog::Info("\xF3\xB0\x84\x9B *purrr*");
+        if (command.Id() == "woki.kitty.complex")
+            return slog::Info("\xF3\xB0\x84\x9B complex command!");
+        return woki::Status::NotFound();
+    }
+
+    void OnDetach() noexcept {
+        (void)positions_.Remove(entity_);
+        (void)registry_.Destroy(entity_);
+    }
+
+private:
+    struct Position final {
+        woki::math::vec2<float> value{};
+    };
+
+    woki::guest::Registry<8> registry_;
+    woki::guest::ComponentPool<Position, 8> positions_;
+    woki::guest::Entity entity_;
 };
 
 } // namespace
 
-WOKI_PLUGIN(Kitty)
+WOKI_EXTENSION(Kitty)

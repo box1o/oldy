@@ -1,0 +1,10 @@
+#include <woki/extension.hpp>
+
+class Extension final {
+public:
+    void OnAttach() noexcept {
+        (void)slog::Info("hello from wokiext");
+    }
+};
+
+WOKI_EXTENSION(Extension)

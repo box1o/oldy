@@ -74,7 +74,7 @@ std::string_view ToString(ApplicationEventType type) noexcept {
 Result<ApplicationEventType> ParseApplicationEventType(std::string_view name) {
     const auto found = std::ranges::find(kApplicationEventNames, name, &ApplicationEventName::name);
     if (found == kApplicationEventNames.end())
-        return Err(ErrorCode::ValidationInvalidState, "Unknown application activation event '" + std::string(name) + "'.");
+        return Err(ErrorCode::ValidationInvalidState, "Unknown application event '" + std::string(name) + "'.");
     return Ok(found->type);
 }
 

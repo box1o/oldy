@@ -6,6 +6,7 @@
 #include "woki/ext/runtime.hpp"
 #include "woki/ext/registry.hpp"
 #include "woki/ext/wasm/web_engine.hpp"
+#include "woki/ext/application_event.hpp"
 #include "woki/ext/internal/command_index.hpp"
 #include "woki/ext/internal/event_service.hpp"
 
@@ -34,7 +35,14 @@ struct ExtensionManager::Impl {
 ExtensionManager::ExtensionManager(scope<RuntimeEngine> engine) noexcept
     : impl_(createScope<Impl>(std::move(engine))) {}
 
-ExtensionManager::~ExtensionManager() = default;
+ExtensionManager::~ExtensionManager() {
+    impl_->runtime.UnloadAll();
+    try {
+        impl_->DrainEmittedEvents();
+    } catch (...) {
+        // Destruction cannot report publisher failures.
+    }
+}
 
 scope<ExtensionManager> CreateExtensionManager(HostOptions options) {
     auto manager = scope<ExtensionManager>(new ExtensionManager(wasm::CreateEngine(options.allow_trusted_synchronous_web)));
@@ -141,10 +149,12 @@ Result<void> ExtensionManager::Scan() {
 
 Result<void> ExtensionManager::ScanSource(const std::filesystem::path& source_root) {
     Roots next_roots = impl_->roots;
-    if (next_roots.data.empty() || next_roots.cache.empty() || next_roots.config.empty()) {
+    if (next_roots.extensions.empty() || next_roots.data.empty() || next_roots.cache.empty() || next_roots.config.empty()) {
         auto defaults = DefaultRoots();
         if (!defaults)
             return Err(defaults.error());
+        if (next_roots.extensions.empty())
+            next_roots.extensions = defaults->extensions;
         if (next_roots.data.empty())
             next_roots.data = defaults->data;
         if (next_roots.cache.empty())
@@ -152,6 +162,10 @@ Result<void> ExtensionManager::ScanSource(const std::filesystem::path& source_ro
         if (next_roots.config.empty())
             next_roots.config = defaults->config;
     }
+    auto validated_roots = ValidateRoots(next_roots);
+    if (!validated_roots)
+        return Err(validated_roots.error());
+    next_roots = std::move(*validated_roots);
     Registry next_registry;
     if (auto scanned = next_registry.ScanSource(source_root, next_roots); !scanned)
         return Err(scanned.error());
@@ -244,13 +258,13 @@ void ExtensionManager::DispatchEvent(u32 event_type, std::span<const u8> payload
         return;
     for (const ExtensionPackage& package : impl_->registry.Packages()) {
         if (known) {
-            if (!ActivatesOn(package.GetManifest(), *known))
+            if (!HasPermission(package.GetManifest(), Permission::Events))
                 continue;
             if (!impl_->runtime.IsActive(package.Id()) && !Load(package.Id()))
                 continue;
         } else if (!impl_->runtime.IsActive(package.Id()))
             continue;
-        if (impl_->runtime.HasGrant(package.Id(), Permission::Events) && impl_->runtime.IsSubscribed(package.Id(), event_type))
+        if (impl_->runtime.HasGrant(package.Id(), Permission::Events))
             impl_->runtime.DispatchEvent(package.Id(), event_type, payload);
     }
     impl_->DrainEmittedEvents();
@@ -260,7 +274,7 @@ void ExtensionManager::DispatchNamedEvent(std::string_view topic, std::span<cons
     if (!host::IsValidEventTopic(topic) || payload.size() > limits::kMaxEventBytes)
         return;
     for (const ExtensionPackage& package : impl_->registry.Packages()) {
-        if (impl_->runtime.IsActive(package.Id()) && impl_->runtime.HasGrant(package.Id(), Permission::Events) && impl_->runtime.IsSubscribed(package.Id(), topic))
+        if (impl_->runtime.IsActive(package.Id()) && impl_->runtime.HasGrant(package.Id(), Permission::Events))
             impl_->runtime.DispatchNamedEvent(package.Id(), topic, payload);
     }
     impl_->DrainEmittedEvents();

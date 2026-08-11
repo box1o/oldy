@@ -1108,8 +1108,6 @@ void RhiRenderer::Resize(const u32 width, const u32 height) {
         ready_ = false;
         return;
     }
-
-    slog::Info("RHI renderer resized to {}x{}", width_, height_);
 }
 
 bool RhiRenderer::RenderFrame(const f64 delta_ms) {

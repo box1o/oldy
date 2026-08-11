@@ -1,0 +1,6 @@
+#pragma once
+#ifndef NDEBUG
+#define assert(value) ((value) ? static_cast<void>(0) : __builtin_trap())
+#else
+#define assert(value) static_cast<void>(0)
+#endif

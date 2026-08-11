@@ -9,7 +9,7 @@ TEST_CASE("Host config writes atomically within the separate config root") {
     namespace fs = std::filesystem;
     const fs::path root = fs::temp_directory_path() / "woki_host_storage_tests";
     fs::remove_all(root);
-    woki::ext::host::HostApi host({"woki.test", {woki::ext::Permission::Config}, root / "data", root / "config", root / "cache", {}, {}});
+    woki::ext::host::HostApi host({"woki.test", {woki::ext::Permission::Config}, root / "data", root / "config", root / "cache", {}});
 
     REQUIRE(host.WriteConfig("theme", "light").has_value());
     REQUIRE(host.WriteConfig("theme", "dark").has_value());
@@ -26,7 +26,7 @@ TEST_CASE("Host config rejection does not replace an existing value") {
     namespace fs = std::filesystem;
     const fs::path root = fs::temp_directory_path() / "woki_host_storage_limit_tests";
     fs::remove_all(root);
-    woki::ext::host::HostApi host({"woki.test", {woki::ext::Permission::Config}, root / "data", root / "config", root / "cache", {}, {}});
+    woki::ext::host::HostApi host({"woki.test", {woki::ext::Permission::Config}, root / "data", root / "config", root / "cache", {}});
 
     REQUIRE(host.WriteConfig("theme", "stable").has_value());
     const std::string oversized(woki::ext::limits::kMaxConfigValueBytes + 1, 'x');

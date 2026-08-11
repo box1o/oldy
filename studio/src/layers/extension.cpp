@@ -7,12 +7,16 @@ namespace {
 
 [[nodiscard]] std::filesystem::path SourceExtensionsRoot() {
 #ifdef WOKI_SOURCE_EXTENSIONS_DIR
-    return std::filesystem::path{WOKI_SOURCE_EXTENSIONS_DIR};
+    std::filesystem::path root{WOKI_SOURCE_EXTENSIONS_DIR};
 #elif defined(WOKI_SOURCE_DIR)
-    return std::filesystem::path{WOKI_SOURCE_DIR} / "extensions";
+    std::filesystem::path root = std::filesystem::path{WOKI_SOURCE_DIR} / "extensions";
 #else
-    return std::filesystem::current_path() / "extensions";
+    std::filesystem::path root = std::filesystem::current_path() / "extensions";
 #endif
+    root = std::filesystem::absolute(root).lexically_normal();
+    std::error_code error;
+    const std::filesystem::path canonical = std::filesystem::weakly_canonical(root, error);
+    return error ? root : canonical;
 }
 
 } // namespace
@@ -61,7 +65,10 @@ void ExtensionLayer::OnEvent(Context& ctx, events::Event& event) {
             ExecuteRegisteredCommands();
         }
     }
+}
 
+void ExtensionLayer::ObserveEvent(Context& ctx, const events::Event& event) {
+    (void)ctx;
     DispatchEventToExtensions(event);
 }
 

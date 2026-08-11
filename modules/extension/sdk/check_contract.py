@@ -188,6 +188,7 @@ def check_signatures() -> None:
         "init: func() -> status;",
         "tick: func(delta-ms: f64);",
         "event: func(event-type: event-id, payload: list<u8>);",
+        "named-event: func(topic: string, payload: list<u8>);",
         "unload: func();",
         "command: func(command-id: string, payload: list<u8>) -> status;",
         "log: func(level: level, message: string) -> status;",
@@ -198,8 +199,8 @@ def check_signatures() -> None:
         "append: func(path: string, data: list<u8>) -> status;",
         "get: func(key: string) -> result<string, status>;",
         "set: func(key: string, value: string) -> status;",
-        "subscribe: func(event-type: event-id) -> status;",
         "emit: func(event-type: event-id, payload: list<u8>) -> status;",
+        "emit-named: func(topic: string, payload: list<u8>) -> status;",
     }
     combined_wit = guest_wit + " " + host_wit
     for declaration in wit_declarations:
@@ -207,7 +208,102 @@ def check_signatures() -> None:
             fail(f"WIT signature drift: {declaration}")
 
 
+def check_wit_policy(expected_imports: set[str]) -> None:
+    host = (EXTENSION / "wit" / "host.wit").read_text()
+    guest = (EXTENSION / "wit" / "guest.wit").read_text()
+    worlds = (EXTENSION / "wit" / "world.wit").read_text()
+    capability_imports = {
+        "logging": ("log", {"host_log"}),
+        "paths": ("paths", {"host_path_data", "host_path_cache"}),
+        "storage": (
+            "storage",
+            {
+                "host_file_read",
+                "host_file_write",
+                "host_file_append",
+                "host_file_read_n",
+                "host_file_write_n",
+                "host_file_append_n",
+            },
+        ),
+        "config": ("config", {"host_config_get", "host_config_set"}),
+        "events": (
+            "events",
+            {
+                "host_event_subscribe",
+                "host_event_emit",
+                "host_event_subscribe_named",
+                "host_event_emit_named",
+            },
+        ),
+    }
+    expected_functions = {
+        "logging": {"log"},
+        "paths": {"data-dir", "cache-dir"},
+        "storage": {"read", "write", "append"},
+        "config": {"get", "set"},
+        "events": {"emit", "emit-named"},
+    }
+    if (
+        set().union(*(imports for _, imports in capability_imports.values()))
+        != expected_imports
+    ):
+        fail("WIT capability-to-raw-import policy drift")
+    for capability, (permission, _) in capability_imports.items():
+        interface = re.search(rf"interface {capability}\s*\{{(.*?)\n\}}", host, re.S)
+        if (
+            not interface
+            or f"`{permission}` manifest permission" not in interface.group(1)
+        ):
+            fail(f"WIT {capability} interface must document its manifest permission")
+        functions = set(
+            re.findall(r"\b([a-z][a-z0-9-]*):\s*func\b", interface.group(1))
+        )
+        if functions != expected_functions[capability]:
+            fail(f"WIT {capability} function policy drift: {functions}")
+
+    package_versions = re.findall(
+        r"package\s+woki:extension@([0-9]+\.[0-9]+\.[0-9]+);", host + guest + worlds
+    )
+    if package_versions != ["2.0.0"] * 3:
+        fail(f"WIT package version drift: {package_versions}")
+
+    lifecycle = re.search(r"interface lifecycle\s*\{(.*?)\n\}", guest, re.S)
+    named = re.search(r"interface named-events\s*\{(.*?)\n\}", guest, re.S)
+    if not lifecycle or "named-event:" in lifecycle.group(1):
+        fail("WIT base lifecycle must not require named-event delivery")
+    if (
+        not named
+        or "named-event: func(topic: string, payload: list<u8>);" not in named.group(1)
+    ):
+        fail("WIT optional named-events interface is missing")
+
+    world_bodies = dict(re.findall(r"world\s+([a-z-]+)\s*\{(.*?)\n\}", worlds, re.S))
+    world_exports = {
+        name: set(re.findall(r"export\s+([a-z-]+);", body))
+        for name, body in world_bodies.items()
+    }
+    expected_worlds = {
+        "extension": {"lifecycle"},
+        "extension-with-named-events": {"lifecycle", "named-events"},
+        "extension-with-commands": {"lifecycle", "commands"},
+        "extension-with-commands-and-named-events": {
+            "lifecycle",
+            "commands",
+            "named-events",
+        },
+    }
+    if world_exports != expected_worlds:
+        fail(f"WIT optional export world drift: {world_exports}")
+    expected_capabilities = set(capability_imports)
+    for name, body in world_bodies.items():
+        imports = set(re.findall(r"import\s+([a-z-]+);", body))
+        if imports != expected_capabilities:
+            fail(f"WIT capability surface drift in world {name}: {imports}")
+
+
 def check_static_contract() -> None:
+    run([sys.executable, str(SDK / "generate_wit_bindings.py"), "--check"])
     limits = c_defines(SDK / "woki_limits.h")
     permissions = c_defines(SDK / "perm_bits.h")
     types = (SDK / "types.h").read_text()
@@ -322,16 +418,7 @@ def check_static_contract() -> None:
     if "-Wl,--allow-undefined\n" in cmake:
         fail("CMake guest linker uses unrestricted --allow-undefined")
 
-    worlds = (EXTENSION / "wit" / "world.wit").read_text()
-    guest = (EXTENSION / "wit" / "guest.wit").read_text()
-    if (
-        "world extension-with-commands" not in worlds
-        or "export commands;" not in worlds
-    ):
-        fail("WIT command world is missing")
-    lifecycle = re.search(r"interface lifecycle\s*\{(.*?)\}", guest, re.S)
-    if not lifecycle or "command:" in lifecycle.group(1):
-        fail("WIT base lifecycle must not require commands")
+    check_wit_policy(expected_imports)
     check_signatures()
 
 
@@ -448,43 +535,43 @@ _Static_assert(WOKI_EXT_API_VERSION == 1u, "api version");
 _Static_assert(WOKI_EXT_OK == 0 && WOKI_EXT_INVALID == -5, "status");
 """
     cxx_source = r"""
-#include <woki/ext/plugin.hpp>
+#include <woki/extension.hpp>
 static_assert(WOKI_EXT_EVENT_APP_RESUME == 305u);
 static_assert(WOKI_EXT_EVENT_EXTENSION_ID(42u) == 0x8000002au);
 static_assert(WOKI_EXT_API_VERSION == 1u);
 static_assert(WOKI_EXT_MAX_EVENT_LEN == WOKI_EXT_GUEST_BUFFER_SIZE);
-static_assert(woki::ext::StringView("org.example.ready").Size() == 17u);
+static_assert(woki::StringView("org.example.ready").Size() == 17u);
+static_assert(woki::StringView("same") == woki::StringView("same"));
+static_assert(woki::StringView("same") != woki::StringView("other"));
 struct EmptyPlugin {};
 struct OptionalPlugin {
-    void OnLoad() {}
-    void OnTick(double) {}
-    void OnEvent(woki::ext::Event&) {}
-    void OnUnload() {}
-    int OnCommand(woki::ext::StringView, woki::ext::Bytes) { return WOKI_EXT_OK; }
+    woki::Status OnAttach() noexcept { return woki::Status::Success(); }
+    void OnUpdate(woki::f64) noexcept {}
+    void OnEvent(woki::events::Event&) noexcept {}
+    woki::i32 OnCommand(const woki::extension::Command&) noexcept { return WOKI_EXT_OK; }
+    void OnDetach() noexcept {}
 };
 void CheckOptionalCallbacks() {
-    woki::ext::Context context;
-    woki::ext::Event event{WOKI_EXT_EVENT_APP_RESUME, nullptr, 0u};
+    woki::events::Event event{WOKI_EXT_EVENT_APP_RESUME, nullptr, 0u};
     EmptyPlugin empty;
-    (void)woki::ext::detail::Load(empty, context);
-    woki::ext::detail::Tick(empty, context, 1.0);
-    woki::ext::detail::Deliver(empty, context, event);
-    woki::ext::detail::Unload(empty, context);
-    (void)woki::ext::detail::Command(empty, context, {}, {});
+    (void)woki::extension::detail::Attach(empty);
+    woki::extension::detail::Update(empty, 1.0);
+    woki::extension::detail::Deliver(empty, event);
+    (void)woki::extension::detail::Invoke(empty, {{}, {}});
     OptionalPlugin optional;
-    (void)woki::ext::detail::Load(optional, context);
-    woki::ext::detail::Tick(optional, context, 1.0);
-    woki::ext::detail::Deliver(optional, context, event);
-    woki::ext::detail::Unload(optional, context);
-    (void)woki::ext::detail::Command(optional, context, {}, {});
+    (void)woki::extension::detail::Attach(optional);
+    woki::extension::detail::Update(optional, 1.0);
+    woki::extension::detail::Deliver(optional, event);
+    (void)woki::extension::detail::Invoke(optional, {{}, {}});
 }
 struct TestPlugin {
-    woki::ext::Status OnLoad(woki::ext::Context&) { return woki::ext::Status::Success(); }
-    void OnEvent(woki::ext::Event& event) {
-        (void)event.Dispatch<woki::ext::MouseScrolledEvent>([](const auto& value) { return value.offset_y != 0.0f; });
+    woki::Status OnAttach() noexcept { return woki::Status::Success(); }
+    void OnEvent(woki::events::Event& event) noexcept {
+        woki::events::EventDispatcher dispatcher{event};
+        (void)dispatcher.Dispatch<woki::events::MouseScrolledEvent>([](const auto& value) noexcept { return value.offset_y != 0.0f; });
     }
 };
-WOKI_PLUGIN(TestPlugin)
+WOKI_EXTENSION(TestPlugin)
 """
     with tempfile.TemporaryDirectory(prefix="woki-contract-") as temporary:
         temp = Path(temporary)
@@ -503,22 +590,20 @@ WOKI_PLUGIN(TestPlugin)
         cxx_file.write_text(cxx_source)
         second_file.write_text('#include "guest_alloc.h"\n')
         second_cxx_file.write_text(
-            "#include <woki/ext/plugin.hpp>\n"
-            'static_assert(woki::ext::StringView("second.tu").Size() == 9u);\n'
-            "woki::ext::Status FromSecondTranslationUnit() { "
-            "return woki::ext::Status::Success(); }\n"
+            "#include <woki/extension.hpp>\n"
+            'static_assert(woki::StringView("second.tu").Size() == 9u);\n'
+            "woki::Status FromSecondTranslationUnit() { "
+            "return woki::Status::Success(); }\n"
         )
         nontrivial_cxx_file.write_text(
-            "#include <woki/ext/plugin.hpp>\n"
-            "struct NontrivialPlugin { NontrivialPlugin() {} };\n"
-            "WOKI_PLUGIN(NontrivialPlugin)\n"
+            "#include <woki/extension.hpp>\n"
+            "struct NontrivialPlugin { ~NontrivialPlugin() {} };\n"
+            "WOKI_EXTENSION(NontrivialPlugin)\n"
         )
         common = ["-I", str(SDK), "-Wall", "-Wextra", "-Werror", "-pedantic"]
         run([cc, "-std=c17", "-fsyntax-only", *common, str(c_file)])
         run([cxx, "-std=c++23", "-fsyntax-only", *common, str(cxx_file)])
-        run_fails(
-            [cxx, "-std=c++23", "-fsyntax-only", *common, str(nontrivial_cxx_file)]
-        )
+        run([cxx, "-std=c++23", "-fsyntax-only", *common, str(nontrivial_cxx_file)])
         run(
             [
                 cxx,
@@ -656,8 +741,10 @@ def main() -> int:
         check_static_contract()
         check_compilers(arguments.cc, arguments.cxx)
         node = shutil.which("node")
-        if node:
-            run([node, "--check", str(EXTENSION / "web" / "woki_ext.js")])
+        if not node:
+            fail("Node.js is required for extension web bridge validation")
+        run([node, "--check", str(EXTENSION / "web" / "woki_ext.js")])
+        run([node, str(EXTENSION / "web" / "woki_ext_test.js")])
     except (OSError, RuntimeError) as error:
         print(f"contract check failed: {error}", file=sys.stderr)
         return 1

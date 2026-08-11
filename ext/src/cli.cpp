@@ -141,7 +141,8 @@ std::expected<Command, ParseError> ParseCommand(std::span<const std::string_view
         return CreateCommand{{.name = std::string(*name),
             .id = std::string(Value(*parsed, "id")),
             .out_dir = Value(*parsed, "out").empty() ? current_directory : std::filesystem::path(Value(*parsed, "out")),
-            .lang = Value(*parsed, "lang").empty() ? "cpp" : std::string(Value(*parsed, "lang"))}};
+            .lang = Value(*parsed, "lang").empty() ? "cpp" : std::string(Value(*parsed, "lang")),
+            .executable = executable}};
     }
     if (command == "build" || command == "run" || command == "test") {
         constexpr std::string_view values[]{"config"};

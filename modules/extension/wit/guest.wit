@@ -1,4 +1,4 @@
-package woki:extension@1.0.0;
+package woki:extension@2.0.0;
 
 interface lifecycle {
   use types.{status};
@@ -8,8 +8,12 @@ interface lifecycle {
   init: func() -> status;
   tick: func(delta-ms: f64);
   event: func(event-type: event-id, payload: list<u8>);
-  named-event: func(topic: string, payload: list<u8>);
   unload: func();
+}
+
+/// Exported only by guests that receive named event topics.
+interface named-events {
+  named-event: func(topic: string, payload: list<u8>);
 }
 
 /// Exported only by extensions that contribute commands in their manifest.

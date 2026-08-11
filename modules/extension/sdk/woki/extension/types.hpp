@@ -2,14 +2,15 @@
 
 #include <woki/ext/sdk/host.h>
 
-namespace woki::ext {
+namespace woki {
 
 using u8 = uint8_t;
 using u16 = uint16_t;
 using u32 = uint32_t;
 using i32 = int32_t;
+using f32 = float;
+using f64 = double;
 
-/** A non-owning UTF-8 string view passed across the extension API. */
 class StringView final {
 public:
     constexpr StringView() noexcept = default;
@@ -35,12 +36,21 @@ public:
         return size_ == 0u;
     }
 
+    friend constexpr bool operator==(StringView left, StringView right) noexcept {
+        if (left.size_ != right.size_)
+            return false;
+        for (u32 index = 0; index < left.size_; ++index) {
+            if (left.data_[index] != right.data_[index])
+                return false;
+        }
+        return true;
+    }
+
 private:
     const char* data_{};
     u32 size_{};
 };
 
-/** A non-owning byte view passed across the extension API. */
 class Bytes final {
 public:
     constexpr Bytes() noexcept = default;
@@ -66,7 +76,65 @@ private:
     u32 size_{};
 };
 
-/** A raw ABI status code with named constructors for SDK results. */
+class MutableBytes final {
+public:
+    constexpr MutableBytes(u8* data, u32 capacity) noexcept
+        : data_(data),
+          capacity_(capacity) {}
+
+    [[nodiscard]] constexpr u8* Data() const noexcept {
+        return data_;
+    }
+
+    [[nodiscard]] constexpr u32 Capacity() const noexcept {
+        return capacity_;
+    }
+
+    [[nodiscard]] constexpr u32 Size() const noexcept {
+        return size_;
+    }
+
+    [[nodiscard]] constexpr Bytes View() const noexcept {
+        return {data_, size_ <= capacity_ ? size_ : capacity_};
+    }
+
+    [[nodiscard]] constexpr bool Complete() const noexcept {
+        return size_ <= capacity_;
+    }
+
+    constexpr void SetSize(u32 size) noexcept {
+        size_ = size;
+    }
+
+private:
+    u8* data_{};
+    u32 capacity_{};
+    u32 size_{};
+};
+
+template <u32 Capacity>
+class StringBuffer final {
+public:
+    [[nodiscard]] constexpr char* Data() noexcept {
+        return data_;
+    }
+
+    [[nodiscard]] static constexpr u32 Size() noexcept {
+        return Capacity;
+    }
+
+    [[nodiscard]] constexpr StringView View() const noexcept {
+        u32 size{};
+        while (size < Capacity && data_[size] != '\0')
+            ++size;
+        return {data_, size};
+    }
+
+private:
+    static_assert(Capacity > 0u, "StringBuffer capacity must be positive");
+    char data_[Capacity]{};
+};
+
 class Status final {
 public:
     constexpr Status() noexcept = default;
@@ -114,30 +182,4 @@ private:
     i32 code_{WOKI_EXT_OK};
 };
 
-enum class LogLevel : u32 { Debug = WOKI_EXT_LOG_DEBUG, Info = WOKI_EXT_LOG_INFO, Warn = WOKI_EXT_LOG_WARN, Error = WOKI_EXT_LOG_ERROR };
-
-/** Allocation-free access to the host logger. */
-class Log final {
-public:
-    [[nodiscard]] Status Write(LogLevel level, StringView message) const noexcept {
-        return Status{host_log(static_cast<u32>(level), message.Data(), message.Size())};
-    }
-
-    [[nodiscard]] Status Debug(StringView message) const noexcept {
-        return Write(LogLevel::Debug, message);
-    }
-
-    [[nodiscard]] Status Info(StringView message) const noexcept {
-        return Write(LogLevel::Info, message);
-    }
-
-    [[nodiscard]] Status Warn(StringView message) const noexcept {
-        return Write(LogLevel::Warn, message);
-    }
-
-    [[nodiscard]] Status Error(StringView message) const noexcept {
-        return Write(LogLevel::Error, message);
-    }
-};
-
-} // namespace woki::ext
+} // namespace woki

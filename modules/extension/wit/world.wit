@@ -1,5 +1,8 @@
-package woki:extension@1.0.0;
+package woki:extension@2.0.0;
 
+/// Component Model hosts provide the complete capability surface and return a
+/// denied status when a manifest permission is absent. Raw ABI v1 remains
+/// stricter: undeclared capability imports are rejected before instantiation.
 world extension {
   import logging;
   import paths;
@@ -8,6 +11,17 @@ world extension {
   import events;
 
   export lifecycle;
+}
+
+world extension-with-named-events {
+  import logging;
+  import paths;
+  import storage;
+  import config;
+  import events;
+
+  export lifecycle;
+  export named-events;
 }
 
 /// The world for a guest whose manifest contributes commands.
@@ -20,4 +34,17 @@ world extension-with-commands {
 
   export lifecycle;
   export commands;
+}
+
+
+world extension-with-commands-and-named-events {
+  import logging;
+  import paths;
+  import storage;
+  import config;
+  import events;
+
+  export lifecycle;
+  export commands;
+  export named-events;
 }

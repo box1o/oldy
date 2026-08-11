@@ -102,16 +102,23 @@ TEST_CASE("build arguments are deterministic and preserve path boundaries") {
     const auto root = std::filesystem::absolute("project with spaces").lexically_normal();
     wokiext::BuildOptions options{.path = root, .executable = "wokiext", .config = "Debug"};
     const auto configure = wokiext::BuildConfigureArguments(options, "/cmake modules", "/sdk path");
+    const std::size_t generator_offset =
+#if defined(_WIN32)
+        2;
     REQUIRE(configure.size() == 12);
-    CHECK(configure[0] == "cmake");
     CHECK(configure[1] == "-G");
     CHECK(configure[2] == "Ninja");
-    CHECK(configure[4] == (root / "build").generic_string());
-    CHECK(configure[6] == root.generic_string());
-    CHECK(configure[7] == "-DCMAKE_BUILD_TYPE=Debug");
-    CHECK(configure[9] == "-DWOKI_CMAKE_DIR=/cmake modules");
-    CHECK(configure[10] == "-DWOKI_SDK_DIR=/sdk path");
-    CHECK(configure[11] == "-DWOKI_EXTENSION_PACKAGE_DIR=" + (root / "build/packages").generic_string());
+#else
+        0;
+    REQUIRE(configure.size() == 10);
+#endif
+    CHECK(configure[0] == "cmake");
+    CHECK(configure[2 + generator_offset] == (root / "build").generic_string());
+    CHECK(configure[4 + generator_offset] == root.generic_string());
+    CHECK(configure[5 + generator_offset] == "-DCMAKE_BUILD_TYPE=Debug");
+    CHECK(configure[7 + generator_offset] == "-DWOKI_CMAKE_DIR=/cmake modules");
+    CHECK(configure[8 + generator_offset] == "-DWOKI_SDK_DIR=/sdk path");
+    CHECK(configure[9 + generator_offset] == "-DWOKI_EXTENSION_PACKAGE_DIR=" + (root / "build/packages").generic_string());
 
     CHECK(wokiext::BuildCompileArguments(options) == std::vector<std::string>{"cmake", "--build", (root / "build").generic_string(), "--config", "Debug"});
 }
@@ -209,6 +216,36 @@ TEST_CASE("clean rejects symbolic-link project roots") {
     CHECK(error.str().find("symbolic-link") != std::string::npos);
 }
 
+TEST_CASE("clean rejects symbolic-link parent components and build directories") {
+    TemporaryDirectory temporary;
+    const auto real_parent = temporary.path / "real";
+    const auto project = real_parent / "project";
+    const auto parent_link = temporary.path / "parent-link";
+    const auto outside = temporary.path / "outside";
+    std::filesystem::create_directories(project);
+    std::filesystem::create_directories(outside);
+    std::ofstream(project / "CMakeLists.txt") << "project(test)";
+    std::ofstream(project / "manifest.yaml") << "id: woki.test";
+    std::ofstream(outside / "sentinel") << "keep";
+    std::error_code link_error;
+    std::filesystem::create_directory_symlink(real_parent, parent_link, link_error);
+    if (link_error)
+        SKIP("directory symlinks are unavailable: " + link_error.message());
+
+    std::ostringstream output;
+    std::ostringstream error;
+    wokiext::Diagnostics diagnostics(output, error);
+    UnusedProcessRunner processes;
+    wokiext::SystemFilesystem filesystem;
+    wokiext::Context context{diagnostics, processes, filesystem};
+    CHECK(wokiext::Clean(context, {.path = parent_link / "project"}) == wokiext::Status::Error);
+
+    std::filesystem::create_directory_symlink(outside, project / "build", link_error);
+    REQUIRE_FALSE(link_error);
+    CHECK(wokiext::Clean(context, {.path = project}) == wokiext::Status::Error);
+    CHECK(std::filesystem::exists(outside / "sentinel"));
+}
+
 TEST_CASE("create validates ids before writing and quotes YAML names") {
     TemporaryDirectory temporary;
     std::ostringstream output;
@@ -218,14 +255,72 @@ TEST_CASE("create validates ids before writing and quotes YAML names") {
     wokiext::SystemFilesystem filesystem;
     wokiext::Context context{diagnostics, processes, filesystem};
 
-    CHECK(wokiext::Create(context, {.name = "Invalid", .id = "../escape", .out_dir = temporary.path, .lang = "c"}) == wokiext::Status::Usage);
+    CHECK(wokiext::Create(context, {.name = "Invalid", .id = "../escape", .out_dir = temporary.path, .lang = "c", .executable = {}}) == wokiext::Status::Usage);
     CHECK_FALSE(std::filesystem::exists(temporary.path / "invalid"));
 
-    CHECK(wokiext::Create(context, {.name = "True: Bob's Tool", .id = "woki.bobs-tool", .out_dir = temporary.path, .lang = "c"}) == wokiext::Status::Ok);
+    CHECK(wokiext::Create(context, {.name = "True: Bob's Tool", .id = "woki.bobs-tool", .out_dir = temporary.path, .lang = "c", .executable = {}}) == wokiext::Status::Ok);
     std::ifstream manifest(temporary.path / "true-bob-s-tool" / "manifest.yaml");
     const std::string contents{std::istreambuf_iterator<char>(manifest), std::istreambuf_iterator<char>()};
     CHECK(contents.find("name: 'True: Bob''s Tool'") != std::string::npos);
     CHECK(contents.find("activation:\n  startup: true") != std::string::npos);
+}
+
+TEST_CASE("template rendering accepts only known uppercase placeholders") {
+    const wokiext::TemplateReplacements replacements{{"NAME", "Woki"}};
+    auto rendered = wokiext::RenderTemplate("hello {{NAME}}", replacements);
+    REQUIRE(rendered);
+    CHECK(*rendered == "hello Woki");
+
+    CHECK_FALSE(wokiext::RenderTemplate("{{UNKNOWN}}", replacements));
+    CHECK_FALSE(wokiext::RenderTemplate("{{lower}}", replacements));
+    CHECK_FALSE(wokiext::RenderTemplate("{{NAME}", replacements));
+    CHECK_FALSE(wokiext::RenderTemplate("value }}", replacements));
+    CHECK_FALSE(wokiext::RenderTemplate("{{NAME}}", {{"NAME", "{{LATER}}"}}));
+}
+
+TEST_CASE("template instantiation rejects unsafe destinations before writing") {
+    TemporaryDirectory temporary;
+    const auto templates = temporary.path / "templates";
+    const auto destination = temporary.path / "project";
+    std::filesystem::create_directories(templates);
+    std::ofstream(templates / "{{NAME}}.in") << "valid";
+
+    auto instantiated = wokiext::InstantiateTemplates(templates, destination, {{"NAME", "../escape"}});
+    REQUIRE_FALSE(instantiated);
+    CHECK(instantiated.error().find("Unsafe template destination") != std::string::npos);
+    CHECK_FALSE(std::filesystem::exists(destination));
+    CHECK_FALSE(std::filesystem::exists(temporary.path / "escape"));
+}
+
+TEST_CASE("template instantiation rejects malformed templates before writing") {
+    TemporaryDirectory temporary;
+    const auto templates = temporary.path / "templates";
+    const auto destination = temporary.path / "project";
+    std::filesystem::create_directories(templates);
+    std::ofstream(templates / "first.txt.in") << "valid";
+    std::ofstream(templates / "second.txt.in") << "{{UNKNOWN}}";
+
+    CHECK_FALSE(wokiext::InstantiateTemplates(templates, destination, {}));
+    CHECK_FALSE(std::filesystem::exists(destination));
+}
+
+TEST_CASE("create rejects a symbolic-link destination") {
+    TemporaryDirectory temporary;
+    const auto destination = temporary.path / "linked-project";
+    std::error_code link_error;
+    std::filesystem::create_directory_symlink(temporary.path / "outside", destination, link_error);
+    if (link_error)
+        SKIP("directory symlinks are unavailable: " + link_error.message());
+
+    std::ostringstream output;
+    std::ostringstream error;
+    wokiext::Diagnostics diagnostics(output, error);
+    UnusedProcessRunner processes;
+    wokiext::SystemFilesystem filesystem;
+    wokiext::Context context{diagnostics, processes, filesystem};
+    CHECK(wokiext::Create(context, {.name = "Linked Project", .id = {}, .out_dir = temporary.path, .lang = "c", .executable = {}}) == wokiext::Status::Error);
+    CHECK_FALSE(std::filesystem::exists(temporary.path / "outside"));
+    CHECK(error.str().find("symbolic-link destination") != std::string::npos);
 }
 
 TEST_CASE("remove deletes config by default and keep-data preserves all state") {
@@ -258,6 +353,19 @@ TEST_CASE("remove deletes config by default and keep-data preserves all state") 
     CHECK(std::filesystem::exists(roots.config / "woki.keep"));
     CHECK(std::filesystem::exists(roots.cache / "woki.keep"));
     CHECK(output.str().find("kept data, config, and cache") != std::string::npos);
+}
+
+TEST_CASE("remove requires a strict extension id") {
+    TemporaryDirectory temporary;
+    std::ostringstream output;
+    std::ostringstream error;
+    wokiext::Diagnostics diagnostics(output, error);
+    UnusedProcessRunner processes;
+    wokiext::SystemFilesystem filesystem;
+    wokiext::Context context{diagnostics, processes, filesystem};
+
+    for (std::string id : {"../escape", "single", "Woki.Bad", "woki..bad", "woki/bad"})
+        CHECK(wokiext::Remove(context, {.id = std::move(id), .root = temporary.path}) == wokiext::Status::Usage);
 }
 
 } // namespace

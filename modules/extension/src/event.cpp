@@ -22,22 +22,6 @@ bool IsValidEventTopic(std::string_view topic) noexcept {
     return true;
 }
 
-void EventSession::Subscribe(u32 event_type) {
-    subscriptions_.insert(event_type);
-}
-
-void EventSession::Subscribe(std::string topic) {
-    named_subscriptions_.insert(std::move(topic));
-}
-
-bool EventSession::IsSubscribed(u32 event_type) const noexcept {
-    return subscriptions_.contains(kWildcardEventType) || subscriptions_.contains(event_type);
-}
-
-bool EventSession::IsSubscribed(std::string_view topic) const noexcept {
-    return named_subscriptions_.contains(std::string(topic));
-}
-
 void EventService::SetBus(EventBus* bus) noexcept {
     bus_ = bus;
 }
@@ -64,7 +48,8 @@ void EventService::Drain() {
         }
     } guard{draining_};
 
-    while (!queue_.empty() && bus_ != nullptr) {
+    std::size_t delivered{};
+    while (!queue_.empty() && bus_ != nullptr && delivered++ < kMaxEventsPerDrain) {
         EventBus* bus = bus_;
         Event event = std::move(queue_.front());
         queue_.pop_front();

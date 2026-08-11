@@ -84,3 +84,5 @@ plan.md
 Testing/
 .hidden/
 .context/
+.rewrite/
+.bin/

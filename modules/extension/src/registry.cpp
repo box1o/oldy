@@ -1,8 +1,13 @@
 #include <tuple>
+#include <cwctype>
 #include <algorithm>
 #include <filesystem>
 #include <system_error>
 #include <unordered_map>
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 #include "woki/ext/registry.hpp"
 
@@ -26,6 +31,29 @@ namespace fs = std::filesystem;
     std::error_code error;
     return !entry.is_symlink(error) && entry.is_directory(error) && !fs::is_symlink(entry.path() / "manifest.yaml", error) && fs::is_regular_file(entry.path() / "manifest.yaml", error);
 }
+
+[[nodiscard]] bool PathContains(const fs::path& parent, const fs::path& child) {
+    auto parent_part = parent.begin();
+    auto child_part = child.begin();
+    for (; parent_part != parent.end() && child_part != child.end(); ++parent_part, ++child_part) {
+#ifdef _WIN32
+        std::wstring parent_component = parent_part->native();
+        std::wstring child_component = child_part->native();
+        std::ranges::transform(parent_component, parent_component.begin(), [](wchar_t ch) { return ch == L'/' ? L'\\' : static_cast<wchar_t>(std::towlower(ch)); });
+        std::ranges::transform(child_component, child_component.begin(), [](wchar_t ch) { return ch == L'/' ? L'\\' : static_cast<wchar_t>(std::towlower(ch)); });
+        if (parent_component != child_component)
+#else
+        if (*parent_part != *child_part)
+#endif
+            return false;
+    }
+    return parent_part == parent.end();
+}
+
+[[nodiscard]] bool PathsOverlap(const fs::path& left, const fs::path& right) {
+    return PathContains(left, right) || PathContains(right, left);
+}
+
 } // namespace
 
 ExtensionPackage::ExtensionPackage(std::string id, Manifest manifest, PackageLayout layout)
@@ -175,18 +203,38 @@ Result<void> Registry::Scan(const Roots& roots) {
 
 Result<void> Registry::ScanSource(const fs::path& source_root, const Roots& roots) {
     Registry next;
+    if (source_root.empty())
+        return Err(ErrorCode::InvalidArgument, "Source extension root must not be empty.");
+    auto validated_roots = ValidateRoots(roots);
+    if (!validated_roots)
+        return Err(validated_roots.error());
+    if (!source_root.is_absolute() || source_root.lexically_normal() != source_root)
+        return Err(ErrorCode::InvalidArgument, "Source extension root must be absolute and canonical: " + source_root.string());
     std::error_code error;
     const bool exists = fs::exists(source_root, error);
     if (error)
         return Err(ErrorCode::FileReadError, error.message());
     if (!exists) {
-        *this = std::move(next);
-        return Ok();
+        return Err(ErrorCode::FileNotFound, "Source extension root does not exist: " + source_root.string());
     }
     if (!fs::is_directory(source_root, error)) {
         return Err(ErrorCode::ValidationInvalidState, "Source extension root is not a directory: " + source_root.string());
     }
-    for (const fs::directory_entry& entry : fs::directory_iterator(source_root, error)) {
+    const fs::path canonical_source = fs::weakly_canonical(source_root, error);
+    if (error)
+        return Err(ErrorCode::FileReadError, "Failed to canonicalize source extension root: " + error.message());
+#ifdef _WIN32
+    const DWORD source_attributes = GetFileAttributesW(source_root.c_str());
+    if (source_attributes == INVALID_FILE_ATTRIBUTES || (source_attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
+#else
+    if (canonical_source != source_root)
+#endif
+        return Err(ErrorCode::FileAccessDenied, "Source extension root must be canonical and must not use a symbolic-link or reparse-point alias.");
+    for (const fs::path& runtime_root : {validated_roots->data, validated_roots->cache, validated_roots->config}) {
+        if (PathsOverlap(canonical_source, runtime_root))
+            return Err(ErrorCode::InvalidArgument, "Source extension root must not overlap extension data, cache, or config roots.");
+    }
+    for (const fs::directory_entry& entry : fs::directory_iterator(canonical_source, error)) {
         if (error)
             return Err(ErrorCode::FileReadError, error.message());
         if (!IsCandidatePackageDir(entry))
@@ -203,8 +251,8 @@ Result<void> Registry::ScanSource(const fs::path& source_root, const Roots& root
             next.AddFailure({candidate, package_root, valid.error()});
             continue;
         }
-        PackageLayout layout{package_root, package_root / "manifest.yaml", (package_root / manifest->wasm_path).lexically_normal(), (roots.data / manifest->id).lexically_normal(),
-            (ConfigRoot(roots) / manifest->id).lexically_normal(), (roots.cache / manifest->id).lexically_normal()};
+        PackageLayout layout{package_root, package_root / "manifest.yaml", (package_root / manifest->wasm_path).lexically_normal(), (validated_roots->data / manifest->id).lexically_normal(),
+            (validated_roots->config / manifest->id).lexically_normal(), (validated_roots->cache / manifest->id).lexically_normal()};
         auto valid_layout = ValidatePackageLayout(layout);
         if (!valid_layout) {
             next.AddFailure({manifest->id, package_root, valid_layout.error()});

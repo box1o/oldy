@@ -27,8 +27,12 @@ function(woki_register_extensions extensions_dir)
         include("${CMAKE_CURRENT_FUNCTION_LIST_DIR}/ExtensionManifest.cmake")
         woki_extension_manifest_wasm("${extension_dir}/manifest.yaml" extension_wasm_relative)
 
-        find_program(_woki_ninja NAMES ninja ninja-build REQUIRED)
-        set(extension_generator_args -G "Ninja Multi-Config" "-DCMAKE_MAKE_PROGRAM=${_woki_ninja}")
+        find_program(_woki_ninja NAMES ninja ninja-build)
+        if(_woki_ninja)
+            set(extension_generator_args -G "Ninja Multi-Config" "-DCMAKE_MAKE_PROGRAM=${_woki_ninja}")
+        else()
+            set(extension_generator_args -G "${CMAKE_GENERATOR}" "-DCMAKE_BUILD_TYPE=$<CONFIG>")
+        endif()
 
         add_custom_target(${extension_target}
             COMMAND ${CMAKE_COMMAND} -E make_directory "${extension_build_dir}"

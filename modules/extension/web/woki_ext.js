@@ -313,6 +313,7 @@ mergeInto(LibraryManager.library, {
         let data;
         try { data = FS.readFile(path); } catch (error) { return WokiExtContract.status.notFound; }
         if (data.length > WokiExtContract.limits.configValue) return WokiExtContract.status.noSpace;
+        if (data.includes(0)) return WokiExtContract.status.invalid;
         try {
           return this.writeText(record, outPtr, outCap, new TextDecoder().decode(data));
         } catch (error) {
@@ -330,6 +331,7 @@ mergeInto(LibraryManager.library, {
         } catch (error) {
           return WokiExtContract.status.invalid;
         }
+        if (value.includes(0)) return WokiExtContract.status.invalid;
         if (key.length > WokiExtContract.limits.configKey) return WokiExtContract.status.noSpace;
         if (!this.safeConfigKey(key)) return WokiExtContract.status.invalid;
         const path = this.safePath(record.configPath, key);

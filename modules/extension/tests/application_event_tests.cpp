@@ -3,12 +3,20 @@
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 
-#include <woki/ext/plugin.hpp>
+#include <woki/extension.hpp>
 #include <woki/ext/application_event.hpp>
 
 namespace {
 
 using woki::ext::ApplicationEventType;
+
+int lifetime_destructors{};
+
+struct LifetimeProbe final {
+    ~LifetimeProbe() {
+        ++lifetime_destructors;
+    }
+};
 
 template <typename Payload>
 void CheckEmpty(ApplicationEventType type) {
@@ -20,6 +28,17 @@ void CheckEmpty(ApplicationEventType type) {
 }
 
 } // namespace
+
+TEST_CASE("C++ extension lifetime ignores unload before construction and duplicate unload") {
+    lifetime_destructors = 0;
+    woki::extension::detail::DetachInstance<LifetimeProbe>();
+    CHECK(lifetime_destructors == 0);
+    (void)woki::extension::detail::ConstructInstance<LifetimeProbe>();
+    woki::extension::detail::DetachInstance<LifetimeProbe>();
+    CHECK(lifetime_destructors == 1);
+    woki::extension::detail::DetachInstance<LifetimeProbe>();
+    CHECK(lifetime_destructors == 1);
+}
 
 TEST_CASE("Application event IDs and empty payloads cover every exposed event") {
     using enum ApplicationEventType;
@@ -75,10 +94,17 @@ TEST_CASE("Application event payloads round trip through fixed little endian lay
     REQUIRE(woki_ext_decode_position_event(signed_bits.data(), static_cast<std::uint32_t>(signed_bits.size()), &decoded_position) == WOKI_EXT_OK);
     CHECK(decoded_position.x == std::numeric_limits<std::int32_t>::min());
     CHECK(decoded_position.y == -1);
-    const woki::ext::Event guest_position{WOKI_EXT_EVENT_WINDOW_MOVED, signed_bits.data(), static_cast<woki::u32>(signed_bits.size())};
-    const auto guest_decoded = guest_position.Get<woki::ext::WindowMovedEvent>();
-    CHECK(guest_decoded.x == std::numeric_limits<woki::i32>::min());
-    CHECK(guest_decoded.y == -1);
+    woki::events::Event guest_position{WOKI_EXT_EVENT_WINDOW_MOVED, signed_bits.data(), static_cast<woki::u32>(signed_bits.size())};
+    woki::events::EventDispatcher dispatcher{guest_position};
+    bool delivered = false;
+    CHECK(dispatcher.Dispatch<woki::events::WindowMovedEvent>([&](woki::events::WindowMovedEvent decoded) noexcept {
+        delivered = true;
+        CHECK(decoded.x == std::numeric_limits<woki::i32>::min());
+        CHECK(decoded.y == -1);
+        return true;
+    }));
+    CHECK(delivered);
+    CHECK(guest_position.Handled());
 
     const auto pressed = EncodeApplicationEvent(KeyPressedPayload{0x1234, 0x89abcdef});
     CHECK(std::ranges::equal(pressed.Payload(), std::array<woki::u8, 6>{0x34, 0x12, 0xef, 0xcd, 0xab, 0x89}));

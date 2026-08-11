@@ -57,8 +57,6 @@ public:
     void Unload(std::string_view extension_id) noexcept;
     void UnloadAll() noexcept;
     [[nodiscard]] bool IsActive(std::string_view extension_id) const noexcept;
-    [[nodiscard]] bool IsSubscribed(std::string_view extension_id, u32 event_type) const noexcept;
-    [[nodiscard]] bool IsSubscribed(std::string_view extension_id, std::string_view topic) const noexcept;
     [[nodiscard]] bool HasGrant(std::string_view extension_id, Permission permission) const noexcept;
     [[nodiscard]] std::span<const ExtensionStatus> Statuses() const noexcept;
 

@@ -11,6 +11,7 @@
 
 #include <woki/ext/runtime.hpp>
 #include <woki/ext/registry.hpp>
+#include <woki/ext/application_event.hpp>
 #include <woki/ext/internal/command_index.hpp>
 #include <woki/ext/internal/event_service.hpp>
 #include <woki/ext/internal/runtime_test_access.hpp>
@@ -31,6 +32,8 @@ struct InstanceCalls {
     bool fail_init{};
     bool fail_tick{};
     bool fail_event{};
+    bool emit_on_create{};
+    bool emit_on_initialize{};
     bool emit_on_unload{};
     bool events_granted{};
     std::optional<woki::ErrorCode> command_error;
@@ -55,6 +58,10 @@ public:
 
     woki::Result<void> Initialize() override {
         ++calls_.initialized;
+        if (calls_.emit_on_initialize) {
+            const std::array<woki::u8, 1> payload{6};
+            (void)host_.EmitEvent(woki::ext::ExtensionEventId(6), payload);
+        }
         return calls_.fail_init ? woki::Err(woki::ErrorCode::InvalidState, "initialize failed") : woki::Ok();
     }
 
@@ -107,6 +114,10 @@ public:
         auto& calls = calls_[package.Id()];
         ++calls.created;
         calls.events_granted = host.Allows(woki::ext::Permission::Events);
+        if (calls.emit_on_create) {
+            const std::array<woki::u8, 1> payload{5};
+            (void)host.EmitEvent(woki::ext::ExtensionEventId(5), payload);
+        }
         if (calls.fail_create)
             return woki::Err(woki::ErrorCode::InvalidState, "create failed");
         for (const auto event_type : calls.subscriptions) {
@@ -246,11 +257,28 @@ TEST_CASE("Registry source scan accepts development folder names and isolates du
     REQUIRE(registry.ScanSource(root / "source", {root / "installed", root / "data", root / "cache"}));
     REQUIRE(registry.Packages().size() == 1);
     REQUIRE(registry.Find("woki.dev") != nullptr);
-    REQUIRE(registry.Find("woki.dev")->Layout().install_root == root / "source" / "short");
+    REQUIRE(fs::equivalent(registry.Find("woki.dev")->Layout().install_root, root / "source" / "short"));
     REQUIRE(registry.Find("woki.same") == nullptr);
-    REQUIRE(registry.Find("woki.dev")->Layout().config_root == root / "ext-config" / "woki.dev");
+    REQUIRE(fs::weakly_canonical(registry.Find("woki.dev")->Layout().config_root) == fs::weakly_canonical(root / "ext-config" / "woki.dev"));
     REQUIRE(registry.Failures().size() == 2);
     REQUIRE(registry.Failures().front().CandidateId() == "woki.same");
+}
+
+TEST_CASE("Registry source scan rejects aliases and overlap with runtime roots") {
+    const fs::path root = TempRoot("registry_source_roots");
+    const woki::ext::Roots roots{root / "installed", root / "data", root / "cache", root / "config"};
+    fs::create_directories(root / "source");
+    woki::ext::Registry registry;
+
+    CHECK_FALSE(registry.ScanSource("relative-source", roots));
+    CHECK_FALSE(registry.ScanSource(root / "data", roots));
+    fs::create_directories(root / "installed");
+    CHECK(registry.ScanSource(root / "installed", roots));
+
+    std::error_code error;
+    fs::create_directory_symlink(root / "source", root / "source-alias", error);
+    if (!error)
+        CHECK_FALSE(registry.ScanSource(root / "source-alias", roots));
 }
 
 TEST_CASE("Registry scan failure preserves the previous snapshot") {
@@ -342,11 +370,11 @@ TEST_CASE("Runtime validates package files before creating an instance") {
     CHECK(Status(runtime, "woki.missing-runtime")->state == woki::ext::ExtensionState::Failed);
 }
 
-TEST_CASE("ExtensionManager lazily activates commands and filters events by permission") {
+TEST_CASE("ExtensionManager activates event-capable packages and gates delivery by effective permission") {
     const fs::path root = TempRoot("manager_lazy");
-    WritePackage(root / "extensions" / "woki.events", "woki.events", "[events]", "activation:\n  tick: true\n  events: [window.resized]\ncontributes:\n  commands:\n    - id: woki.events.run\n      title: Run\n");
-    WritePackage(root / "extensions" / "woki.wild", "woki.wild", "[events]", "activation:\n  events: [window.resized]\n");
-    WritePackage(root / "extensions" / "woki.unsubscribed", "woki.unsubscribed", "[events]", "activation:\n  events: [window.resized]\n");
+    WritePackage(root / "extensions" / "woki.events", "woki.events", "[events]", "activation:\n  tick: true\ncontributes:\n  commands:\n    - id: woki.events.run\n      title: Run\n");
+    WritePackage(root / "extensions" / "woki.wild", "woki.wild", "[events]");
+    WritePackage(root / "extensions" / "woki.unsubscribed", "woki.unsubscribed", "[events]");
     WritePackage(root / "extensions" / "woki.quiet", "woki.quiet", "[]", "activation:\n  tick: true\ncontributes:\n  commands:\n    - id: woki.quiet.run\n      title: Run Quietly\n");
     std::map<std::string, InstanceCalls> calls;
     const auto resize = static_cast<woki::u32>(woki::ext::ApplicationEventType::WindowResized);
@@ -370,20 +398,23 @@ TEST_CASE("ExtensionManager lazily activates commands and filters events by perm
     REQUIRE(calls["woki.events"].events == 1);
     REQUIRE(calls["woki.events"].event_type == resize);
     REQUIRE(calls["woki.wild"].events == 1);
-    REQUIRE(calls["woki.unsubscribed"].events == 0);
+    REQUIRE(calls["woki.unsubscribed"].events == 1);
     REQUIRE(calls["woki.quiet"].events == 0);
     manager.DispatchEvent(static_cast<woki::u32>(woki::ext::ApplicationEventType::WindowMoved), payload);
-    REQUIRE(calls["woki.events"].events == 1);
-    REQUIRE(calls["woki.wild"].events == 1);
+    REQUIRE(calls["woki.events"].events == 2);
+    REQUIRE(calls["woki.wild"].events == 2);
+    REQUIRE(calls["woki.unsubscribed"].events == 2);
     manager.Tick(16.0);
     REQUIRE(calls["woki.events"].ticks == 1);
     REQUIRE(calls["woki.quiet"].ticks == 1);
     manager.DispatchNamedEvent("woki.source.ready", payload);
-    REQUIRE(calls["woki.events"].events == 2);
+    REQUIRE(calls["woki.events"].events == 3);
     REQUIRE(calls["woki.events"].event_topic == "woki.source.ready");
+    REQUIRE(calls["woki.wild"].events == 3);
+    REQUIRE(calls["woki.unsubscribed"].events == 3);
 }
 
-TEST_CASE("ExtensionManager routes deprecated numeric extension events only to active subscribers") {
+TEST_CASE("ExtensionManager routes deprecated numeric extension events to active granted runtimes") {
     const fs::path root = TempRoot("manager_numeric_compatibility");
     WritePackage(root / "extensions" / "woki.numeric", "woki.numeric", "[events]");
     std::map<std::string, InstanceCalls> calls;
@@ -466,6 +497,32 @@ TEST_CASE("EventService restores drain state after publisher exceptions") {
     CHECK(bus.events.back().type == 2);
 }
 
+TEST_CASE("EventService bounds self-sustaining event delivery per drain") {
+    woki::ext::host::EventService service;
+
+    class RepeatingBus final : public woki::ext::host::EventBus {
+    public:
+        explicit RepeatingBus(woki::ext::host::EventService& service)
+            : service_(service) {}
+
+        void Publish(const woki::ext::host::Event&) override {
+            ++published;
+            REQUIRE(service_.Enqueue({1, {}, {}, {}}));
+        }
+
+        std::size_t published{};
+
+    private:
+        woki::ext::host::EventService& service_;
+    } bus(service);
+
+    service.SetBus(&bus);
+    REQUIRE(service.Enqueue({1, {}, {}, {}}));
+    service.Drain();
+    CHECK(bus.published == woki::ext::host::kMaxEventsPerDrain);
+    CHECK(service.Checkpoint() == 1);
+}
+
 TEST_CASE("ExtensionManager LoadAll aggregates failures and rescan unloads active instances") {
     const fs::path root = TempRoot("manager_load_all");
     WritePackage(root / "extensions" / "woki.bad-a", "woki.bad-a");
@@ -514,6 +571,9 @@ TEST_CASE("ExtensionManager activates startup declarations and applies effective
     CHECK(calls["woki.start"].created == 1);
     CHECK_FALSE(calls["woki.start"].events_granted);
     CHECK(calls["woki.lazy"].created == 0);
+    manager.DispatchEvent(static_cast<woki::u32>(woki::ext::ApplicationEventType::WindowResized), {});
+    CHECK(calls["woki.lazy"].created == 1);
+    CHECK(calls["woki.lazy"].events == 0);
 }
 
 TEST_CASE("ExtensionManager records policy rejections as failed statuses") {
@@ -599,6 +659,43 @@ TEST_CASE("ExtensionManager drains events emitted by every explicit unload bound
     REQUIRE(bus.events.size() == 1);
     CHECK(bus.events.front().type == (woki::ext::host::kExtensionEventNamespace | 7));
     CHECK(bus.events.front().origin.extension_id == "woki.events");
+}
+
+TEST_CASE("ExtensionManager discards failed activation events and drains destruction unload events") {
+    const fs::path root = TempRoot("manager_activation_event_transactions");
+    WritePackage(root / "extensions" / "woki.events", "woki.events", "[events]");
+    std::map<std::string, InstanceCalls> calls;
+    RecordingBus bus;
+
+    calls["woki.events"].emit_on_create = true;
+    calls["woki.events"].emit_on_initialize = true;
+    calls["woki.events"].fail_create = true;
+    calls["woki.events"].fail_init = true;
+    {
+        auto manager = woki::ext::internal::ExtensionManagerAccess::Create(woki::createScope<TrackingEngine>(calls));
+        manager.SetEventBus(&bus);
+        manager.SetRoots({root / "extensions", root / "data", root / "cache"});
+        REQUIRE(manager.Scan());
+        CHECK_FALSE(manager.Load("woki.events"));
+        CHECK(bus.events.empty());
+        calls["woki.events"].fail_create = false;
+        CHECK_FALSE(manager.Load("woki.events"));
+    }
+    CHECK(bus.events.empty());
+
+    calls["woki.events"].fail_init = false;
+    calls["woki.events"].emit_on_create = false;
+    calls["woki.events"].emit_on_initialize = false;
+    calls["woki.events"].emit_on_unload = true;
+    {
+        auto manager = woki::ext::internal::ExtensionManagerAccess::Create(woki::createScope<TrackingEngine>(calls));
+        manager.SetEventBus(&bus);
+        manager.SetRoots({root / "extensions", root / "data", root / "cache"});
+        REQUIRE(manager.Scan());
+        REQUIRE(manager.Load("woki.events"));
+    }
+    REQUIRE(bus.events.size() == 1);
+    CHECK(bus.events.front().type == woki::ext::ExtensionEventId(7));
 }
 
 TEST_CASE("ExtensionManager reports a committed install without mutating the active catalog") {

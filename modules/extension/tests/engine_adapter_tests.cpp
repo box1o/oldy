@@ -56,7 +56,7 @@ void WriteBytes(const fs::path& path, std::initializer_list<unsigned char> bytes
 }
 
 [[nodiscard]] woki::ext::host::HostApi MakeHost(const woki::ext::ExtensionPackage& package) {
-    return woki::ext::host::HostApi({package.Id(), package.GetManifest().requested_capabilities.permissions, package.Layout().data_root, package.Layout().config_root, package.Layout().cache_root, {}, {}});
+    return woki::ext::host::HostApi({package.Id(), package.GetManifest().requested_capabilities.permissions, package.Layout().data_root, package.Layout().config_root, package.Layout().cache_root, {}});
 }
 #endif
 
@@ -173,7 +173,7 @@ __attribute__((export_name("ext_on_unload"))) void ext_on_unload(void) {
     (*second)->Unload();
 }
 
-TEST_CASE("Wasmtime event imports use HostApi session subscriptions and queued emission") {
+TEST_CASE("Wasmtime event subscription imports are compatible no-ops and emission is queued") {
     const fs::path root = TempRoot("wasmtime_events");
     Compile(root, R"c(
 __attribute__((import_module("woki_host"), import_name("host_event_subscribe"))) extern int host_event_subscribe(unsigned);
@@ -185,19 +185,31 @@ __attribute__((export_name("ext_init"))) int ext_init(void) { return host_event_
 __attribute__((export_name("ext_on_tick"))) void ext_on_tick(double d) {
     if (d == 2.0) (void)host_event_emit(0x8000002au, payload, sizeof(payload));
 }
-__attribute__((export_name("ext_on_event"))) void ext_on_event(unsigned a, unsigned b, unsigned c) { (void)a;(void)b;(void)c; }
+
+__attribute__((export_name("ext_on_event"))) void ext_on_event(unsigned a, unsigned b, unsigned c) {
+    (void)a;
+    (void)b;
+    (void)c;
+}
+
 __attribute__((export_name("ext_on_unload"))) void ext_on_unload(void) {}
-__attribute__((export_name("ext_alloc"))) unsigned ext_alloc(unsigned len) { return len <= sizeof(buffer) ? (unsigned)buffer : 0; }
-__attribute__((export_name("ext_free"))) void ext_free(unsigned ptr, unsigned len) { (void)ptr; (void)len; }
+
+__attribute__((export_name("ext_alloc"))) unsigned ext_alloc(unsigned len) {
+    return len <= sizeof(buffer) ? (unsigned)buffer : 0;
+}
+
+__attribute__((export_name("ext_free"))) void ext_free(unsigned ptr, unsigned len) {
+    (void)ptr;
+    (void)len;
+}
 )c",
         "--export=ext_alloc --export=ext_free");
 
     auto package = MakePackage(root, "woki.events", {woki::ext::Permission::Events});
-    auto session = std::make_shared<woki::ext::host::EventSession>();
     auto service = std::make_shared<woki::ext::host::EventService>();
     RecordingBus bus;
     service->SetBus(&bus);
-    woki::ext::host::HostApi host({package.Id(), package.GetManifest().requested_capabilities.permissions, package.Layout().data_root, package.Layout().config_root, package.Layout().cache_root, session, service});
+    woki::ext::host::HostApi host({package.Id(), package.GetManifest().requested_capabilities.permissions, package.Layout().data_root, package.Layout().config_root, package.Layout().cache_root, service});
 
     woki::ext::wasm::WasmtimeEngine engine;
     auto instance = engine.Create(package, std::move(host));
@@ -205,8 +217,6 @@ __attribute__((export_name("ext_free"))) void ext_free(unsigned ptr, unsigned le
     INFO(instance_error);
     REQUIRE(instance);
     REQUIRE((*instance)->Initialize());
-    REQUIRE(session->IsSubscribed(77));
-    REQUIRE_FALSE(session->IsSubscribed(78));
     REQUIRE((*instance)->Tick(2.0));
     REQUIRE(bus.events.empty());
     service->Drain();
@@ -215,6 +225,30 @@ __attribute__((export_name("ext_free"))) void ext_free(unsigned ptr, unsigned le
     REQUIRE(bus.events[0].payload == std::vector<woki::u8>{3, 1, 4});
     REQUIRE(bus.events[0].origin.extension_id == "woki.events");
     (*instance)->Unload();
+}
+
+TEST_CASE("Wasmtime reads and writes ABI u32 values as little endian") {
+    const fs::path root = TempRoot("wasmtime_little_endian_u32");
+    Compile(root, R"c(
+__attribute__((import_module("woki_host"), import_name("host_file_read"))) extern int host_file_read(const char*, unsigned char*, unsigned char*);
+static unsigned char output[4];
+static unsigned char length[4] = {4, 0, 0, 0};
+__attribute__((export_name("ext_api_version"))) unsigned ext_api_version(void) { return 1; }
+__attribute__((export_name("ext_init"))) int ext_init(void) {
+    (void)host_file_read("state", output, length);
+    return length[0] == 8 && length[1] == 0 && length[2] == 0 && length[3] == 0 ? 0 : 9;
+}
+__attribute__((export_name("ext_on_tick"))) void ext_on_tick(double d) { (void)d; }
+__attribute__((export_name("ext_on_event"))) void ext_on_event(unsigned a, unsigned b, unsigned c) { (void)a;(void)b;(void)c; }
+__attribute__((export_name("ext_on_unload"))) void ext_on_unload(void) {}
+)c");
+    auto package = MakePackage(root, "woki.endian", {woki::ext::Permission::Storage});
+    fs::create_directories(package.Layout().data_root);
+    WriteText(package.Layout().data_root / "state", "12345678");
+    woki::ext::wasm::WasmtimeEngine engine;
+    auto instance = engine.Create(package, MakeHost(package));
+    REQUIRE(instance);
+    CHECK((*instance)->Initialize());
 }
 
 TEST_CASE("Wasmtime classifies documented guest command statuses") {
