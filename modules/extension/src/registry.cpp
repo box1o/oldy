@@ -5,6 +5,10 @@
 #include <system_error>
 #include <unordered_map>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 #include "woki/ext/registry.hpp"
 
 namespace woki::ext {
@@ -50,9 +54,6 @@ namespace fs = std::filesystem;
     return PathContains(left, right) || PathContains(right, left);
 }
 
-[[nodiscard]] bool PathsEqual(const fs::path& left, const fs::path& right) {
-    return PathContains(left, right) && PathContains(right, left);
-}
 } // namespace
 
 ExtensionPackage::ExtensionPackage(std::string id, Manifest manifest, PackageLayout layout)
@@ -222,7 +223,12 @@ Result<void> Registry::ScanSource(const fs::path& source_root, const Roots& root
     const fs::path canonical_source = fs::weakly_canonical(source_root, error);
     if (error)
         return Err(ErrorCode::FileReadError, "Failed to canonicalize source extension root: " + error.message());
-    if (!PathsEqual(canonical_source, source_root))
+#ifdef _WIN32
+    const DWORD source_attributes = GetFileAttributesW(source_root.c_str());
+    if (source_attributes == INVALID_FILE_ATTRIBUTES || (source_attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
+#else
+    if (canonical_source != source_root)
+#endif
         return Err(ErrorCode::FileAccessDenied, "Source extension root must be canonical and must not use a symbolic-link or reparse-point alias.");
     for (const fs::path& runtime_root : {validated_roots->data, validated_roots->cache, validated_roots->config}) {
         if (PathsOverlap(canonical_source, runtime_root))

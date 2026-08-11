@@ -367,19 +367,18 @@ private:
 
 [[nodiscard]] Result<void> ValidateSourceEntry(const fs::directory_entry& entry, const fs::path& source_root, const Manifest& manifest, std::uintmax_t* total_bytes) {
     std::error_code error;
-    const fs::path relative = fs::relative(entry.path(), source_root, error);
-    if (error) {
+    const fs::path relative = entry.path().lexically_relative(source_root);
+
+    if (entry.is_symlink(error))
+        return Err(ErrorCode::ValidationInvalidState, "Package entry must not be a symlink: " + relative.string());
+    if (error)
         return Err(ErrorCode::FileReadError, error.message());
-    }
 
     if (!IsAllowedArchiveEntry(relative, manifest.wasm_path)) {
         return Err(ErrorCode::ValidationInvalidState,
             "Package contains unsupported entry '" + relative.string() + "'. This build accepts only manifest.yaml, runtime.wasm, and assets/**; native payloads and signatures are unsupported.");
     }
 
-    if (entry.is_symlink(error)) {
-        return Err(ErrorCode::ValidationInvalidState, "Package entry must not be a symlink: " + relative.string());
-    }
     if (entry.is_directory(error)) {
         return Ok();
     }
