@@ -20,7 +20,6 @@ public:
     void OnUpdate(f64 delta_ms) noexcept {
         if (Position* position = positions_.Get(entity_))
             position->value.x += static_cast<float>(delta_ms * 0.001);
-        (void)slog::Info("updated");
     }
 
     void OnEvent(events::Event& event) noexcept {
