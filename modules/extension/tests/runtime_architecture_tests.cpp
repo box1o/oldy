@@ -259,7 +259,7 @@ TEST_CASE("Registry source scan accepts development folder names and isolates du
     REQUIRE(registry.Find("woki.dev") != nullptr);
     REQUIRE(fs::equivalent(registry.Find("woki.dev")->Layout().install_root, root / "source" / "short"));
     REQUIRE(registry.Find("woki.same") == nullptr);
-    REQUIRE(registry.Find("woki.dev")->Layout().config_root == root / "ext-config" / "woki.dev");
+    REQUIRE(fs::weakly_canonical(registry.Find("woki.dev")->Layout().config_root) == fs::weakly_canonical(root / "ext-config" / "woki.dev"));
     REQUIRE(registry.Failures().size() == 2);
     REQUIRE(registry.Failures().front().CandidateId() == "woki.same");
 }
