@@ -915,9 +915,13 @@ void WgpuRenderBundleEncoderImpl::SetPipeline(const RenderPipeline& pipeline) {
 }
 
 void WgpuRenderBundleEncoderImpl::SetResourceTable(const ResourceTable* table) {
+#if defined(WOKI_WGPU_HAS_RENDER_BUNDLE_RESOURCE_TABLE)
     if (encoder_) {
         wgpuRenderBundleEncoderSetResourceTable(encoder_.get(), detail::NativeResourceTable(table));
     }
+#else
+    (void)table;
+#endif
 }
 
 void WgpuRenderBundleEncoderImpl::SetVertexBuffer(const u32 slot, const Buffer* buffer, const u64 offset, const u64 size) {

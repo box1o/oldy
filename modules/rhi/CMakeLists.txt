@@ -76,6 +76,15 @@ else()
         check_cxx_source_compiles(
             "#include <webgpu/webgpu.h>
             int main() {
+                auto function = &wgpuRenderBundleEncoderSetResourceTable;
+                (void)function;
+                return 0;
+            }"
+            WOKI_WGPU_HAS_RENDER_BUNDLE_RESOURCE_TABLE
+        )
+        check_cxx_source_compiles(
+            "#include <webgpu/webgpu.h>
+            int main() {
                 auto feature = WGPUFeatureName_SharedBufferMemoryD3D12SharedMemoryFileMappingHandle;
                 (void)feature;
                 return 0;
@@ -107,6 +116,10 @@ endif()
 
 if(WOKI_WGPU_HAS_RESOURCE_TABLE_LEGACY_BINDING_NAMES)
     target_compile_definitions(woki_rhi PRIVATE WOKI_WGPU_HAS_RESOURCE_TABLE_LEGACY_BINDING_NAMES=1)
+endif()
+
+if(WOKI_WGPU_HAS_RENDER_BUNDLE_RESOURCE_TABLE)
+    target_compile_definitions(woki_rhi PRIVATE WOKI_WGPU_HAS_RENDER_BUNDLE_RESOURCE_TABLE=1)
 endif()
 
 if(WOKI_WGPU_HAS_D3D12_FILE_MAPPING_FEATURE)
