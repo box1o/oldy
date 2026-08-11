@@ -22,17 +22,6 @@ public:
             position->value.x += static_cast<float>(delta_ms * 0.001);
     }
 
-    void OnEvent(events::Event& event) noexcept {
-        events::EventDispatcher dispatcher{event};
-        dispatcher.Dispatch<events::KeyPressedEvent>([](events::KeyPressedEvent key) noexcept { slog::Info("kitty saw key press: ", key.key, " repeat ", key.repeat_count); });
-        dispatcher.Dispatch<events::WindowResizedEvent>([](events::WindowResizedEvent resized) noexcept { slog::Info("kitty saw window resize: ", resized.width, 'x', resized.height); });
-        dispatcher.Dispatch<events::WindowMovedEvent>([](events::WindowMovedEvent moved) noexcept { slog::Info("kitty saw window move: ", moved.x, 'x', moved.y); });
-        dispatcher.Dispatch<events::WindowClosedEvent>([](events::WindowClosedEvent) noexcept { slog::Info("kitty saw window close"); });
-        dispatcher.Dispatch<events::WindowMinimizedEvent>([](events::WindowMinimizedEvent) noexcept { slog::Info("kitty saw window minimize"); });
-        dispatcher.Dispatch<events::WindowMaximizedEvent>([](events::WindowMaximizedEvent) noexcept { slog::Info("kitty saw window maximize"); });
-        dispatcher.Dispatch<events::WindowRestoredEvent>([](events::WindowRestoredEvent) noexcept { slog::Info("kitty saw window restore"); });
-    }
-
     Status OnCommand(const extension::Command& command) noexcept {
         if (command.Id() == "woki.kitty.pet")
             return slog::Info("\xF3\xB0\x84\x9B *purrr*");

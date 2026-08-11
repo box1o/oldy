@@ -1,0 +1,38 @@
+id: woki.dinolab
+name: 'Dino Lab'
+version: 0.1.0
+apiVersion: 1
+runtime:
+  wasm: extension.wasm
+libraries:
+  - math
+  - ecs
+permissions:
+  - log
+  - paths
+  - storage
+  - config
+  - events
+activation:
+  startup: true
+  tick: true
+contributes:
+  commands:
+    - id: woki.dinolab.spawn
+      title: Spawn Dinosaur
+      category: Dino Lab
+    - id: woki.dinolab.roar
+      title: Make Dinosaurs Roar
+      category: Dino Lab
+    - id: woki.dinolab.status
+      title: Show Park Status
+      category: Dino Lab
+    - id: woki.dinolab.save
+      title: Save Dinosaur Park
+      category: Dino Lab
+    - id: woki.dinolab.reset
+      title: Reset Dinosaur Park
+      category: Dino Lab
+    - id: woki.dinolab.speed
+      title: Change Simulation Speed
+      category: Dino Lab

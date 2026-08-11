@@ -149,8 +149,6 @@ bool Application::Tick() {
     EmitEvent<events::SwapBuffersEvent>();
     EmitEvent<events::FrameEndEvent>();
 
-    // NOTE: Drawing and update logic would go here
-
     if (window_->ShouldClose()) {
         Stop();
         return false;

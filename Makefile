@@ -100,5 +100,5 @@ web: build-web
 
 clean:
 	@echo "→ Cleaning build output..."
-	@rm -rf $(BUILD_DIR) $(WEB_BUILD_DIR) Testing/
+	@rm -rf build build-* $(WEB_BUILD_DIR) ext/build extensions/*/build Testing/ .bin/ wokiext wokiext.exe woki-studio woki-studio.exe
 	@echo "✓ Clean complete"

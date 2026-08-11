@@ -5,7 +5,7 @@ if(APPLE)
     list(APPEND WOKI_PROJECT_LANGUAGES OBJCXX)
 endif()
 
-project(woki VERSION 0.0.1 LANGUAGES ${WOKI_PROJECT_LANGUAGES})
+project(woki VERSION 0.0.2 LANGUAGES ${WOKI_PROJECT_LANGUAGES})
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -50,8 +50,8 @@ endif()
 
 include(Extensions)
 woki_register_extensions("${CMAKE_SOURCE_DIR}/extensions")
-if(TARGET extension_tests AND TARGET woki_extension_kitty)
-    add_dependencies(extension_tests woki_extension_kitty)
+if(TARGET extension_tests AND TARGET woki_extensions)
+    add_dependencies(extension_tests woki_extensions)
 endif()
 
 add_subdirectory(studio)

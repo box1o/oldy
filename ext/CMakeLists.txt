@@ -131,7 +131,7 @@ if(BUILD_TESTING)
     add_test(NAME wokiext_cli_unit COMMAND wokiext_cli_unit_tests)
     add_test(NAME wokiext_developer_link
         COMMAND ${CMAKE_COMMAND}
-            -D LINK=${CMAKE_SOURCE_DIR}/.bin/$<TARGET_FILE_NAME:wokiext>
+            -D LINK=${CMAKE_SOURCE_DIR}/wokiext$<TARGET_FILE_SUFFIX:wokiext>
             -D TARGET=$<TARGET_FILE:wokiext>
             -P ${CMAKE_SOURCE_DIR}/cmake/TestDeveloperLink.cmake
     )
