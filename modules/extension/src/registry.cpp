@@ -49,6 +49,10 @@ namespace fs = std::filesystem;
 [[nodiscard]] bool PathsOverlap(const fs::path& left, const fs::path& right) {
     return PathContains(left, right) || PathContains(right, left);
 }
+
+[[nodiscard]] bool PathsEqual(const fs::path& left, const fs::path& right) {
+    return PathContains(left, right) && PathContains(right, left);
+}
 } // namespace
 
 ExtensionPackage::ExtensionPackage(std::string id, Manifest manifest, PackageLayout layout)
@@ -218,7 +222,7 @@ Result<void> Registry::ScanSource(const fs::path& source_root, const Roots& root
     const fs::path canonical_source = fs::weakly_canonical(source_root, error);
     if (error)
         return Err(ErrorCode::FileReadError, "Failed to canonicalize source extension root: " + error.message());
-    if (canonical_source != source_root)
+    if (!PathsEqual(canonical_source, source_root))
         return Err(ErrorCode::FileAccessDenied, "Source extension root must be canonical and must not use a symbolic-link or reparse-point alias.");
     for (const fs::path& runtime_root : {validated_roots->data, validated_roots->cache, validated_roots->config}) {
         if (PathsOverlap(canonical_source, runtime_root))

@@ -126,30 +126,35 @@ private:
 WOKI_EXTENSION(FacadeGuest)
 )cpp");
 
-    const std::string command = std::string("\"") + WOKI_TEST_WASM_CLANGXX
-                                + "\" --target=wasm32-unknown-unknown -std=c++23 -nostdlib -fno-builtin -fno-exceptions -fno-rtti"
-                                  " -I\"" WOKI_EXTENSION_SOURCE_DIR "/sdk\""
+    const fs::path script = root / "compile.cmake";
+    WriteFacadeFile(script, std::string("execute_process(COMMAND [==[") + WOKI_TEST_WASM_CLANGXX
+                                + "]==] --target=wasm32-unknown-unknown -std=c++23 -nostdlib -fno-builtin -fno-exceptions -fno-rtti"
+                                  " -I [==[" WOKI_EXTENSION_SOURCE_DIR "/sdk]==]"
                                   " -DWOKI_EXT_HAS_PATHS=1 -DWOKI_EXT_HAS_STORAGE=1 -DWOKI_EXT_HAS_CONFIG=1 -DWOKI_EXT_HAS_EVENTS=1"
                                   " -Wl,--no-entry -Wl,--export-memory -Wl,--max-memory=33554432"
-                                  " -Wl,--allow-undefined-file=\""
-                                + imports.string()
-                                + "\""
+                                  " [==[-Wl,--allow-undefined-file="
+                                + imports.generic_string()
+                                + "]==]"
                                   " -Wl,--export=ext_api_version -Wl,--export=ext_init -Wl,--export=ext_on_tick"
                                   " -Wl,--export=ext_on_event -Wl,--export=ext_on_event_named -Wl,--export=ext_on_unload"
                                   " -Wl,--export=ext_on_command -Wl,--export=ext_alloc -Wl,--export=ext_free"
-                                  " -o \""
-                                + (root / "extension.wasm").string() + "\" \"" + source.string() + "\"";
+                                  " -o [==["
+                                + (root / "extension.wasm").generic_string() + "]==] [==[" + source.generic_string()
+                                + "]==] RESULT_VARIABLE result)\nif(NOT result EQUAL 0)\n  message(FATAL_ERROR \"guest compilation failed\")\nendif()\n");
+    const std::string command = std::string("cmake -P \"") + script.string() + "\"";
     return std::system(command.c_str()) == 0;
 }
 
 bool RejectFacadeGuest(const fs::path& root, std::string_view body) {
     const fs::path source = root / "rejected.cpp";
     WriteFacadeFile(source, std::string("#include <woki/extension.hpp>\n") + std::string(body));
-    const std::string command = std::string("\"") + WOKI_TEST_WASM_CLANGXX
-                                + "\" --target=wasm32-unknown-unknown -std=c++23 -nostdlib -fno-builtin -fno-exceptions -fno-rtti"
-                                  " -I\"" WOKI_EXTENSION_SOURCE_DIR "/sdk\" -fsyntax-only \""
-                                + source.string() + "\" >/dev/null 2>&1";
-    return std::system(command.c_str()) != 0;
+    const fs::path script = root / "reject.cmake";
+    WriteFacadeFile(script, std::string("execute_process(COMMAND [==[") + WOKI_TEST_WASM_CLANGXX
+                                + "]==] --target=wasm32-unknown-unknown -std=c++23 -nostdlib -fno-builtin -fno-exceptions -fno-rtti"
+                                  " -I [==[" WOKI_EXTENSION_SOURCE_DIR "/sdk]==] -fsyntax-only [==["
+                                + source.generic_string() + "]==] RESULT_VARIABLE result OUTPUT_QUIET ERROR_QUIET)\nif(result EQUAL 0)\n  message(FATAL_ERROR \"invalid guest compiled\")\nendif()\n");
+    const std::string command = std::string("cmake -P \"") + script.string() + "\"";
+    return std::system(command.c_str()) == 0;
 }
 
 #endif
@@ -191,14 +196,11 @@ TEST_CASE("C++ extension facade rejects non-conforming callbacks and subscriptio
 TEST_CASE("Staged Kitty package executes through Wasmtime when available") {
     const fs::path root = WOKI_KITTY_PACKAGE_DIR;
     REQUIRE(fs::is_regular_file(root / "extension.wasm"));
-    woki::ext::Manifest manifest;
-    manifest.id = "woki.kitty";
-    manifest.name = "kitty";
-    manifest.version = "0.1.0";
-    manifest.requested_capabilities.permissions = {woki::ext::Permission::Log, woki::ext::Permission::Events};
-    manifest.commands = {{"woki.kitty.pet", "Pet the Kitty", "Fun"}, {"woki.kitty.complex", "Complex command", "Fun"}};
-    const auto permissions = manifest.requested_capabilities.permissions;
-    auto package_result = woki::ext::ExtensionPackage::Create(manifest.id, std::move(manifest), {root, root / "manifest.yaml", root / "extension.wasm", root / "data", root / "config", root / "cache"});
+    auto manifest = woki::ext::LoadManifest(root / "manifest.yaml");
+    REQUIRE(manifest);
+    const auto permissions = manifest->requested_capabilities.permissions;
+    const std::string id = manifest->id;
+    auto package_result = woki::ext::ExtensionPackage::Create(id, std::move(*manifest), {root, root / "manifest.yaml", root / "extension.wasm", root / "data", root / "config", root / "cache"});
     REQUIRE(package_result);
     auto package = std::move(*package_result);
     auto service = std::make_shared<woki::ext::host::EventService>();

@@ -603,7 +603,7 @@ private:
     if (GetFileInformationByHandleEx(source, FileAttributeTagInfo, &attributes, sizeof(attributes)) == 0 || GetFileInformationByHandleEx(source, FileBasicInfo, &basic_info, sizeof(basic_info)) == 0
         || (attributes.FileAttributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY)) != 0 || GetFileSizeEx(source, &size) == 0 || size.QuadPart < 0) {
         CloseHandle(source);
-        return Err(ErrorCode::FileAccessDenied, "Unpacked package entry must be a regular non-reparse file: " + relative.generic_string());
+        return Err(ErrorCode::FileAccessDenied, "Unpacked package entry must be a regular non-symlink, non-reparse file: " + relative.generic_string());
     }
     auto final_path = FinalPathForHandle(source, "unpacked package file");
     if (!final_path || !PathsOverlap(source_root, *final_path)) {
