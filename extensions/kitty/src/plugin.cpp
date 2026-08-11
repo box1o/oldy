@@ -20,6 +20,7 @@ public:
     void OnUpdate(f64 delta_ms) noexcept {
         if (Position* position = positions_.Get(entity_))
             position->value.x += static_cast<float>(delta_ms * 0.001);
+        (void)slog::Info("updated");
     }
 
     void OnEvent(events::Event& event) noexcept {
@@ -27,10 +28,10 @@ public:
         dispatcher.Dispatch<events::KeyPressedEvent>([](events::KeyPressedEvent key) noexcept { (void)slog::Info("kitty saw key press: ", key.key, " repeat ", key.repeat_count); });
         dispatcher.Dispatch<events::WindowResizedEvent>([](events::WindowResizedEvent resized) noexcept { (void)slog::Info("kitty saw window resize: ", resized.width, 'x', resized.height); });
         dispatcher.Dispatch<events::WindowMovedEvent>([](events::WindowMovedEvent moved) noexcept { (void)slog::Info("kitty saw window move: ", moved.x, 'x', moved.y); });
-        dispatcher.Dispatch<events::WindowClosedEvent>([](events::WindowClosedEvent closed) noexcept { (void)slog::Info("kitty saw window close"); });
-        dispatcher.Dispatch<events::WindowMinimizedEvent>([](events::WindowMinimizedEvent minimized) noexcept { (void)slog::Info("kitty saw window minimize: ", minimized.minimized); });
-        dispatcher.Dispatch<events::WindowMaximizedEvent>([](events::WindowMaximizedEvent maximized) noexcept { (void)slog::Info("kitty saw window maximize: ", maximized.maximized); });
-        dispatcher.Dispatch<events::WindowRestoredEvent>([](events::WindowRestoredEvent restored) noexcept { (void)slog::Info("kitty saw window restore"); });
+        dispatcher.Dispatch<events::WindowClosedEvent>([](events::WindowClosedEvent) noexcept { (void)slog::Info("kitty saw window close"); });
+        dispatcher.Dispatch<events::WindowMinimizedEvent>([](events::WindowMinimizedEvent) noexcept { (void)slog::Info("kitty saw window minimize"); });
+        dispatcher.Dispatch<events::WindowMaximizedEvent>([](events::WindowMaximizedEvent) noexcept { (void)slog::Info("kitty saw window maximize"); });
+        dispatcher.Dispatch<events::WindowRestoredEvent>([](events::WindowRestoredEvent) noexcept { (void)slog::Info("kitty saw window restore"); });
     }
 
     Status OnCommand(const extension::Command& command) noexcept {
