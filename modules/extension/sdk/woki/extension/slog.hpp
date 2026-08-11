@@ -75,7 +75,7 @@ private:
 };
 
 template <typename... Parts>
-[[nodiscard]] Status Write(u32 level, const Parts&... parts) noexcept {
+Status Write(u32 level, const Parts&... parts) noexcept {
     Message<256> message;
     if (!(message.Append(parts) && ...))
         return Status::NoSpace();
@@ -86,22 +86,22 @@ template <typename... Parts>
 } // namespace detail
 
 template <typename... Parts>
-[[nodiscard]] Status Debug(const Parts&... parts) noexcept {
+Status Debug(const Parts&... parts) noexcept {
     return detail::Write(WOKI_EXT_LOG_DEBUG, parts...);
 }
 
 template <typename... Parts>
-[[nodiscard]] Status Info(const Parts&... parts) noexcept {
+Status Info(const Parts&... parts) noexcept {
     return detail::Write(WOKI_EXT_LOG_INFO, parts...);
 }
 
 template <typename... Parts>
-[[nodiscard]] Status Warn(const Parts&... parts) noexcept {
+Status Warn(const Parts&... parts) noexcept {
     return detail::Write(WOKI_EXT_LOG_WARN, parts...);
 }
 
 template <typename... Parts>
-[[nodiscard]] Status Error(const Parts&... parts) noexcept {
+Status Error(const Parts&... parts) noexcept {
     return detail::Write(WOKI_EXT_LOG_ERROR, parts...);
 }
 

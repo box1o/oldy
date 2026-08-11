@@ -42,6 +42,9 @@ function(woki_register_extensions extensions_dir)
                 -S "${extension_dir}"
                 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
                 -DWOKI_REPO_ROOT=${CMAKE_SOURCE_DIR}
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${extension_build_dir}/compile_commands.json"
+                "${extension_dir}/compile_commands.json"
             COMMAND ${CMAKE_COMMAND} --build "${extension_build_dir}" --config $<CONFIG>
             COMMAND ${CMAKE_COMMAND}
                 -D SOURCE_DIR=${extension_built_package_dir}
