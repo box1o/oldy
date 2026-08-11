@@ -25,7 +25,7 @@ public:
         return logged ? context.GetEvents().Subscribe<WindowResizedEvent>() : logged;
     }
 
-    void OnEvent(Event& event) noexcept {
+    void OnEvent(Context&, Event& event) noexcept {
         event.Dispatch<WindowResizedEvent>([](WindowResizedEvent resized) noexcept {
             (void)resized;
         });
@@ -35,8 +35,10 @@ public:
 WOKI_PLUGIN(Hello)
 ```
 
-Every callback is optional. Callbacks may omit `Context&`; `OnLoad` may return
-`void`, `Status`, or a raw status code. Put `WOKI_PLUGIN(Hello)` in exactly one
+Every callback is optional. Every callback that is implemented takes `Context&`
+as its first argument and must be `noexcept`; invalid callback signatures fail
+at compile time. `OnLoad` may return `void`, `Status`, or `i32`, while
+`OnCommand` returns `Status` or `i32`. Put `WOKI_PLUGIN(Hello)` in exactly one
 translation unit. Other `.cpp` files may include `<woki/ext/plugin.hpp>`. The
 plugin type must be trivially default-constructible and trivially destructible;
 the macro enforces both so the freestanding guest needs no static-init guard or
@@ -54,7 +56,23 @@ Status OnCommand(Context& context, StringView topic, Bytes payload) noexcept {
 }
 ```
 
-The facade performs no allocation and requires neither exceptions nor RTTI.
+Log messages can be composed without allocation or manual byte lengths:
+
+```cpp
+context.GetLog().Info("window resized: ", resized.width, 'x', resized.height);
+
+if (command == "org.example.run")
+    return context.GetLog().Info("running command ", command);
+```
+
+The variadic logger uses a fixed 256-byte stack buffer and returns
+`Status::NoSpace()` if the complete message does not fit. For custom capacities,
+use `StringBuilder<N>` and pass it directly to a logger method.
+
+The C++ facade is the recommended extension-authoring API. The shipped C headers
+remain the stable low-level Wasm ABI used by the host and are available for
+advanced guests or other languages; normal C++ plugins do not call that API
+directly. The facade performs no allocation and requires neither exceptions nor RTTI.
 Clang/clang++ targeting `wasm32` is the only supported guest compiler. Guest
 headers reject wasm builds from GCC and other compilers. Bare Clang wasm targets
 without C++ standard-library headers are supported.

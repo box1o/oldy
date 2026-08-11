@@ -209,6 +209,36 @@ TEST_CASE("clean rejects symbolic-link project roots") {
     CHECK(error.str().find("symbolic-link") != std::string::npos);
 }
 
+TEST_CASE("clean rejects symbolic-link parent components and build directories") {
+    TemporaryDirectory temporary;
+    const auto real_parent = temporary.path / "real";
+    const auto project = real_parent / "project";
+    const auto parent_link = temporary.path / "parent-link";
+    const auto outside = temporary.path / "outside";
+    std::filesystem::create_directories(project);
+    std::filesystem::create_directories(outside);
+    std::ofstream(project / "CMakeLists.txt") << "project(test)";
+    std::ofstream(project / "manifest.yaml") << "id: woki.test";
+    std::ofstream(outside / "sentinel") << "keep";
+    std::error_code link_error;
+    std::filesystem::create_directory_symlink(real_parent, parent_link, link_error);
+    if (link_error)
+        SKIP("directory symlinks are unavailable: " + link_error.message());
+
+    std::ostringstream output;
+    std::ostringstream error;
+    wokiext::Diagnostics diagnostics(output, error);
+    UnusedProcessRunner processes;
+    wokiext::SystemFilesystem filesystem;
+    wokiext::Context context{diagnostics, processes, filesystem};
+    CHECK(wokiext::Clean(context, {.path = parent_link / "project"}) == wokiext::Status::Error);
+
+    std::filesystem::create_directory_symlink(outside, project / "build", link_error);
+    REQUIRE_FALSE(link_error);
+    CHECK(wokiext::Clean(context, {.path = project}) == wokiext::Status::Error);
+    CHECK(std::filesystem::exists(outside / "sentinel"));
+}
+
 TEST_CASE("create validates ids before writing and quotes YAML names") {
     TemporaryDirectory temporary;
     std::ostringstream output;
@@ -258,6 +288,19 @@ TEST_CASE("remove deletes config by default and keep-data preserves all state") 
     CHECK(std::filesystem::exists(roots.config / "woki.keep"));
     CHECK(std::filesystem::exists(roots.cache / "woki.keep"));
     CHECK(output.str().find("kept data, config, and cache") != std::string::npos);
+}
+
+TEST_CASE("remove requires a strict extension id") {
+    TemporaryDirectory temporary;
+    std::ostringstream output;
+    std::ostringstream error;
+    wokiext::Diagnostics diagnostics(output, error);
+    UnusedProcessRunner processes;
+    wokiext::SystemFilesystem filesystem;
+    wokiext::Context context{diagnostics, processes, filesystem};
+
+    for (std::string id : {"../escape", "single", "Woki.Bad", "woki..bad", "woki/bad"})
+        CHECK(wokiext::Remove(context, {.id = std::move(id), .root = temporary.path}) == wokiext::Status::Usage);
 }
 
 } // namespace

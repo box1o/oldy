@@ -1,6 +1,5 @@
 #include <tuple>
 #include <vector>
-#include <cstring>
 #include <variant>
 #include <optional>
 #include <algorithm>
@@ -173,9 +172,7 @@ template <typename T>
         return Err(bytes.error());
     }
 
-    u32 value = 0;
-    std::memcpy(&value, bytes->data(), sizeof(value));
-    return Ok(value);
+    return Ok(static_cast<u32>((*bytes)[0]) | (static_cast<u32>((*bytes)[1]) << 8u) | (static_cast<u32>((*bytes)[2]) << 16u) | (static_cast<u32>((*bytes)[3]) << 24u));
 }
 
 [[nodiscard]] Result<void> WriteGuestU32(wasmtime::Caller& caller, int32_t offset, u32 value) {
@@ -184,7 +181,10 @@ template <typename T>
         return Err(bytes.error());
     }
 
-    std::memcpy(bytes->data(), &value, sizeof(value));
+    (*bytes)[0] = static_cast<u8>(value);
+    (*bytes)[1] = static_cast<u8>(value >> 8u);
+    (*bytes)[2] = static_cast<u8>(value >> 16u);
+    (*bytes)[3] = static_cast<u8>(value >> 24u);
     return Ok();
 }
 

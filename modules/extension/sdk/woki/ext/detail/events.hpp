@@ -160,13 +160,13 @@ public:
 
     template <typename T>
     [[nodiscard]] constexpr bool Is() const noexcept {
-        return type_ == detail::EventTraits<T>::kType;
+        return type_ == detail::EventTraits<T>::kType && size_ == detail::EventTraits<T>::kSize && (size_ == 0u || payload_ != nullptr);
     }
 
     template <typename T>
     [[nodiscard]] T Get() const noexcept {
         T result{};
-        if (Is<T>() && size_ == detail::EventTraits<T>::kSize && (size_ == 0u || payload_ != nullptr))
+        if (Is<T>())
             detail::EventTraits<T>::Decode(result, payload_);
         return result;
     }
@@ -178,7 +178,7 @@ public:
     /** Invokes a matching callback; a callback returning bool can mark the event handled. */
     template <typename T, typename Callable>
     bool Dispatch(Callable&& callable) noexcept {
-        if (handled_ || !Is<T>() || size_ != detail::EventTraits<T>::kSize || (size_ != 0u && payload_ == nullptr))
+        if (handled_ || !Is<T>())
             return false;
         T value = Get<T>();
         if constexpr (detail::IsSame<decltype(static_cast<Callable&&>(callable)(value)), bool>)

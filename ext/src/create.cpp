@@ -87,7 +87,7 @@ public:
         return context.GetLog().Info("hello from wokiext");
     }
 
-    void OnEvent(Event&) noexcept {}
+    void OnEvent(Context&, Event&) noexcept {}
 
     Status OnCommand(Context& context, StringView command, Bytes) noexcept {
         return context.GetLog().Info(command);

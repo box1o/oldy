@@ -49,14 +49,21 @@ Result<void> Runtime::Load(const ExtensionPackage& package, EffectiveCapabilitie
         return Err(valid.error());
     }
 
+    const std::size_t event_checkpoint = event_service_ == nullptr ? 0 : event_service_->Checkpoint();
+    const auto discard_activation_events = [this, event_checkpoint] {
+        if (event_service_ != nullptr)
+            event_service_->DiscardAfter(event_checkpoint);
+    };
     auto events = std::make_shared<host::EventSession>();
     host::Context context{package.Id(), grants.permissions, package.Layout().data_root, package.Layout().config_root, package.Layout().cache_root, events, event_service_};
     auto instance = engine_->Create(package, host::HostApi(std::move(context)));
     if (!instance) {
+        discard_activation_events();
         statuses_.push_back({package.Id(), ExtensionState::Failed, instance.error().Code(), std::string(instance.error().Message())});
         return Err(instance.error());
     }
     if (*instance == nullptr) {
+        discard_activation_events();
         const Error error(ErrorCode::InvalidState, "Extension runtime engine returned a null instance.");
         statuses_.push_back({package.Id(), ExtensionState::Failed, error.Code(), std::string(error.Message())});
         return Err(error);
@@ -64,6 +71,7 @@ Result<void> Runtime::Load(const ExtensionPackage& package, EffectiveCapabilitie
     auto initialized = (*instance)->Initialize();
     if (!initialized) {
         (*instance)->Unload();
+        discard_activation_events();
         statuses_.push_back({package.Id(), ExtensionState::Failed, initialized.error().Code(), std::string(initialized.error().Message())});
         return Err(initialized.error());
     }

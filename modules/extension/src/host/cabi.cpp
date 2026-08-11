@@ -243,6 +243,9 @@ i32 ConfigSet(HostApi& host, const char* key, const char* value, u32 len) {
     if (!config_value) {
         return StatusFromError(config_value.error());
     }
+    if (config_value->contains('\0')) {
+        return cabi::kInvalid;
+    }
 
     auto written = host.WriteConfig(*config_key, *config_value);
     if (!written) {

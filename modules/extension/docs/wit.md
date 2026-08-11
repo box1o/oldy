@@ -12,9 +12,10 @@ Files:
 - `wit/guest.wit` defines lifecycle and conditional command callbacks.
 - `wit/world.wit` composes the extension world.
 
-`extension` is the base world. `extension-with-commands` adds the `commands`
-export and corresponds to a manifest with command contributions. WIT has no
-optional function exports, so the two worlds make that condition explicit.
+The exploratory package is versioned as `woki:extension@2.0.0`. `extension` is
+the base world. Additional worlds opt into command dispatch, named-event
+delivery, or both. WIT has no optional function exports, so separate worlds
+make those guest capabilities explicit.
 
 Changes to the current extension contract must be made in raw ABI v1 first.
 Keep WIT aligned when practical, without treating it as a compatibility claim.

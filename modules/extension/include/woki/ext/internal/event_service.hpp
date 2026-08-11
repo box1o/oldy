@@ -32,6 +32,15 @@ public:
     [[nodiscard]] Result<void> Enqueue(Event event);
     void Drain();
 
+    [[nodiscard]] std::size_t Checkpoint() const noexcept {
+        return queue_.size();
+    }
+
+    void DiscardAfter(std::size_t checkpoint) noexcept {
+        while (queue_.size() > checkpoint)
+            queue_.pop_back();
+    }
+
 private:
     EventBus* bus_{};
     std::deque<Event> queue_;

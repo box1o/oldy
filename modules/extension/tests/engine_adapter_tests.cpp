@@ -185,10 +185,23 @@ __attribute__((export_name("ext_init"))) int ext_init(void) { return host_event_
 __attribute__((export_name("ext_on_tick"))) void ext_on_tick(double d) {
     if (d == 2.0) (void)host_event_emit(0x8000002au, payload, sizeof(payload));
 }
-__attribute__((export_name("ext_on_event"))) void ext_on_event(unsigned a, unsigned b, unsigned c) { (void)a;(void)b;(void)c; }
+
+__attribute__((export_name("ext_on_event"))) void ext_on_event(unsigned a, unsigned b, unsigned c) {
+    (void)a;
+    (void)b;
+    (void)c;
+}
+
 __attribute__((export_name("ext_on_unload"))) void ext_on_unload(void) {}
-__attribute__((export_name("ext_alloc"))) unsigned ext_alloc(unsigned len) { return len <= sizeof(buffer) ? (unsigned)buffer : 0; }
-__attribute__((export_name("ext_free"))) void ext_free(unsigned ptr, unsigned len) { (void)ptr; (void)len; }
+
+__attribute__((export_name("ext_alloc"))) unsigned ext_alloc(unsigned len) {
+    return len <= sizeof(buffer) ? (unsigned)buffer : 0;
+}
+
+__attribute__((export_name("ext_free"))) void ext_free(unsigned ptr, unsigned len) {
+    (void)ptr;
+    (void)len;
+}
 )c",
         "--export=ext_alloc --export=ext_free");
 
@@ -215,6 +228,30 @@ __attribute__((export_name("ext_free"))) void ext_free(unsigned ptr, unsigned le
     REQUIRE(bus.events[0].payload == std::vector<woki::u8>{3, 1, 4});
     REQUIRE(bus.events[0].origin.extension_id == "woki.events");
     (*instance)->Unload();
+}
+
+TEST_CASE("Wasmtime reads and writes ABI u32 values as little endian") {
+    const fs::path root = TempRoot("wasmtime_little_endian_u32");
+    Compile(root, R"c(
+__attribute__((import_module("woki_host"), import_name("host_file_read"))) extern int host_file_read(const char*, unsigned char*, unsigned char*);
+static unsigned char output[4];
+static unsigned char length[4] = {4, 0, 0, 0};
+__attribute__((export_name("ext_api_version"))) unsigned ext_api_version(void) { return 1; }
+__attribute__((export_name("ext_init"))) int ext_init(void) {
+    (void)host_file_read("state", output, length);
+    return length[0] == 8 && length[1] == 0 && length[2] == 0 && length[3] == 0 ? 0 : 9;
+}
+__attribute__((export_name("ext_on_tick"))) void ext_on_tick(double d) { (void)d; }
+__attribute__((export_name("ext_on_event"))) void ext_on_event(unsigned a, unsigned b, unsigned c) { (void)a;(void)b;(void)c; }
+__attribute__((export_name("ext_on_unload"))) void ext_on_unload(void) {}
+)c");
+    auto package = MakePackage(root, "woki.endian", {woki::ext::Permission::Storage});
+    fs::create_directories(package.Layout().data_root);
+    WriteText(package.Layout().data_root / "state", "12345678");
+    woki::ext::wasm::WasmtimeEngine engine;
+    auto instance = engine.Create(package, MakeHost(package));
+    REQUIRE(instance);
+    CHECK((*instance)->Initialize());
 }
 
 TEST_CASE("Wasmtime classifies documented guest command statuses") {

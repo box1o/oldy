@@ -53,6 +53,9 @@ foreach(language IN ITEMS c cpp)
     if(NOT build_result EQUAL 0 OR NOT EXISTS "${package_dir}/extension.wasm" OR NOT EXISTS "${package_dir}/manifest.yaml")
         message(FATAL_ERROR "wokiext build failed for generated ${language} project (${build_result})\n${build_output}${build_error}")
     endif()
+    if(NOT EXISTS "${package_dir}/.woki-state" OR EXISTS "${package_dir}.state")
+        message(FATAL_ERROR "wokiext did not publish package content and state as one directory transaction")
+    endif()
     execute_process(
         COMMAND "${WOKIEXT}" verify "${package_dir}"
         RESULT_VARIABLE verify_result

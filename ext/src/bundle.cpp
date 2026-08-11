@@ -1,4 +1,6 @@
 #include <array>
+#include <cerrno>
+#include <memory>
 #include <random>
 #include <string>
 #include <fstream>
@@ -9,6 +11,9 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#else
+#include <fcntl.h>
+#include <unistd.h>
 #endif
 
 #include <woki/ext/package.hpp>
@@ -93,7 +98,7 @@ inline constexpr std::size_t kMaxPackageEntries = 10'000u;
     }
 
     const fs::path package = requested / "build/package";
-    const fs::path state = requested / "build/package.state";
+    const fs::path state = package / ".woki-state";
     if (!fs::is_regular_file(package / "manifest.yaml") || !fs::is_regular_file(state)) {
         return std::unexpected("Extension project has no staged package; run wokiext build first");
     }
@@ -112,16 +117,121 @@ inline constexpr std::size_t kMaxPackageEntries = 10'000u;
     return package;
 }
 
-[[nodiscard]] fs::path TemporarySibling(const fs::path& output) {
-    std::random_device random;
-    for (int attempt = 0; attempt < 64; ++attempt) {
-        const fs::path candidate = output.parent_path() / (output.filename().string() + ".tmp-" + std::to_string(random()));
-        std::error_code error;
-        if (!fs::exists(candidate, error) && !error)
-            return candidate;
+class ExclusiveOutput final {
+public:
+    ExclusiveOutput(const ExclusiveOutput&) = delete;
+    ExclusiveOutput& operator=(const ExclusiveOutput&) = delete;
+
+    ~ExclusiveOutput() {
+        Close();
     }
-    return {};
-}
+
+    [[nodiscard]] static std::expected<std::unique_ptr<ExclusiveOutput>, std::string> Create(const fs::path& output) {
+        std::random_device random;
+        for (int attempt = 0; attempt < 64; ++attempt) {
+            fs::path candidate = output.parent_path() / (output.filename().string() + ".tmp-" + std::to_string(random()));
+            auto temporary = std::unique_ptr<ExclusiveOutput>(new ExclusiveOutput(std::move(candidate)));
+#ifdef _WIN32
+            temporary->handle_ = CreateFileW(temporary->path_.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+            if (temporary->handle_ != INVALID_HANDLE_VALUE)
+                return temporary;
+            const DWORD error = GetLastError();
+            if (error != ERROR_FILE_EXISTS && error != ERROR_ALREADY_EXISTS)
+                return std::unexpected("Cannot create temporary bundle output: " + std::system_category().message(static_cast<int>(error)));
+#else
+            int flags = O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC;
+#ifdef O_NOFOLLOW
+            flags |= O_NOFOLLOW;
+#endif
+            temporary->file_ = ::open(temporary->path_.c_str(), flags, 0600);
+            if (temporary->file_ >= 0)
+                return temporary;
+            if (errno != EEXIST)
+                return std::unexpected("Cannot create temporary bundle output: " + std::error_code(errno, std::generic_category()).message());
+#endif
+        }
+        return std::unexpected("Cannot allocate a unique temporary bundle output");
+    }
+
+    [[nodiscard]] const fs::path& Path() const {
+        return path_;
+    }
+
+    void Discard() {
+        Close();
+        std::error_code error;
+        fs::remove(path_, error);
+    }
+
+    [[nodiscard]] bool FlushAndClose(std::error_code& error) {
+#ifdef _WIN32
+        if (handle_ == INVALID_HANDLE_VALUE)
+            return true;
+        if (FlushFileBuffers(handle_) == 0) {
+            error = std::error_code(static_cast<int>(GetLastError()), std::system_category());
+            Close();
+            return false;
+        }
+#else
+        if (file_ < 0)
+            return true;
+        if (::fsync(file_) != 0) {
+            error = std::error_code(errno, std::generic_category());
+            Close();
+            return false;
+        }
+#endif
+        Close();
+        return true;
+    }
+
+    static la_ssize_t Write(struct archive* archive, void* client_data, const void* buffer, std::size_t size) {
+        auto& output = *static_cast<ExclusiveOutput*>(client_data);
+#ifdef _WIN32
+        const auto count = static_cast<DWORD>(std::min<std::size_t>(size, MAXDWORD));
+        DWORD written = 0;
+        if (WriteFile(output.handle_, buffer, count, &written, nullptr) == 0) {
+            const DWORD error = GetLastError();
+            archive_set_error(archive, static_cast<int>(error), "%s", std::system_category().message(static_cast<int>(error)).c_str());
+            return -1;
+        }
+        return static_cast<la_ssize_t>(written);
+#else
+        ssize_t written;
+        do {
+            written = ::write(output.file_, buffer, size);
+        } while (written < 0 && errno == EINTR);
+        if (written < 0)
+            archive_set_error(archive, errno, "%s", std::error_code(errno, std::generic_category()).message().c_str());
+        return static_cast<la_ssize_t>(written);
+#endif
+    }
+
+private:
+    explicit ExclusiveOutput(fs::path path)
+        : path_(std::move(path)) {}
+
+    void Close() {
+#ifdef _WIN32
+        if (handle_ != INVALID_HANDLE_VALUE) {
+            CloseHandle(handle_);
+            handle_ = INVALID_HANDLE_VALUE;
+        }
+#else
+        if (file_ >= 0) {
+            ::close(file_);
+            file_ = -1;
+        }
+#endif
+    }
+
+    fs::path path_;
+#ifdef _WIN32
+    HANDLE handle_{INVALID_HANDLE_VALUE};
+#else
+    int file_{-1};
+#endif
+};
 
 [[nodiscard]] bool ReplaceFile(const fs::path& temporary, const fs::path& output, std::error_code& error) {
 #ifdef _WIN32
@@ -242,32 +352,30 @@ Status Bundle(Context& context, const BundleOptions& options) {
         context.diagnostics.Error("Bundle output must be a canonical non-symbolic path outside the project and package directories");
         return Status::Error;
     }
-    const fs::path temporary = TemporarySibling(out_file);
-    if (temporary.empty()) {
-        context.diagnostics.Error("Cannot allocate a temporary bundle output");
+    auto temporary = ExclusiveOutput::Create(out_file);
+    if (!temporary) {
+        context.diagnostics.Error(temporary.error());
         return Status::Error;
     }
 
     struct archive* writer = archive_write_new();
     if (writer == nullptr) {
         context.diagnostics.Error("Failed to allocate archive writer");
+        (*temporary)->Discard();
         return Status::Error;
     }
 
     if (archive_write_set_format_zip(writer) != ARCHIVE_OK) {
         context.diagnostics.Error(archive_error_string(writer));
         archive_write_free(writer);
+        (*temporary)->Discard();
         return Status::Error;
     }
-#ifdef _WIN32
-    const int open_status = archive_write_open_filename_w(writer, temporary.c_str());
-#else
-    const int open_status = archive_write_open_filename(writer, temporary.c_str());
-#endif
+    const int open_status = archive_write_open(writer, temporary->get(), nullptr, ExclusiveOutput::Write, nullptr);
     if (open_status != ARCHIVE_OK) {
         context.diagnostics.Error(archive_error_string(writer));
         archive_write_free(writer);
-        fs::remove(temporary, directory_error);
+        (*temporary)->Discard();
         return Status::Error;
     }
 
@@ -279,6 +387,9 @@ Status Bundle(Context& context, const BundleOptions& options) {
     const fs::recursive_directory_iterator end;
     for (; iterator != end && !iteration_error; iterator.increment(iteration_error)) {
         const fs::directory_entry& entry = *iterator;
+        const fs::path relative = entry.path().lexically_relative(root);
+        if (relative == ".woki-state")
+            continue;
         if (entry.is_symlink(iteration_error)) {
             context.diagnostics.Err() << "Bundle input contains a symbolic link: " << entry.path() << '\n';
             status = Status::Error;
@@ -310,15 +421,21 @@ Status Bundle(Context& context, const BundleOptions& options) {
         status = Status::Error;
     }
 
+    std::error_code flush_error;
+    if (!(*temporary)->FlushAndClose(flush_error) && status == Status::Ok) {
+        context.diagnostics.Error("Cannot flush temporary bundle output: " + flush_error.message());
+        status = Status::Error;
+    }
+
     if (status != Status::Ok) {
         std::error_code error;
-        fs::remove(temporary, error);
+        fs::remove((*temporary)->Path(), error);
         return status;
     }
 
     std::error_code replace_error;
-    if (!ReplaceFile(temporary, out_file, replace_error)) {
-        fs::remove(temporary, directory_error);
+    if (!ReplaceFile((*temporary)->Path(), out_file, replace_error)) {
+        fs::remove((*temporary)->Path(), directory_error);
         context.diagnostics.Error("Cannot activate bundle output: " + replace_error.message());
         return Status::Error;
     }

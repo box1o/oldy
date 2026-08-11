@@ -93,8 +93,7 @@ if(EMSCRIPTEN)
         "--shell-file" "${CMAKE_SOURCE_DIR}/web/index.html"
     )
 
-    set(_EXT_DIR "${CMAKE_BINARY_DIR}/extension-packages")
-    file(MAKE_DIRECTORY "${_EXT_DIR}")
+    set(_EXT_DIR "${CMAKE_BINARY_DIR}/extension-packages/$<CONFIG>")
     target_link_options(studio PRIVATE
         "SHELL:--preload-file ${_EXT_DIR}@/extensions"
     )

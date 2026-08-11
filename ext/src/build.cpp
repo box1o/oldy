@@ -256,13 +256,6 @@ Status Build(Context& context, const BuildOptions& options) {
         return Status::Error;
     }
 
-    std::error_code state_error;
-    context.filesystem.Remove(build_dir / "package.state", state_error);
-    if (state_error) {
-        context.diagnostics.Error("Cannot invalidate the previously staged package: " + state_error.message());
-        return Status::Error;
-    }
-
     const std::filesystem::path cmake_module_dir = FindCMakeModuleDir(options.executable);
     if (cmake_module_dir.empty()) {
         context.diagnostics.Error("Cannot locate Woki extension CMake modules; set WOKI_CMAKE_DIR");

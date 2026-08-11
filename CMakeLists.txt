@@ -50,5 +50,8 @@ endif()
 
 include(Extensions)
 woki_register_extensions("${CMAKE_SOURCE_DIR}/extensions")
+if(TARGET extension_tests AND TARGET woki_extension_kitty)
+    add_dependencies(extension_tests woki_extension_kitty)
+endif()
 
 add_subdirectory(studio)

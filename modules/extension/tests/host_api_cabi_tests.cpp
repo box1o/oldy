@@ -84,6 +84,9 @@ TEST_CASE("HostApi enforces path, symlink, and size boundaries without corruptin
     REQUIRE(host.WriteConfig("stable", "old"));
     REQUIRE_FALSE(host.WriteConfig("stable", std::string(woki::ext::limits::kMaxConfigValueBytes + 1, 'x')));
     REQUIRE(*host.ReadConfig("stable") == "old");
+    const std::string embedded_nul{"new\0hidden", 10};
+    REQUIRE(host.WriteConfig("stable", embedded_nul).error().Code() == woki::ErrorCode::InvalidArgument);
+    REQUIRE(*host.ReadConfig("stable") == "old");
 
     fs::create_directories(root / "data");
     std::ofstream(root / "data" / "full", std::ios::binary);
@@ -166,6 +169,8 @@ TEST_CASE("C ABI maps permissions, invalid pointers, limits, and missing values"
     REQUIRE(FileAppend(host, "x", nullptr, 1) == kInvalid);
     REQUIRE(ConfigSet(host, nullptr, "x", 1) == kInvalid);
     REQUIRE(ConfigSet(host, "key", nullptr, 1) == kInvalid);
+    const char embedded_nul[] = {'a', '\0', 'b'};
+    REQUIRE(ConfigSet(host, "key", embedded_nul, sizeof(embedded_nul)) == kInvalid);
     REQUIRE(ConfigGet(host, "missing", text.data(), static_cast<woki::u32>(text.size())) == kNotFound);
     REQUIRE(FileRead(host, "../escape", nullptr, &length) == kInvalid);
 }

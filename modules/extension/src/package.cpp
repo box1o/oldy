@@ -21,8 +21,10 @@
 #elif !defined(__EMSCRIPTEN__)
 #include <cerrno>
 #include <fcntl.h>
+#include <dirent.h>
 #include <unistd.h>
 #include <sys/file.h>
+#include <sys/stat.h>
 #endif
 
 #include "woki/ext/package.hpp"
@@ -44,6 +46,18 @@ inline constexpr std::uintmax_t kMaxSingleFileBytes = 64u * 1024u * 1024u;
 inline constexpr std::uintmax_t kMaxTotalPackageBytes = 256u * 1024u * 1024u;
 inline constexpr std::uintmax_t kMaxWasmBytes = 32u * 1024u * 1024u;
 inline constexpr std::size_t kMaxPackageEntries = 10'000u;
+
+[[nodiscard]] bool IsInternalPackageMetadata(const fs::path& relative) {
+    return relative == ".woki-state";
+}
+
+[[nodiscard]] bool SameManifest(const Manifest& left, const Manifest& right) {
+    return left.id == right.id && left.name == right.name && left.version == right.version && left.api_version == right.api_version && left.wasm_path == right.wasm_path
+           && left.requested_capabilities.permissions == right.requested_capabilities.permissions && left.activation.startup == right.activation.startup && left.activation.tick == right.activation.tick
+           && left.activation.events == right.activation.events && std::ranges::equal(left.commands, right.commands, [](const CommandContribution& first, const CommandContribution& second) {
+                  return first.id == second.id && first.title == second.title && first.category == second.category;
+              });
+}
 
 [[nodiscard]] bool PathsOverlap(const fs::path& first, const fs::path& second) {
     const auto is_prefix = [](const fs::path& prefix, const fs::path& path) {
@@ -389,8 +403,283 @@ private:
     return Ok();
 }
 
+#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
+
+[[nodiscard]] bool SameModificationTimes(const struct stat& first, const struct stat& second) {
+#ifdef __APPLE__
+    return first.st_mtimespec.tv_sec == second.st_mtimespec.tv_sec && first.st_mtimespec.tv_nsec == second.st_mtimespec.tv_nsec && first.st_ctimespec.tv_sec == second.st_ctimespec.tv_sec
+           && first.st_ctimespec.tv_nsec == second.st_ctimespec.tv_nsec;
+#else
+    return first.st_mtim.tv_sec == second.st_mtim.tv_sec && first.st_mtim.tv_nsec == second.st_mtim.tv_nsec && first.st_ctim.tv_sec == second.st_ctim.tv_sec && first.st_ctim.tv_nsec == second.st_ctim.tv_nsec;
+#endif
+}
+
+[[nodiscard]] Error FileSystemError(ErrorCode code, std::string_view operation, const fs::path& path, int error = errno) {
+    return MakeError(code, std::string(operation) + " '" + path.string() + "': " + std::error_code(error, std::generic_category()).message());
+}
+
+[[nodiscard]] Result<void> CopyPackageDirectory(int source_directory,
+    const fs::path& relative_directory,
+    const fs::path& destination_root,
+    const Manifest& manifest,
+    std::uintmax_t* total_bytes,
+    std::size_t* entry_count,
+    std::set<std::string>* portable_entries) {
+    const int scan_fd = ::dup(source_directory);
+    if (scan_fd < 0)
+        return Err(FileSystemError(ErrorCode::FileReadError, "Failed to duplicate unpacked package directory handle", relative_directory));
+    DIR* directory = ::fdopendir(scan_fd);
+    if (directory == nullptr) {
+        const int open_error = errno;
+        ::close(scan_fd);
+        return Err(FileSystemError(ErrorCode::FileReadError, "Failed to scan unpacked package directory", relative_directory, open_error));
+    }
+
+    std::vector<std::string> names;
+    errno = 0;
+    while (dirent* entry = ::readdir(directory)) {
+        const std::string_view name{entry->d_name};
+        if (name != "." && name != "..")
+            names.emplace_back(name);
+        errno = 0;
+    }
+    const int scan_error = errno;
+    ::closedir(directory);
+    if (scan_error != 0)
+        return Err(FileSystemError(ErrorCode::FileReadError, "Failed to scan unpacked package directory", relative_directory, scan_error));
+    std::ranges::sort(names);
+
+    for (const std::string& name : names) {
+        const fs::path relative = relative_directory / fs::path{name};
+        if (IsInternalPackageMetadata(relative))
+            continue;
+        if (!IsSafeRelativePath(relative) || !IsAllowedArchiveEntry(relative, manifest.wasm_path)) {
+            return Err(ErrorCode::ValidationInvalidState,
+                "Package contains unsupported entry '" + relative.generic_string() + "'. This build accepts only manifest.yaml, runtime.wasm, and assets/**; native payloads and signatures are unsupported.");
+        }
+        if (++*entry_count > kMaxPackageEntries)
+            return Err(ErrorCode::ValidationOutOfRange, "Package exceeds 10000 entry limit.");
+
+        std::string collision_key = relative.generic_string();
+        std::ranges::transform(collision_key, collision_key.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+        if (!portable_entries->insert(collision_key).second)
+            return Err(ErrorCode::ValidationInvalidState, "Package contains a case-colliding path: " + relative.generic_string());
+
+        struct stat status{};
+        if (::fstatat(source_directory, name.c_str(), &status, AT_SYMLINK_NOFOLLOW) != 0)
+            return Err(FileSystemError(ErrorCode::FileReadError, "Failed to inspect unpacked package entry", relative));
+        if (S_ISLNK(status.st_mode))
+            return Err(ErrorCode::ValidationInvalidState, "Package entry must not be a symlink: " + relative.generic_string());
+
+        if (S_ISDIR(status.st_mode)) {
+            int flags = O_RDONLY | O_DIRECTORY | O_CLOEXEC;
+#ifdef O_NOFOLLOW
+            flags |= O_NOFOLLOW;
+#endif
+            const int child = ::openat(source_directory, name.c_str(), flags);
+            if (child < 0)
+                return Err(FileSystemError(ErrorCode::FileReadError, "Failed to securely open unpacked package directory", relative));
+            struct stat opened_directory_status{};
+            if (::fstat(child, &opened_directory_status) != 0 || !S_ISDIR(opened_directory_status.st_mode) || opened_directory_status.st_dev != status.st_dev || opened_directory_status.st_ino != status.st_ino) {
+                const int inspect_error = errno;
+                ::close(child);
+                return Err(FileSystemError(ErrorCode::FileReadError, "Unpacked package directory changed while being opened", relative, inspect_error));
+            }
+            std::error_code error;
+            fs::create_directory(destination_root / relative, error);
+            if (error) {
+                ::close(child);
+                return Err(ErrorCode::FileWriteError, error.message());
+            }
+            auto copied = CopyPackageDirectory(child, relative, destination_root, manifest, total_bytes, entry_count, portable_entries);
+            ::close(child);
+            if (!copied)
+                return copied;
+            continue;
+        }
+        if (!S_ISREG(status.st_mode))
+            return Err(ErrorCode::ValidationInvalidState, "Package entry must be a regular file or directory: " + relative.generic_string());
+
+        int source_flags = O_RDONLY | O_CLOEXEC;
+#ifdef O_NOFOLLOW
+        source_flags |= O_NOFOLLOW;
+#endif
+        const int source = ::openat(source_directory, name.c_str(), source_flags);
+        if (source < 0)
+            return Err(FileSystemError(ErrorCode::FileReadError, "Failed to securely open unpacked package file", relative));
+        struct stat opened_status{};
+        if (::fstat(source, &opened_status) != 0 || !S_ISREG(opened_status.st_mode) || opened_status.st_dev != status.st_dev || opened_status.st_ino != status.st_ino || opened_status.st_nlink != 1) {
+            const int inspect_error = errno;
+            ::close(source);
+            return Err(FileSystemError(ErrorCode::FileReadError, "Unpacked package file changed while being opened", relative, inspect_error));
+        }
+        if (static_cast<std::uintmax_t>(opened_status.st_size) > kMaxSingleFileBytes) {
+            ::close(source);
+            return Err(ErrorCode::ValidationOutOfRange, "Package file exceeds 64 MiB limit: " + relative.generic_string());
+        }
+
+        const fs::path destination = destination_root / relative;
+        const int output = ::open(destination.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
+        if (output < 0) {
+            const int write_error = errno;
+            ::close(source);
+            return Err(FileSystemError(ErrorCode::FileWriteError, "Failed to create staged package file", destination, write_error));
+        }
+        std::array<char, 64 * 1024> buffer{};
+        std::uintmax_t file_bytes = 0;
+        while (true) {
+            const ssize_t read_bytes = ::read(source, buffer.data(), buffer.size());
+            if (read_bytes < 0) {
+                if (errno == EINTR)
+                    continue;
+                const int read_error = errno;
+                ::close(output);
+                ::close(source);
+                return Err(FileSystemError(ErrorCode::FileReadError, "Failed to read unpacked package file", relative, read_error));
+            }
+            if (read_bytes == 0)
+                break;
+            const auto chunk = static_cast<std::uintmax_t>(read_bytes);
+            if (chunk > kMaxSingleFileBytes - file_bytes || chunk > kMaxTotalPackageBytes - *total_bytes) {
+                ::close(output);
+                ::close(source);
+                return Err(ErrorCode::ValidationOutOfRange, "Package exceeds unpacked size limits while copying: " + relative.generic_string());
+            }
+            file_bytes += chunk;
+            *total_bytes += chunk;
+            ssize_t written = 0;
+            while (written < read_bytes) {
+                const ssize_t count = ::write(output, buffer.data() + written, static_cast<std::size_t>(read_bytes - written));
+                if (count <= 0) {
+                    if (count < 0 && errno == EINTR)
+                        continue;
+                    const int write_error = errno;
+                    ::close(output);
+                    ::close(source);
+                    return Err(FileSystemError(ErrorCode::FileWriteError, "Failed to write staged package file", destination, write_error));
+                }
+                written += count;
+            }
+        }
+        struct stat final_status{};
+        const bool changed = ::fstat(source, &final_status) != 0 || final_status.st_size != opened_status.st_size || final_status.st_dev != opened_status.st_dev || final_status.st_ino != opened_status.st_ino
+                             || !SameModificationTimes(final_status, opened_status);
+        ::close(output);
+        ::close(source);
+        if (changed || file_bytes != static_cast<std::uintmax_t>(opened_status.st_size))
+            return Err(ErrorCode::FileReadError, "Unpacked package file changed while it was being copied: " + relative.generic_string());
+    }
+    return Ok();
+}
+
+#endif
+
+#ifdef _WIN32
+
+[[nodiscard]] Result<fs::path> FinalPathForHandle(HANDLE handle, std::string_view description) {
+    const DWORD required = GetFinalPathNameByHandleW(handle, nullptr, 0, FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+    if (required == 0)
+        return Err(ErrorCode::FileReadError, "Failed to resolve " + std::string(description) + ".");
+    std::wstring path(required, L'\0');
+    const DWORD written = GetFinalPathNameByHandleW(handle, path.data(), required, FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+    if (written == 0 || written >= required)
+        return Err(ErrorCode::FileReadError, "Failed to resolve " + std::string(description) + ".");
+    path.resize(written);
+    constexpr std::wstring_view kExtendedPrefix = L"\\\\?\\";
+    constexpr std::wstring_view kExtendedUncPrefix = L"\\\\?\\UNC\\";
+    if (path.starts_with(kExtendedUncPrefix))
+        path.replace(0, kExtendedUncPrefix.size(), L"\\\\");
+    else if (path.starts_with(kExtendedPrefix))
+        path.erase(0, kExtendedPrefix.size());
+    return Ok(fs::path{path}.lexically_normal());
+}
+
+[[nodiscard]] Result<void> CopyWindowsFileSecure(const fs::path& source_path, const fs::path& source_root, const fs::path& destination, const fs::path& relative, std::uintmax_t* copied_total) {
+    HANDLE source = CreateFileW(source_path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_SEQUENTIAL_SCAN, nullptr);
+    if (source == INVALID_HANDLE_VALUE)
+        return Err(ErrorCode::FileReadError, "Failed to securely open unpacked package file: " + relative.generic_string());
+    FILE_ATTRIBUTE_TAG_INFO attributes{};
+    FILE_BASIC_INFO basic_info{};
+    LARGE_INTEGER size{};
+    if (GetFileInformationByHandleEx(source, FileAttributeTagInfo, &attributes, sizeof(attributes)) == 0 || GetFileInformationByHandleEx(source, FileBasicInfo, &basic_info, sizeof(basic_info)) == 0
+        || (attributes.FileAttributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY)) != 0 || GetFileSizeEx(source, &size) == 0 || size.QuadPart < 0) {
+        CloseHandle(source);
+        return Err(ErrorCode::FileAccessDenied, "Unpacked package entry must be a regular non-reparse file: " + relative.generic_string());
+    }
+    auto final_path = FinalPathForHandle(source, "unpacked package file");
+    if (!final_path || !PathsOverlap(source_root, *final_path)) {
+        CloseHandle(source);
+        return Err(ErrorCode::FileAccessDenied, "Unpacked package file resolved outside its source root: " + relative.generic_string());
+    }
+    if (static_cast<std::uintmax_t>(size.QuadPart) > kMaxSingleFileBytes || static_cast<std::uintmax_t>(size.QuadPart) > kMaxTotalPackageBytes - *copied_total) {
+        CloseHandle(source);
+        return Err(ErrorCode::ValidationOutOfRange, "Package exceeds unpacked size limits while copying: " + relative.generic_string());
+    }
+
+    HANDLE output = CreateFileW(destination.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (output == INVALID_HANDLE_VALUE) {
+        CloseHandle(source);
+        return Err(ErrorCode::FileWriteError, "Failed to create staged package file: " + destination.string());
+    }
+    std::array<char, 64 * 1024> buffer{};
+    std::uintmax_t file_bytes = 0;
+    while (true) {
+        DWORD read_bytes = 0;
+        if (ReadFile(source, buffer.data(), static_cast<DWORD>(buffer.size()), &read_bytes, nullptr) == 0) {
+            CloseHandle(output);
+            CloseHandle(source);
+            return Err(ErrorCode::FileReadError, "Failed to read unpacked package file: " + relative.generic_string());
+        }
+        if (read_bytes == 0)
+            break;
+        if (read_bytes > kMaxSingleFileBytes - file_bytes || read_bytes > kMaxTotalPackageBytes - *copied_total) {
+            CloseHandle(output);
+            CloseHandle(source);
+            return Err(ErrorCode::ValidationOutOfRange, "Package exceeds unpacked size limits while copying: " + relative.generic_string());
+        }
+        DWORD written = 0;
+        if (WriteFile(output, buffer.data(), read_bytes, &written, nullptr) == 0 || written != read_bytes) {
+            CloseHandle(output);
+            CloseHandle(source);
+            return Err(ErrorCode::FileWriteError, "Failed to write staged package file: " + destination.string());
+        }
+        file_bytes += read_bytes;
+        *copied_total += read_bytes;
+    }
+    LARGE_INTEGER final_size{};
+    FILE_BASIC_INFO final_basic_info{};
+    const bool changed = GetFileSizeEx(source, &final_size) == 0 || GetFileInformationByHandleEx(source, FileBasicInfo, &final_basic_info, sizeof(final_basic_info)) == 0 || final_size.QuadPart != size.QuadPart
+                         || final_basic_info.LastWriteTime.QuadPart != basic_info.LastWriteTime.QuadPart || final_basic_info.ChangeTime.QuadPart != basic_info.ChangeTime.QuadPart
+                         || file_bytes != static_cast<std::uintmax_t>(size.QuadPart);
+    CloseHandle(output);
+    CloseHandle(source);
+    if (changed)
+        return Err(ErrorCode::FileReadError, "Unpacked package file changed while it was being copied: " + relative.generic_string());
+    return Ok();
+}
+
+#endif
+
 [[nodiscard]] Result<void> CopyPackageTree(const fs::path& source_root, const fs::path& destination_root, const Manifest& manifest) {
+#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
+    int flags = O_RDONLY | O_DIRECTORY | O_CLOEXEC;
+#ifdef O_NOFOLLOW
+    flags |= O_NOFOLLOW;
+#endif
+    const int source = ::open(source_root.c_str(), flags);
+    if (source < 0)
+        return Err(FileSystemError(ErrorCode::FileReadError, "Failed to securely open unpacked package root", source_root));
     std::uintmax_t total_bytes = 0;
+    std::size_t entry_count = 0;
+    std::set<std::string> portable_entries;
+    auto copied = CopyPackageDirectory(source, {}, destination_root, manifest, &total_bytes, &entry_count, &portable_entries);
+    ::close(source);
+    return copied;
+#else
+    std::uintmax_t total_bytes = 0;
+#ifdef _WIN32
+    std::uintmax_t copied_total = 0;
+#endif
     std::size_t entry_count = 0;
     std::error_code error;
     std::set<std::string> portable_entries;
@@ -399,6 +688,12 @@ private:
         if (error) {
             return Err(ErrorCode::FileReadError, error.message());
         }
+        const fs::path relative = fs::relative(entry.path(), source_root, error);
+        if (error) {
+            return Err(ErrorCode::FileReadError, error.message());
+        }
+        if (IsInternalPackageMetadata(relative))
+            continue;
         if (++entry_count > kMaxPackageEntries) {
             return Err(ErrorCode::ValidationOutOfRange, "Package exceeds 10000 entry limit.");
         }
@@ -406,11 +701,6 @@ private:
         auto valid = ValidateSourceEntry(entry, source_root, manifest, &total_bytes);
         if (!valid) {
             return Err(valid.error());
-        }
-
-        const fs::path relative = fs::relative(entry.path(), source_root, error);
-        if (error) {
-            return Err(ErrorCode::FileReadError, error.message());
         }
         std::string collision_key = relative.generic_string();
         std::ranges::transform(collision_key, collision_key.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
@@ -432,13 +722,57 @@ private:
             return Err(ErrorCode::FileWriteError, error.message());
         }
 
+#ifdef _WIN32
+        auto copied = CopyWindowsFileSecure(entry.path(), source_root, destination, relative, &copied_total);
+        if (!copied)
+            return copied;
+#else
         fs::copy_file(entry.path(), destination, fs::copy_options::none, error);
-        if (error) {
+        if (error)
             return Err(ErrorCode::FileWriteError, error.message());
-        }
+#endif
     }
 
     return Ok();
+#endif
+}
+
+[[nodiscard]] Result<Manifest> ValidateStagedPackage(const fs::path& staging_root, const Manifest* expected_manifest = nullptr) {
+    std::error_code error;
+    if (fs::is_symlink(fs::symlink_status(staging_root, error)) || !fs::is_directory(staging_root, error))
+        return Err(ErrorCode::FileAccessDenied, "Extension staging root must remain a real directory.");
+    const fs::path manifest_path = staging_root / "manifest.yaml";
+    if (fs::is_symlink(fs::symlink_status(manifest_path, error)))
+        return Err(ErrorCode::FileAccessDenied, "Staged extension manifest must not be a symbolic link.");
+    auto manifest = LoadManifest(manifest_path);
+    if (!manifest)
+        return Err(manifest.error());
+    if (expected_manifest != nullptr && !SameManifest(*manifest, *expected_manifest)) {
+        return Err(ErrorCode::ValidationInvalidState, "Staged extension manifest changed during installation.");
+    }
+
+    std::uintmax_t total_bytes = 0;
+    std::size_t entry_count = 0;
+    std::set<std::string> portable_entries;
+    for (const fs::directory_entry& entry : fs::recursive_directory_iterator(staging_root, fs::directory_options::none, error)) {
+        if (error)
+            return Err(ErrorCode::FileReadError, error.message());
+        const fs::path relative = fs::relative(entry.path(), staging_root, error);
+        if (error)
+            return Err(ErrorCode::FileReadError, error.message());
+        if (IsInternalPackageMetadata(relative))
+            continue;
+        if (++entry_count > kMaxPackageEntries)
+            return Err(ErrorCode::ValidationOutOfRange, "Package exceeds 10000 entry limit.");
+        auto valid = ValidateSourceEntry(entry, staging_root, *manifest, &total_bytes);
+        if (!valid)
+            return Err(valid.error());
+        std::string collision_key = relative.generic_string();
+        std::ranges::transform(collision_key, collision_key.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+        if (!portable_entries.insert(collision_key).second)
+            return Err(ErrorCode::ValidationInvalidState, "Package contains a case-colliding path: " + relative.generic_string());
+    }
+    return Ok(std::move(*manifest));
 }
 
 [[nodiscard]] Result<void> ValidateWasmSize(const fs::path& path) {
@@ -532,7 +866,12 @@ private:
     archive_read_support_format_zip(reader);
     archive_read_support_filter_all(reader);
 
-    if (archive_read_open_filename(reader, archive_path.string().c_str(), 10240) != ARCHIVE_OK) {
+#ifdef _WIN32
+    const int open_status = archive_read_open_filename_w(reader, archive_path.c_str(), 10240);
+#else
+    const int open_status = archive_read_open_filename(reader, archive_path.c_str(), 10240);
+#endif
+    if (open_status != ARCHIVE_OK) {
         const std::string message = archive_error_string(reader);
         archive_read_free(reader);
         return Err(ErrorCode::ParseInvalidFormat, "Failed to open extension archive '" + archive_path.string() + "': " + message);
@@ -799,14 +1138,17 @@ Result<void> ValidatePackageLayout(const PackageLayout& layout) {
 
 Result<PackageLayout> InstallUnpackedPackage(const fs::path& source_root, const Roots& roots, InstallPolicy policy) {
     std::error_code error;
-    if (fs::is_symlink(fs::symlink_status(source_root, error))) {
-        return Err(ErrorCode::FileAccessDenied, "Unpacked extension package source must not be a symbolic link: " + source_root.string());
+    const fs::path supplied_source = fs::absolute(source_root, error).lexically_normal();
+    if (error)
+        return Err(ErrorCode::FileReadError, "Failed to resolve unpacked extension source: " + error.message());
+    if (fs::is_symlink(fs::symlink_status(supplied_source, error))) {
+        return Err(ErrorCode::FileAccessDenied, "Unpacked extension package source must not be a symbolic link: " + supplied_source.string());
     }
-    if (!fs::is_directory(source_root, error)) {
-        return Err(ErrorCode::FileNotFound, "Unpacked extension package source is not a directory: " + source_root.string());
+    if (!fs::is_directory(supplied_source, error)) {
+        return Err(ErrorCode::FileNotFound, "Unpacked extension package source is not a directory: " + supplied_source.string());
     }
 
-    auto manifest = LoadManifest(source_root / "manifest.yaml");
+    auto manifest = LoadManifest(supplied_source / "manifest.yaml");
     if (!manifest) {
         return Err(manifest.error());
     }
@@ -816,15 +1158,14 @@ Result<PackageLayout> InstallUnpackedPackage(const fs::path& source_root, const 
         return Err(layout.error());
     }
 
-    const fs::path canonical_source = fs::weakly_canonical(source_root, error);
+    const fs::path canonical_source = fs::weakly_canonical(supplied_source, error);
     if (error) {
         return Err(ErrorCode::FileReadError, "Failed to canonicalize unpacked extension source: " + error.message());
     }
     if (PathsOverlap(canonical_source, layout->install_root) || PathsOverlap(canonical_source, layout->install_root.parent_path())) {
         return Err(ErrorCode::InvalidArgument, "Unpacked extension source must not overlap the extension install root.");
     }
-    const fs::path supplied_source = fs::absolute(source_root, error);
-    if (error || !SamePath(source_root, source_root.lexically_normal())) {
+    if (!SamePath(source_root, source_root.lexically_normal())) {
         return Err(ErrorCode::FileAccessDenied, "Unpacked extension source must be canonical and must not use a symbolic-link alias.");
     }
 #ifdef _WIN32
@@ -865,15 +1206,19 @@ Result<PackageLayout> InstallUnpackedPackage(const fs::path& source_root, const 
     }
     const fs::path staging_root = std::move(*staging);
 
-    auto copied = CopyPackageTree(source_root, staging_root, *manifest);
+    auto copied = CopyPackageTree(canonical_source, staging_root, *manifest);
     if (!copied) {
         return ErrorWithCleanup(copied.error(), staging_root);
     }
 
+    auto staged_manifest = ValidateStagedPackage(staging_root, &*manifest);
+    if (!staged_manifest) {
+        return ErrorWithCleanup(staged_manifest.error(), staging_root);
+    }
     auto valid_staged = ValidatePackageLayout(PackageLayout{
         .install_root = staging_root,
         .manifest = staging_root / "manifest.yaml",
-        .wasm = (staging_root / manifest->wasm_path).lexically_normal(),
+        .wasm = (staging_root / staged_manifest->wasm_path).lexically_normal(),
         .data_root = layout->data_root,
         .config_root = layout->config_root,
         .cache_root = layout->cache_root,
@@ -892,7 +1237,6 @@ Result<PackageLayout> InstallUnpackedPackage(const fs::path& source_root, const 
 
 Result<PackageLayout> InstallArchive(const fs::path& archive_path, const Roots& roots, InstallPolicy policy) {
 #ifndef __EMSCRIPTEN__
-    std::error_code error;
     auto validated_roots = ValidateRoots(roots);
     if (!validated_roots)
         return Err(validated_roots.error());
@@ -913,22 +1257,9 @@ Result<PackageLayout> InstallArchive(const fs::path& archive_path, const Roots& 
         return ErrorWithCleanup(extracted.error(), staging_root);
     }
 
-    auto manifest = LoadManifest(staging_root / "manifest.yaml");
-    if (!manifest) {
+    auto manifest = ValidateStagedPackage(staging_root);
+    if (!manifest)
         return ErrorWithCleanup(manifest.error(), staging_root);
-    }
-
-    std::uintmax_t total_bytes = 0;
-    for (const fs::directory_entry& entry : fs::recursive_directory_iterator(staging_root, fs::directory_options::none, error)) {
-        if (error) {
-            return ErrorWithCleanup(MakeError(ErrorCode::FileReadError, error.message()), staging_root);
-        }
-
-        auto valid = ValidateSourceEntry(entry, staging_root, *manifest, &total_bytes);
-        if (!valid) {
-            return ErrorWithCleanup(valid.error(), staging_root);
-        }
-    }
 
     auto layout = ResolvePackageLayout(*manifest, roots);
     if (!layout) {

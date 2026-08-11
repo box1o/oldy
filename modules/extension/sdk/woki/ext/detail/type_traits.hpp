@@ -6,6 +6,9 @@
 
 namespace woki::ext::detail {
 
+template <typename T>
+T&& Declval() noexcept;
+
 #if __has_include(<type_traits>)
 template <typename T, typename U>
 inline constexpr bool IsSame = std::is_same_v<T, U>;

@@ -143,6 +143,7 @@ foreach(language IN ITEMS C CXX)
 endforeach()
 
 set(hash_package "${TEST_ROOT}/hash-package")
+file(WRITE "${hash_package}.state" "legacy-sidecar")
 execute_process(
     COMMAND "${CMAKE_COMMAND}"
         -D SOURCE_DIR=${package_dir}
@@ -157,6 +158,9 @@ execute_process(
 if(NOT hash_stage_result EQUAL 0)
     message(FATAL_ERROR "Could not stage package for SDK content-hash test")
 endif()
+if(EXISTS "${hash_package}.state")
+    message(FATAL_ERROR "Legacy package state sidecar was not removed during migration")
+endif()
 set(sdk_hash_probe "${relocated_sdk}/woki/ext/sdk/ext.h")
 file(READ "${sdk_hash_probe}" sdk_hash_probe_contents)
 file(APPEND "${sdk_hash_probe}" "\n/* changed SDK content */\n")
@@ -164,7 +168,7 @@ execute_process(
     COMMAND "${CMAKE_COMMAND}"
         -D PROJECT_DIR=${source_dir}
         -D SDK_DIR=${relocated_sdk}
-        -D STATE_FILE=${hash_package}.state
+        -D STATE_FILE=${hash_package}/.woki-state
         -P "${WOKI_CMAKE_DIR}/CheckExtensionState.cmake"
     RESULT_VARIABLE stale_sdk_result
     OUTPUT_QUIET
@@ -181,7 +185,7 @@ file(MAKE_DIRECTORY "${failed_source}" "${preserved_destination}")
 file(COPY "${package_dir}/" DESTINATION "${failed_source}")
 file(WRITE "${failed_source}/${wasm_relative}" "not wasm")
 file(WRITE "${preserved_destination}/sentinel" "preserved")
-file(WRITE "${preserved_destination}.state" "preserved-state")
+file(WRITE "${preserved_destination}/.woki-state" "preserved-state")
 execute_process(
     COMMAND "${CMAKE_COMMAND}"
         -D SOURCE_DIR=${failed_source}
@@ -196,7 +200,7 @@ execute_process(
     ERROR_QUIET
 )
 file(READ "${preserved_destination}/sentinel" preserved_package_contents)
-file(READ "${preserved_destination}.state" preserved_state_contents)
+file(READ "${preserved_destination}/.woki-state" preserved_state_contents)
 if(failed_stage_result EQUAL 0 OR NOT preserved_package_contents STREQUAL "preserved" OR NOT preserved_state_contents STREQUAL "preserved-state")
     message(FATAL_ERROR "failed staging did not preserve the existing package and state")
 endif()

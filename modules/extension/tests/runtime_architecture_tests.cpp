@@ -31,6 +31,8 @@ struct InstanceCalls {
     bool fail_init{};
     bool fail_tick{};
     bool fail_event{};
+    bool emit_on_create{};
+    bool emit_on_initialize{};
     bool emit_on_unload{};
     bool events_granted{};
     std::optional<woki::ErrorCode> command_error;
@@ -55,6 +57,10 @@ public:
 
     woki::Result<void> Initialize() override {
         ++calls_.initialized;
+        if (calls_.emit_on_initialize) {
+            const std::array<woki::u8, 1> payload{6};
+            (void)host_.EmitEvent(woki::ext::ExtensionEventId(6), payload);
+        }
         return calls_.fail_init ? woki::Err(woki::ErrorCode::InvalidState, "initialize failed") : woki::Ok();
     }
 
@@ -107,6 +113,10 @@ public:
         auto& calls = calls_[package.Id()];
         ++calls.created;
         calls.events_granted = host.Allows(woki::ext::Permission::Events);
+        if (calls.emit_on_create) {
+            const std::array<woki::u8, 1> payload{5};
+            (void)host.EmitEvent(woki::ext::ExtensionEventId(5), payload);
+        }
         if (calls.fail_create)
             return woki::Err(woki::ErrorCode::InvalidState, "create failed");
         for (const auto event_type : calls.subscriptions) {
@@ -251,6 +261,23 @@ TEST_CASE("Registry source scan accepts development folder names and isolates du
     REQUIRE(registry.Find("woki.dev")->Layout().config_root == root / "ext-config" / "woki.dev");
     REQUIRE(registry.Failures().size() == 2);
     REQUIRE(registry.Failures().front().CandidateId() == "woki.same");
+}
+
+TEST_CASE("Registry source scan rejects aliases and overlap with runtime roots") {
+    const fs::path root = TempRoot("registry_source_roots");
+    const woki::ext::Roots roots{root / "installed", root / "data", root / "cache", root / "config"};
+    fs::create_directories(root / "source");
+    woki::ext::Registry registry;
+
+    CHECK_FALSE(registry.ScanSource("relative-source", roots));
+    CHECK_FALSE(registry.ScanSource(root / "data", roots));
+    fs::create_directories(root / "installed");
+    CHECK(registry.ScanSource(root / "installed", roots));
+
+    std::error_code error;
+    fs::create_directory_symlink(root / "source", root / "source-alias", error);
+    if (!error)
+        CHECK_FALSE(registry.ScanSource(root / "source-alias", roots));
 }
 
 TEST_CASE("Registry scan failure preserves the previous snapshot") {
@@ -599,6 +626,43 @@ TEST_CASE("ExtensionManager drains events emitted by every explicit unload bound
     REQUIRE(bus.events.size() == 1);
     CHECK(bus.events.front().type == (woki::ext::host::kExtensionEventNamespace | 7));
     CHECK(bus.events.front().origin.extension_id == "woki.events");
+}
+
+TEST_CASE("ExtensionManager discards failed activation events and drains destruction unload events") {
+    const fs::path root = TempRoot("manager_activation_event_transactions");
+    WritePackage(root / "extensions" / "woki.events", "woki.events", "[events]");
+    std::map<std::string, InstanceCalls> calls;
+    RecordingBus bus;
+
+    calls["woki.events"].emit_on_create = true;
+    calls["woki.events"].emit_on_initialize = true;
+    calls["woki.events"].fail_create = true;
+    calls["woki.events"].fail_init = true;
+    {
+        auto manager = woki::ext::internal::ExtensionManagerAccess::Create(woki::createScope<TrackingEngine>(calls));
+        manager.SetEventBus(&bus);
+        manager.SetRoots({root / "extensions", root / "data", root / "cache"});
+        REQUIRE(manager.Scan());
+        CHECK_FALSE(manager.Load("woki.events"));
+        CHECK(bus.events.empty());
+        calls["woki.events"].fail_create = false;
+        CHECK_FALSE(manager.Load("woki.events"));
+    }
+    CHECK(bus.events.empty());
+
+    calls["woki.events"].fail_init = false;
+    calls["woki.events"].emit_on_create = false;
+    calls["woki.events"].emit_on_initialize = false;
+    calls["woki.events"].emit_on_unload = true;
+    {
+        auto manager = woki::ext::internal::ExtensionManagerAccess::Create(woki::createScope<TrackingEngine>(calls));
+        manager.SetEventBus(&bus);
+        manager.SetRoots({root / "extensions", root / "data", root / "cache"});
+        REQUIRE(manager.Scan());
+        REQUIRE(manager.Load("woki.events"));
+    }
+    REQUIRE(bus.events.size() == 1);
+    CHECK(bus.events.front().type == woki::ext::ExtensionEventId(7));
 }
 
 TEST_CASE("ExtensionManager reports a committed install without mutating the active catalog") {
