@@ -417,7 +417,7 @@ Result<void> RenderLayer::BuildRenderGraph() {
             pass.SetScissorRect(viewport.x, viewport.y, viewport.width, viewport.height);
             const u32 offset = index * state.uniform_stride;
             pass.SetBindGroup(1, state.view_bind_group.get(), std::span(&offset, 1));
-            pass.DrawIndexed(kCubeIndices.size(), 1);
+            pass.DrawIndexed(static_cast<u32>(kCubeIndices.size()), 1);
         }
     });
     builder.SetPassData("FourViewCube", pass_state_);

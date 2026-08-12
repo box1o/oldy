@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <limits>
+#include <type_traits>
 
 namespace woki::asset {
 namespace {
@@ -34,10 +35,12 @@ public:
         if (Remaining() < sizeof(T)) {
             return false;
         }
-        value = 0;
+        using Unsigned = std::make_unsigned_t<T>;
+        Unsigned bits = 0;
         for (std::size_t i = 0; i < sizeof(T); ++i) {
-            value |= static_cast<T>(std::to_integer<u8>(bytes_[position_ + i])) << (i * 8U);
+            bits |= static_cast<Unsigned>(std::to_integer<u8>(bytes_[position_ + i])) << (i * 8U);
         }
+        value = static_cast<T>(bits);
         position_ += sizeof(T);
         return true;
     }

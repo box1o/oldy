@@ -83,6 +83,13 @@ TEST_CASE("File watcher rejects missing roots") {
 
 TEST_CASE("File watcher reports recursive file changes with relative paths") {
     TemporaryDirectory temporary("recursive");
+    fs::create_directory(temporary.Path() / "nested");
+    {
+        std::ofstream modified(temporary.Path() / "nested" / "modified.txt");
+        modified << "first";
+        std::ofstream removed(temporary.Path() / "nested" / "removed.txt");
+        removed << "remove me";
+    }
     auto watcher_result = woki::FileWatcher::Create(temporary.Path());
     REQUIRE(watcher_result);
     auto watcher = std::move(*watcher_result);
@@ -90,24 +97,23 @@ TEST_CASE("File watcher reports recursive file changes with relative paths") {
     CHECK(watcher->Root().is_absolute());
     CHECK(watcher->Drain().empty());
 
-    fs::create_directory(temporary.Path() / "nested");
     {
-        std::ofstream file(temporary.Path() / "nested" / "example.txt");
+        std::ofstream file(temporary.Path() / "nested" / "added.txt");
         file << "first";
     }
-    auto events = WaitFor(*watcher, [](const auto& current) { return Contains(current, woki::FileWatchEventType::Added, "nested/example.txt"); });
-    CHECK(Contains(events, woki::FileWatchEventType::Added, "nested/example.txt"));
+    auto events = WaitFor(*watcher, [](const auto& current) { return Contains(current, woki::FileWatchEventType::Added, "nested/added.txt"); });
+    CHECK(Contains(events, woki::FileWatchEventType::Added, "nested/added.txt"));
 
     {
-        std::ofstream file(temporary.Path() / "nested" / "example.txt", std::ios::app);
+        std::ofstream file(temporary.Path() / "nested" / "modified.txt", std::ios::app);
         file << "second";
     }
-    events = WaitFor(*watcher, [](const auto& current) { return Contains(current, woki::FileWatchEventType::Modified, "nested/example.txt"); });
-    CHECK(Contains(events, woki::FileWatchEventType::Modified, "nested/example.txt"));
+    events = WaitFor(*watcher, [](const auto& current) { return Contains(current, woki::FileWatchEventType::Modified, "nested/modified.txt"); });
+    CHECK(Contains(events, woki::FileWatchEventType::Modified, "nested/modified.txt"));
 
-    fs::remove(temporary.Path() / "nested" / "example.txt");
-    events = WaitFor(*watcher, [](const auto& current) { return Contains(current, woki::FileWatchEventType::Removed, "nested/example.txt"); });
-    CHECK(Contains(events, woki::FileWatchEventType::Removed, "nested/example.txt"));
+    fs::remove(temporary.Path() / "nested" / "removed.txt");
+    events = WaitFor(*watcher, [](const auto& current) { return Contains(current, woki::FileWatchEventType::Removed, "nested/removed.txt"); });
+    CHECK(Contains(events, woki::FileWatchEventType::Removed, "nested/removed.txt"));
 
     watcher->Stop();
     CHECK_FALSE(watcher->IsRunning());
