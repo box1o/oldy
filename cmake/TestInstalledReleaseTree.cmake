@@ -42,6 +42,7 @@ foreach(required IN ITEMS
     "${prefix}/${DATADIR}/woki/extensions/${CONFIG}/dino-lab/manifest.yaml"
     "${prefix}/${DATADIR}/woki/extensions/${CONFIG}/dino-lab/extension.wasm"
     "${prefix}/${DATADIR}/woki/extensions/${CONFIG}/dino-lab/assets/field-guide.txt"
+    "${prefix}/${DATADIR}/woki/assets/shaders/descriptors/cube.woki-shader"
 )
     if(NOT EXISTS "${required}")
         message(FATAL_ERROR "Installed release tree is missing ${required}")

@@ -1,0 +1,1 @@
+{"schema":1,"name":"depth","language":"wgsl","sources":["shaders/common/transform.wgsl","shaders/mesh/vertex.wgsl","shaders/abi/view.wgsl","shaders/abi/object.wgsl","shaders/mesh/skinning.wgsl","shaders/entry/depth.wgsl"],"entry_points":[{"stage":"vertex","name":"depth_static_vs"},{"stage":"vertex","name":"depth_skinned_vs"}]}

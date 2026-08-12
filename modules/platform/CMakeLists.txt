@@ -2,11 +2,27 @@ cmake_minimum_required(VERSION 3.25)
 
 project(platform VERSION 1.0.0 DESCRIPTION "Platform and window abstraction" LANGUAGES CXX)
 
+set(file_watcher_source src/file_watcher_emscripten.cpp)
+if(NOT EMSCRIPTEN)
+    if(WIN32)
+        set(file_watcher_source src/file_watcher_windows.cpp)
+    elseif(APPLE)
+        set(file_watcher_source src/file_watcher_macos.cpp)
+    elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        set(file_watcher_source src/file_watcher_linux.cpp)
+    else()
+        message(FATAL_ERROR "File watcher backend is unavailable for ${CMAKE_SYSTEM_NAME}")
+    endif()
+endif()
+
 add_module(platform
     SOURCES
+        src/file_watcher.cpp
+        ${file_watcher_source}
         src/window/window.cpp
     HEADERS
         include/woki/platform.hpp
+        include/woki/platform/file_watcher.hpp
         include/woki/window/window.hpp
         include/woki/events/base.hpp
         include/woki/events/type.hpp
@@ -28,6 +44,10 @@ if(EMSCRIPTEN)
     target_link_options(woki_platform PUBLIC "-sUSE_GLFW=3")
 else()
     target_link_libraries(woki_platform PRIVATE glfw)
+endif()
+
+if(APPLE)
+    target_link_libraries(woki_platform PRIVATE "-framework CoreServices")
 endif()
 
 if(BUILD_TESTING)

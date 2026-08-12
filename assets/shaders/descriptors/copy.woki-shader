@@ -1,0 +1,1 @@
+{"schema":1,"name":"copy","language":"wgsl","sources":["shaders/post/fullscreen.wgsl","shaders/abi/post.wgsl","shaders/entry/copy.wgsl"],"entry_points":[{"stage":"vertex","name":"copy_vs"},{"stage":"fragment","name":"copy_fs"}]}

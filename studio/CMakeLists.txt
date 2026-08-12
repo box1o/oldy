@@ -40,8 +40,14 @@ set(_DEPS
     woki::core
     woki::platform
     woki::rhi
+    woki::gfx
+    woki::gfx_asset_preload
     woki::extension
 )
+
+if(EMSCRIPTEN)
+    target_compile_definitions(studio PRIVATE WOKI_STUDIO_ASSET_ROOT="/assets")
+endif()
 
 if(EMSCRIPTEN)
     message(STATUS "Building studio for web")
@@ -141,9 +147,15 @@ else()
         "${_INSTALLED_STUDIO_DIR}"
         "/${CMAKE_INSTALL_DATADIR}/woki/extensions"
     )
+    file(RELATIVE_PATH _INSTALLED_ASSETS_FROM_BINDIR
+        "${_INSTALLED_STUDIO_DIR}"
+        "/${CMAKE_INSTALL_DATAROOTDIR}/woki/assets"
+    )
 
     target_compile_definitions(studio PRIVATE
         "WOKI_SOURCE_EXTENSIONS_DIR=(*woki::paths::ExecutablePath()).parent_path() / std::filesystem::path{\"${_INSTALLED_EXTENSIONS_FROM_BINDIR}/$<CONFIG>\"}"
+        WOKI_STUDIO_DEVELOPMENT_ASSET_ROOT="${WOKI_GFX_ASSET_BUILD_DIR}"
+        WOKI_STUDIO_INSTALLED_ASSET_DIR="${_INSTALLED_ASSETS_FROM_BINDIR}"
         WOKI_SYSTEM_CONFIG_DIR="${CMAKE_INSTALL_FULL_SYSCONFDIR}/woki"
     )
 

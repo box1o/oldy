@@ -1,0 +1,1 @@
+{"schema":1,"name":"cube","language":"wgsl","sources":["shaders/common/math.wgsl","shaders/common/transform.wgsl","shaders/mesh/vertex.wgsl","shaders/abi/view.wgsl","shaders/abi/object.wgsl","shaders/entry/cube.wgsl"],"entry_points":[{"stage":"vertex","name":"cube_vs"},{"stage":"vertex","name":"cube_instanced_vs"},{"stage":"fragment","name":"cube_fs"}]}

@@ -1,0 +1,1 @@
+{"schema":1,"name":"validate-compute","language":"wgsl","sources":["shaders/compute/indexing.wgsl","shaders/entry/validate_compute.wgsl"],"entry_points":[{"stage":"compute","name":"validate_compute"}]}

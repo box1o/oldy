@@ -1,0 +1,1 @@
+{"schema":1,"name":"tone-map","language":"wgsl","sources":["shaders/common/color.wgsl","shaders/post/fullscreen.wgsl","shaders/abi/post.wgsl","shaders/entry/tone_map.wgsl"],"entry_points":[{"stage":"vertex","name":"tone_map_vs"},{"stage":"fragment","name":"tone_map_fs"}]}

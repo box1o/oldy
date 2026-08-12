@@ -1,0 +1,1 @@
+{"schema":1,"name":"bitmap-text","language":"wgsl","sources":["shaders/common/math.wgsl","shaders/text/coverage.wgsl","shaders/abi/text.wgsl","shaders/entry/text.wgsl"],"entry_points":[{"stage":"vertex","name":"text_vs"},{"stage":"fragment","name":"bitmap_text_fs"}]}
