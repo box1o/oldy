@@ -132,7 +132,7 @@ jobs:
             -DCMAKE_CXX_COMPILER="${{ matrix.compiler_cxx }}" \
             -DCMAKE_PREFIX_PATH="${DAWN_PREFIX}" \
             -DDawn_DIR="${Dawn_DIR}"
-          cmake --build build-tint --target gfx_tests gfx_tint_tests woki-shader -j"$(nproc)"
+          cmake --build build-tint --target gfx_tests gfx_tint_tests woki-shader -j2
           ctest --test-dir build-tint --output-on-failure -R '^gfx_(tests|tint_tests)$'
 
       - name: Prepare package
