@@ -2,5 +2,6 @@
 
 // IWYU pragma: begin_exports
 #include "events/events.hpp"
+#include "platform/file_watcher.hpp"
 #include "window/window.hpp"
 // IWYU pragma: end_exports

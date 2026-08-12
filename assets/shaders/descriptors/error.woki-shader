@@ -1,0 +1,1 @@
+{"schema":1,"name":"error","language":"wgsl","sources":["shaders/entry/error.wgsl"],"entry_points":[{"stage":"vertex","name":"error_vs"},{"stage":"fragment","name":"error_fs"}]}

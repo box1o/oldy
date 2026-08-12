@@ -42,6 +42,7 @@ foreach(required IN ITEMS
     "${prefix}/${DATADIR}/woki/extensions/${CONFIG}/dino-lab/manifest.yaml"
     "${prefix}/${DATADIR}/woki/extensions/${CONFIG}/dino-lab/extension.wasm"
     "${prefix}/${DATADIR}/woki/extensions/${CONFIG}/dino-lab/assets/field-guide.txt"
+    "${prefix}/${DATADIR}/woki/assets/shaders/descriptors/cube.woki-shader"
 )
     if(NOT EXISTS "${required}")
         message(FATAL_ERROR "Installed release tree is missing ${required}")
@@ -57,6 +58,11 @@ endforeach()
 file(STRINGS "${studio}" studio_strings REGEX "woki/extensions/${CONFIG}")
 if(NOT studio_strings)
     message(FATAL_ERROR "Installed Studio does not contain its executable-relative bundled extension path")
+endif()
+
+file(STRINGS "${studio}" studio_asset_strings REGEX "woki/assets")
+if(NOT studio_asset_strings)
+    message(FATAL_ERROR "Installed Studio does not contain its executable-relative asset path")
 endif()
 
 set(project_parent "${TEST_ROOT}/installed cli project")

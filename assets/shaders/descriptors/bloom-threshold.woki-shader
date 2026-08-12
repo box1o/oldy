@@ -1,0 +1,1 @@
+{"schema":1,"name":"bloom-threshold","language":"wgsl","sources":["shaders/common/math.wgsl","shaders/post/fullscreen.wgsl","shaders/post/bloom.wgsl","shaders/abi/post.wgsl","shaders/entry/bloom.wgsl"],"entry_points":[{"stage":"vertex","name":"bloom_vs"},{"stage":"fragment","name":"bloom_threshold_fs"}]}

@@ -25,6 +25,16 @@ find_or_add(Catch2
 mark_dependency_system(Catch2)
 mark_dependency_system(Catch2WithMain)
 
+find_or_add(nlohmann_json
+    NO_SYSTEM
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG v3.11.3
+    CMAKE_CACHE_VARS
+        "JSON_BuildTests=OFF"
+        "JSON_Install=OFF"
+)
+mark_dependency_system(nlohmann_json)
+
 if(NOT EMSCRIPTEN)
     find_package(LibArchive QUIET)
     if(NOT LibArchive_FOUND)
@@ -95,13 +105,20 @@ if(NOT EMSCRIPTEN)
             "SPDLOG_FMT_EXTERNAL=ON"
     )
 
+    set(_GLFW_WAYLAND OFF)
+    set(_GLFW_X11 OFF)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        set(_GLFW_WAYLAND ON)
+        set(_GLFW_X11 ON)
+    endif()
+
     find_or_add(glfw
         GIT_REPOSITORY https://github.com/glfw/glfw.git
         GIT_TAG master
         DISABLE_INSTALL
         CMAKE_CACHE_VARS
-            GLFW_BUILD_WAYLAND=ON
-            GLFW_BUILD_X11=ON
+            "GLFW_BUILD_WAYLAND=${_GLFW_WAYLAND}"
+            "GLFW_BUILD_X11=${_GLFW_X11}"
     )
 
     find_or_add(msdfgen
@@ -117,22 +134,41 @@ if(NOT EMSCRIPTEN)
             "MSDFGEN_INSTALL=OFF"
     )
 
+    set(_DAWN_VULKAN OFF)
+    set(_DAWN_D3D12 OFF)
+    set(_DAWN_METAL OFF)
+    set(_DAWN_DESKTOP_GL OFF)
+    set(_DAWN_OPENGLES OFF)
+    set(_DAWN_WAYLAND OFF)
+    set(_DAWN_X11 OFF)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        set(_DAWN_VULKAN ON)
+        set(_DAWN_DESKTOP_GL ON)
+        set(_DAWN_OPENGLES ON)
+        set(_DAWN_WAYLAND ON)
+        set(_DAWN_X11 ON)
+    elseif(APPLE)
+        set(_DAWN_METAL ON)
+    elseif(WIN32)
+        set(_DAWN_D3D12 ON)
+    endif()
+
     find_or_add(Dawn
         GIT_REPOSITORY https://github.com/google/dawn.git
-        GIT_TAG main
+        GIT_TAG 9fd4a731474f66c1ce5465f9b13919ad7487315d
         FIND_PACKAGE_ARGS CONFIG
         CMAKE_CACHE_VARS
             DAWN_FETCH_DEPENDENCIES=ON
             DAWN_BUILD_TESTS=OFF
-            DAWN_ENABLE_VULKAN=ON
+            "DAWN_ENABLE_VULKAN=${_DAWN_VULKAN}"
             DAWN_ENABLE_D3D11=OFF
-            DAWN_ENABLE_D3D12=OFF
-            DAWN_ENABLE_METAL=OFF
+            "DAWN_ENABLE_D3D12=${_DAWN_D3D12}"
+            "DAWN_ENABLE_METAL=${_DAWN_METAL}"
             DAWN_ENABLE_NULL=ON
-            DAWN_ENABLE_DESKTOP_GL=ON
-            DAWN_ENABLE_OPENGLES=ON
-            DAWN_USE_WAYLAND=ON
-            DAWN_USE_X11=ON
+            "DAWN_ENABLE_DESKTOP_GL=${_DAWN_DESKTOP_GL}"
+            "DAWN_ENABLE_OPENGLES=${_DAWN_OPENGLES}"
+            "DAWN_USE_WAYLAND=${_DAWN_WAYLAND}"
+            "DAWN_USE_X11=${_DAWN_X11}"
             DAWN_USE_GLFW=ON
     )
 else()

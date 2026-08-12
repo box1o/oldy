@@ -1,0 +1,12 @@
+cmake_minimum_required(VERSION 3.25)
+
+file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS "*.cpp")
+add_module_test(gfx_tests SOURCES ${SOURCES} LIBRARIES woki::gfx Catch2::Catch2WithMain)
+add_dependencies(gfx_tests woki_gfx_assets)
+target_compile_definitions(gfx_tests PRIVATE WOKI_GFX_TEST_ASSET_ROOT="${WOKI_GFX_ASSET_BUILD_DIR}")
+if(WOKI_GFX_HAS_TINT)
+    target_compile_definitions(gfx_tests PRIVATE WOKI_GFX_TEST_HAS_TINT=1)
+    add_module_test(gfx_tint_tests SOURCES reflection_tests.cpp pack_tests.cpp LIBRARIES woki::gfx Catch2::Catch2WithMain)
+    add_dependencies(gfx_tint_tests woki_gfx_assets)
+    target_compile_definitions(gfx_tint_tests PRIVATE WOKI_GFX_TEST_ASSET_ROOT="${WOKI_GFX_ASSET_BUILD_DIR}" WOKI_GFX_TEST_HAS_TINT=1)
+endif()

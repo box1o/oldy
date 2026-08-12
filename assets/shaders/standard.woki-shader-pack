@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "id": "woki.standard",
+  "version": "1.0.0",
+  "dependencies": [],
+  "shaders": [
+    {"name":"bitmap-text","descriptor":"descriptors/bitmap-text.woki-shader"},
+    {"name":"bloom-blur","descriptor":"descriptors/bloom-blur.woki-shader"},
+    {"name":"bloom-composite","descriptor":"descriptors/bloom-composite.woki-shader"},
+    {"name":"bloom-threshold","descriptor":"descriptors/bloom-threshold.woki-shader"},
+    {"name":"copy","descriptor":"descriptors/copy.woki-shader"},
+    {"name":"cube","descriptor":"descriptors/cube.woki-shader"},
+    {"name":"depth","descriptor":"descriptors/depth.woki-shader"},
+    {"name":"error","descriptor":"descriptors/error.woki-shader"},
+    {"name":"msdf-text","descriptor":"descriptors/msdf-text.woki-shader"},
+    {"name":"pbr","descriptor":"descriptors/pbr.woki-shader"},
+    {"name":"sdf-text","descriptor":"descriptors/sdf-text.woki-shader"},
+    {"name":"sky","descriptor":"descriptors/sky.woki-shader"},
+    {"name":"tone-map","descriptor":"descriptors/tone-map.woki-shader"},
+    {"name":"unlit","descriptor":"descriptors/unlit.woki-shader"},
+    {"name":"validate-compute","descriptor":"descriptors/validate-compute.woki-shader"}
+  ]
+}
