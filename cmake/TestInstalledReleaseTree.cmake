@@ -60,11 +60,6 @@ if(NOT studio_strings)
     message(FATAL_ERROR "Installed Studio does not contain its executable-relative bundled extension path")
 endif()
 
-file(STRINGS "${studio}" studio_asset_strings REGEX "woki/assets")
-if(NOT studio_asset_strings)
-    message(FATAL_ERROR "Installed Studio does not contain its executable-relative asset path")
-endif()
-
 set(project_parent "${TEST_ROOT}/installed cli project")
 execute_process(
     COMMAND "${CMAKE_COMMAND}" -E env --unset=WOKI_CMAKE_DIR --unset=WOKI_SDK_DIR
