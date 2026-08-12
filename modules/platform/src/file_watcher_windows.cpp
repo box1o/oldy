@@ -6,7 +6,9 @@
 #include <array>
 #include <atomic>
 #include <cstddef>
+#include <condition_variable>
 #include <filesystem>
+#include <mutex>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -53,6 +55,13 @@ public:
         } catch (...) {
             state.running.store(false, std::memory_order_release);
             throw;
+        }
+        std::unique_lock lock(backend->startup_mutex_);
+        backend->startup_condition_.wait(lock, [&] { return backend->startup_complete_; });
+        if (!backend->startup_succeeded_) {
+            lock.unlock();
+            backend->Stop();
+            return Err(ErrorCode::FailedToAcquireResource, "Failed to start the Windows file watcher");
         }
         return scope<FileWatcherBackend>(std::move(backend));
     }
@@ -105,6 +114,7 @@ private:
         try {
             Run();
         } catch (...) {
+            ReportStartup(false);
             state_.PushRescan();
         }
         state_.running.store(false, std::memory_order_release);
@@ -122,6 +132,7 @@ private:
             if (requested == FALSE && GetLastError() != ERROR_IO_PENDING) {
                 throw std::system_error(static_cast<int>(GetLastError()), std::system_category());
             }
+            ReportStartup(true);
 
             const std::array<HANDLE, 2> events{stop_event_, io_event_};
             const DWORD wait_result = WaitForMultipleObjects(static_cast<DWORD>(events.size()), events.data(), FALSE, INFINITE);
@@ -169,10 +180,26 @@ private:
         }
     }
 
+    void ReportStartup(const bool succeeded) noexcept {
+        {
+            std::scoped_lock lock(startup_mutex_);
+            if (startup_complete_) {
+                return;
+            }
+            startup_succeeded_ = succeeded;
+            startup_complete_ = true;
+        }
+        startup_condition_.notify_all();
+    }
+
     FileWatcherState& state_;
     HANDLE directory_;
     HANDLE io_event_;
     HANDLE stop_event_;
+    std::mutex startup_mutex_;
+    std::condition_variable startup_condition_;
+    bool startup_complete_{false};
+    bool startup_succeeded_{false};
     std::atomic_bool stop_requested_{false};
     std::thread thread_;
 };
