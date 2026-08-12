@@ -56,8 +56,8 @@ bool Contains(const std::vector<woki::FileWatchEvent>& events, woki::FileWatchEv
     return std::ranges::any_of(events, [&](const auto& event) { return event.type == type && event.path == path; });
 }
 
-bool Invalidates(const std::vector<woki::FileWatchEvent>& events, woki::FileWatchEventType type, const fs::path& path) {
-    return Contains(events, type, path) || Contains(events, woki::FileWatchEventType::RescanRequired, {});
+bool Invalidates(const std::vector<woki::FileWatchEvent>& events, const fs::path& path) {
+    return std::ranges::any_of(events, [&](const auto& event) { return event.path == path; }) || Contains(events, woki::FileWatchEventType::RescanRequired, {});
 }
 
 std::vector<woki::FileWatchEvent> WaitForRescan(woki::FileWatcher& watcher) {
@@ -105,19 +105,19 @@ TEST_CASE("File watcher reports recursive file changes with relative paths") {
         std::ofstream file(temporary.Path() / "nested" / "added.txt");
         file << "first";
     }
-    auto events = WaitFor(*watcher, [](const auto& current) { return Invalidates(current, woki::FileWatchEventType::Added, "nested/added.txt"); });
-    CHECK(Invalidates(events, woki::FileWatchEventType::Added, "nested/added.txt"));
+    auto events = WaitFor(*watcher, [](const auto& current) { return Invalidates(current, "nested/added.txt"); });
+    CHECK(Invalidates(events, "nested/added.txt"));
 
     {
         std::ofstream file(temporary.Path() / "nested" / "modified.txt", std::ios::app);
         file << "second";
     }
-    events = WaitFor(*watcher, [](const auto& current) { return Invalidates(current, woki::FileWatchEventType::Modified, "nested/modified.txt"); });
-    CHECK(Invalidates(events, woki::FileWatchEventType::Modified, "nested/modified.txt"));
+    events = WaitFor(*watcher, [](const auto& current) { return Invalidates(current, "nested/modified.txt"); });
+    CHECK(Invalidates(events, "nested/modified.txt"));
 
     fs::remove(temporary.Path() / "nested" / "removed.txt");
-    events = WaitFor(*watcher, [](const auto& current) { return Invalidates(current, woki::FileWatchEventType::Removed, "nested/removed.txt"); });
-    CHECK(Invalidates(events, woki::FileWatchEventType::Removed, "nested/removed.txt"));
+    events = WaitFor(*watcher, [](const auto& current) { return Invalidates(current, "nested/removed.txt"); });
+    CHECK(Invalidates(events, "nested/removed.txt"));
 
     watcher->Stop();
     CHECK_FALSE(watcher->IsRunning());

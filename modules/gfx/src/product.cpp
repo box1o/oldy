@@ -42,10 +42,9 @@ public:
     bool Int(T& value) {
         if (bytes_.size() - offset_ < sizeof(T))
             return false;
-        using U = std::make_unsigned_t<T>;
-        U bits = 0;
+        u64 bits = 0;
         for (std::size_t i = 0; i < sizeof(T); ++i)
-            bits |= static_cast<U>(std::to_integer<u8>(bytes_[offset_ + i])) << (i * 8U);
+            bits |= static_cast<u64>(std::to_integer<u8>(bytes_[offset_ + i])) << (i * 8U);
         value = static_cast<T>(bits);
         offset_ += sizeof(T);
         return true;

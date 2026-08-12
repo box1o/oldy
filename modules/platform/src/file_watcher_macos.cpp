@@ -119,12 +119,13 @@ private:
         }
         if ((flags & kFSEventStreamEventFlagItemCreated) != 0U) {
             state_.Push({FileWatchEventType::Added, relative});
-        } else if ((flags & kFSEventStreamEventFlagItemRemoved) != 0U) {
+        }
+        if ((flags & kFSEventStreamEventFlagItemRemoved) != 0U) {
             state_.Push({FileWatchEventType::Removed, relative});
-        } else if ((flags
-                       & (kFSEventStreamEventFlagItemModified | kFSEventStreamEventFlagItemInodeMetaMod | kFSEventStreamEventFlagItemFinderInfoMod | kFSEventStreamEventFlagItemChangeOwner
-                           | kFSEventStreamEventFlagItemXattrMod))
-                   != 0U) {
+        }
+        if ((flags
+                & (kFSEventStreamEventFlagItemModified | kFSEventStreamEventFlagItemInodeMetaMod | kFSEventStreamEventFlagItemFinderInfoMod | kFSEventStreamEventFlagItemChangeOwner | kFSEventStreamEventFlagItemXattrMod))
+            != 0U) {
             state_.Push({FileWatchEventType::Modified, relative});
         }
     }
