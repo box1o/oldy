@@ -1,0 +1,72 @@
+{
+  "$schema": "https://schemas.woki.dev/cook-manifest/v1.schema.json",
+  "schema": 1,
+  "package": "woki.studio.standard",
+  "shaders": "shaders/standard.woki-shader-pack",
+  "shaderProducts": {
+    "bitmap-text": "shaders/bitmap-text.woki-product",
+    "canvas": "shaders/canvas.woki-product",
+    "bloom-blur": "shaders/bloom-blur.woki-product",
+    "bloom-composite": "shaders/bloom-composite.woki-product",
+    "bloom-downsample": "shaders/bloom-downsample.woki-product",
+    "bloom-threshold": "shaders/bloom-threshold.woki-product",
+    "cluster-lights": "shaders/cluster-lights.woki-product",
+    "copy": "shaders/copy.woki-product",
+    "cube": "shaders/cube.woki-product",
+    "depth": "shaders/depth.woki-product",
+    "error": "shaders/error.woki-product",
+    "exposure": "shaders/exposure.woki-product",
+    "fxaa": "shaders/fxaa.woki-product",
+    "gpu-visibility": "shaders/gpu-visibility.woki-product",
+    "hiz-downsample": "shaders/hiz-downsample.woki-product",
+    "hiz-seed": "shaders/hiz-seed.woki-product",
+    "msdf-text": "shaders/msdf-text.woki-product",
+    "pbr": "shaders/pbr.woki-product",
+    "sdf-text": "shaders/sdf-text.woki-product",
+    "sky": "shaders/sky.woki-product",
+    "tone-map": "shaders/tone-map.woki-product",
+    "taa": "shaders/taa.woki-product",
+    "unlit": "shaders/unlit.woki-product",
+    "validate-compute": "shaders/validate-compute.woki-product"
+  },
+  "pipelines": [
+    "render/compatibility-forward.woki-pipeline",
+    "render/cube.woki-pipeline",
+    "render/desktop-forward.woki-pipeline",
+    "render/editor-forward.woki-pipeline",
+    "render/mobile-forward.woki-pipeline"
+  ],
+  "materials": ["materials/default-pbr.woki-material", "materials/red-unlit.woki-material"],
+  "materialProducts": [
+    "materials/df1258a0-824a-54ec-b058-a77e0b52c017.woki-product",
+    "materials/398db147-4060-5923-bf8c-891905d4e26d.woki-product",
+    "materials/19cf6eb8-b656-5af1-808f-e42ed23100e8.woki-product",
+    "materials/51c90ad9-382b-545c-a531-8a1a2884b506.woki-product"
+  ],
+  "meshes": ["anim/climbing.woki-mesh-import"],
+  "textures": [
+    "textures/default/white.woki-texture",
+    "textures/default/black.woki-texture",
+    "textures/default/flat-normal.woki-texture",
+    "textures/default/magenta.woki-texture",
+    "textures/default/white-cube.woki-texture",
+    "textures/default/black-cube.woki-texture",
+    "textures/default/depth.woki-texture"
+  ],
+  "textureProducts": {
+    "white": "textures/b73e75ab-a346-51ce-8485-49e114d7d2e1.woki-product",
+    "black": "textures/aee2f8f1-7765-59ca-b658-3fe43d844b9f.woki-product",
+    "flat-normal": "textures/f72fb0bb-0bd7-5d44-a536-3568824ed392.woki-product",
+    "magenta": "textures/3766a4b6-ef5e-54aa-8753-d664ca038eed.woki-product",
+    "white-cube": "textures/fd99a93d-40d1-55f9-8c93-a6d4077a87b9.woki-product",
+    "black-cube": "textures/451a732a-2cc4-5949-bd8a-86e3d4266141.woki-product",
+    "depth": "textures/a3c2678b-6cc9-50be-950d-2e5be6473194.woki-product"
+  },
+  "environmentFallbacks": {
+    "radiance": "textures/451a732a-2cc4-5949-bd8a-86e3d4266141.woki-product",
+    "irradiance": "textures/451a732a-2cc4-5949-bd8a-86e3d4266141.woki-product",
+    "prefilteredSpecular": "textures/451a732a-2cc4-5949-bd8a-86e3d4266141.woki-product",
+    "brdfLut": "textures/b73e75ab-a346-51ce-8485-49e114d7d2e1.woki-product"
+  },
+  "runtimeFiles": ["ui/theme/base.woki-theme", "ui/theme/dark.woki-theme", "ui/theme/light.woki-theme"]
+}

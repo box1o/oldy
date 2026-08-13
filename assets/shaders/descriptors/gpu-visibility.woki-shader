@@ -1,0 +1,1 @@
+{"schema":1,"name":"gpu-visibility","language":"wgsl","sources":["shaders/compute/gpu_visibility.wgsl"],"entry_points":[{"stage":"compute","name":"cull_and_classify"}]}

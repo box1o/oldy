@@ -11,6 +11,31 @@
 
 namespace woki::rhi {
 
+// WebGPU-compatible indirect argument layouts. Keeping these types in the RHI
+// prevents renderer code from depending on a backend SDK's packing rules.
+struct DrawIndirectArguments final {
+    u32 vertex_count{};
+    u32 instance_count{};
+    u32 first_vertex{};
+    u32 first_instance{};
+};
+
+struct DrawIndexedIndirectArguments final {
+    u32 index_count{};
+    u32 instance_count{};
+    u32 first_index{};
+    i32 base_vertex{};
+    u32 first_instance{};
+};
+
+struct IndirectDrawCount final {
+    u32 value{};
+};
+
+static_assert(sizeof(DrawIndirectArguments) == 16);
+static_assert(sizeof(DrawIndexedIndirectArguments) == 20);
+static_assert(sizeof(IndirectDrawCount) == 4);
+
 class RenderPassEncoder {
 public:
     virtual ~RenderPassEncoder() = default;
@@ -26,6 +51,19 @@ public:
     virtual void InsertDebugMarker(std::string_view marker_label) = 0;
     virtual void MultiDrawIndexedIndirect(const Buffer& indirect_buffer, u64 indirect_offset, u32 max_draw_count, const Buffer* draw_count_buffer = nullptr, u64 draw_count_buffer_offset = 0) = 0;
     virtual void MultiDrawIndirect(const Buffer& indirect_buffer, u64 indirect_offset, u32 max_draw_count, const Buffer* draw_count_buffer = nullptr, u64 draw_count_buffer_offset = 0) = 0;
+
+    void DrawIndexedIndirectCommand(const Buffer& indirect_buffer, const u32 command_index) {
+        DrawIndexedIndirect(indirect_buffer, static_cast<u64>(command_index) * sizeof(DrawIndexedIndirectArguments));
+    }
+
+    void DrawIndirectCommand(const Buffer& indirect_buffer, const u32 command_index) {
+        DrawIndirect(indirect_buffer, static_cast<u64>(command_index) * sizeof(DrawIndirectArguments));
+    }
+
+    void MultiDrawIndexedIndirectCount(const Buffer& commands, const u32 first_command, const u32 capacity, const Buffer& counts, const u32 count_index) {
+        MultiDrawIndexedIndirect(commands, static_cast<u64>(first_command) * sizeof(DrawIndexedIndirectArguments), capacity, &counts, static_cast<u64>(count_index) * sizeof(IndirectDrawCount));
+    }
+
     virtual void PixelLocalStorageBarrier() = 0;
     virtual void PopDebugGroup() = 0;
     virtual void PushDebugGroup(std::string_view group_label) = 0;

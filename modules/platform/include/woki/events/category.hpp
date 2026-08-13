@@ -9,13 +9,16 @@ enum class EventCategory : u16 {
     kWindow = 1 << 0,
     kInput = 1 << 1,
     kKeyboard = 1 << 2,
-    kMouse = 1 << 3,
-    kMouseButton = 1 << 4,
+    kPointer = 1 << 3,
+    kGesture = 1 << 4,
     kRender = 1 << 5,
     kApplication = 1 << 6,
     kScene = 1 << 7,
     kPhysics = 1 << 8,
     kAudio = 1 << 9,
+    kGamepad = 1 << 10,
+    kText = 1 << 11,
+    kDevice = 1 << 12,
     kCustom = 1 << 15,
 };
 

@@ -1,6 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include <woki/gfx.hpp>
+#include <woki/gfx/advanced.hpp>
 
 TEST_CASE("Tint reflection normalizes a WGSL interface snapshot") {
     if (!woki::gfx::IsTintShaderCompilerAvailable()) {

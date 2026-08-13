@@ -21,3 +21,4 @@ permissions:
 #     - id: woki.hello.say
 #       title: Say Hello
 #       category: Examples
+$schema: https://schemas.woki.dev/extension.manifest/v1.schema.json

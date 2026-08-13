@@ -1,19 +1,18 @@
 #include <array>
 #include <cerrno>
+#include <poll.h>
+#include <string>
+#include <thread>
 #include <cstdint>
 #include <cstring>
-#include <filesystem>
-#include <stdexcept>
-#include <string>
-#include <system_error>
-#include <thread>
-#include <unordered_map>
 #include <utility>
-
-#include <poll.h>
+#include <unistd.h>
+#include <stdexcept>
+#include <filesystem>
+#include <system_error>
 #include <sys/eventfd.h>
 #include <sys/inotify.h>
-#include <unistd.h>
+#include <unordered_map>
 
 #include "file_watcher_internal.hpp"
 

@@ -22,10 +22,11 @@ file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
 
 list(FILTER SOURCES EXCLUDE REGEX ".*/src/wasm/wasmtime_engine\\.cpp$")
 
-set(EXTENSION_DEPS
+set(EXTENSION_PUBLIC_DEPS
     woki::core
-    yaml-cpp::yaml-cpp
+    woki::config
 )
+set(EXTENSION_PRIVATE_DEPS)
 
 if(NOT EMSCRIPTEN)
     if(NOT TARGET woki::libarchive)
@@ -33,7 +34,9 @@ if(NOT EMSCRIPTEN)
             "woki::extension requires woki::libarchive on native builds. "
             "Install libarchive development files or allow FetchContent in 3rdparty/CMakeLists.txt.")
     endif()
-    list(APPEND EXTENSION_DEPS woki::libarchive)
+    list(APPEND EXTENSION_PRIVATE_DEPS
+        "$<BUILD_INTERFACE:woki::libarchive>"
+        "$<INSTALL_INTERFACE:$<1:LibArchive::LibArchive>>")
 
     if(WOKI_EXTENSION_WITH_WASMTIME)
         if(NOT TARGET wasmtime::cpp AND NOT TARGET wasmtime::wasmtime)
@@ -42,9 +45,13 @@ if(NOT EMSCRIPTEN)
                 "Re-run cmake configure to fetch or build the Wasmtime C API.")
         endif()
         if(TARGET wasmtime::cpp)
-            list(APPEND EXTENSION_DEPS wasmtime::cpp)
+            list(APPEND EXTENSION_PRIVATE_DEPS
+                "$<BUILD_INTERFACE:wasmtime::cpp>"
+                "$<INSTALL_INTERFACE:$<1:wasmtime::wasmtime>>")
         else()
-            list(APPEND EXTENSION_DEPS wasmtime::wasmtime)
+            list(APPEND EXTENSION_PRIVATE_DEPS
+                "$<BUILD_INTERFACE:wasmtime::wasmtime>"
+                "$<INSTALL_INTERFACE:$<1:wasmtime::wasmtime>>")
         endif()
     endif()
 endif()
@@ -58,7 +65,8 @@ add_module(extension
     NO_INSTALL_HEADERS
     SOURCES ${EXTENSION_SOURCES}
     HEADERS ${HEADERS} ${SDK_HEADERS}
-    DEPENDENCIES ${EXTENSION_DEPS}
+    PUBLIC_DEPENDENCIES ${EXTENSION_PUBLIC_DEPS}
+    PRIVATE_DEPENDENCIES ${EXTENSION_PRIVATE_DEPS}
 )
 
 install(FILES

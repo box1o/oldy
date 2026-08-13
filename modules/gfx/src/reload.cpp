@@ -1,10 +1,13 @@
-#include <woki/gfx/reload.hpp>
-
 #include <algorithm>
+
+#include <woki/gfx/advanced/reload.hpp>
 
 namespace woki::gfx {
 
-void ShaderDependencyGraph::Replace(const ShaderAssetHandle shader, const std::span<const asset::AssetPath> dependencies) {
+void ShaderDependencyGraph::Replace(
+    const ShaderAssetHandle shader,
+    const std::span<const asset::AssetPath> dependencies
+) {
     auto next_reverse = reverse_;
     auto next_forward = forward_;
     const auto old = next_forward.find(shader);
@@ -69,17 +72,51 @@ void ShaderReloadCoordinator::Process(const std::span<const FileWatchEvent> even
 ReloadEvent ShaderReloadCoordinator::Publish(ReloadCandidate candidate) {
     const auto current = library_.Record(candidate.handle);
     if (!current || current->version != candidate.base_version)
-        return {candidate.handle, ReloadOutcome::Stale, current ? current->version : 0, "reload candidate was built from a stale generation"};
+        return {.handle = candidate.handle,
+            .outcome = ReloadOutcome::Stale,
+            .version = current ? current->version : 0,
+            .message = "reload candidate was built from a stale generation",
+            .interface_changed = false,
+            .previous_interface = {},
+            .current_interface = {}};
     if (!candidate.product)
-        return {candidate.handle, ReloadOutcome::Rejected, current->version, std::string(candidate.product.error().Message())};
+        return {.handle = candidate.handle,
+            .outcome = ReloadOutcome::Rejected,
+            .version = current->version,
+            .message = std::string(candidate.product.error().Message()),
+            .interface_changed = false,
+            .previous_interface = {},
+            .current_interface = {}};
+    ContentHash previous_interface{};
+    if (auto previous = library_.Borrow(candidate.handle); previous)
+        previous_interface = previous->Interface().hash;
     auto published = library_.Publish(candidate.handle, *candidate.product);
     if (!published)
-        return {candidate.handle, ReloadOutcome::Rejected, current->version, std::string(published.error().Message())};
+        return {.handle = candidate.handle,
+            .outcome = ReloadOutcome::Rejected,
+            .version = current->version,
+            .message = std::string(published.error().Message()),
+            .interface_changed = false,
+            .previous_interface = {},
+            .current_interface = {}};
     const auto generation = library_.Borrow(candidate.handle);
     if (!generation)
-        return {candidate.handle, ReloadOutcome::Rejected, current->version, std::string(generation.error().Message())};
+        return {.handle = candidate.handle,
+            .outcome = ReloadOutcome::Rejected,
+            .version = current->version,
+            .message = std::string(generation.error().Message()),
+            .interface_changed = false,
+            .previous_interface = {},
+            .current_interface = {}};
     graph_.Replace(candidate.handle, generation->Dependencies());
-    return {candidate.handle, ReloadOutcome::Published, generation->Version(), {}};
+    const ContentHash current_interface = generation->Interface().hash;
+    return {candidate.handle,
+        ReloadOutcome::Published,
+        generation->Version(),
+        {},
+        previous_interface != ContentHash{} && previous_interface != current_interface,
+        previous_interface,
+        current_interface};
 }
 
 } // namespace woki::gfx

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://schemas.woki.dev/pipeline/v1.schema.json",
+  "schema": 1,
+  "name": "Editor Forward",
+  "renderPath": "forward",
+  "targets": {
+    "color": ["surface"],
+    "depth": "depth24plus",
+    "samples": 1
+  },
+  "features": [
+    { "id": "mesh" },
+    { "id": "gpu-visibility" },
+    { "id": "depth" },
+    { "id": "hiz-depth-pyramid" },
+    { "id": "velocity" },
+    { "id": "lighting" },
+    { "id": "shadows" },
+    { "id": "forward" },
+    { "id": "transparent" },
+    { "id": "sky" },
+    { "id": "exposure" },
+    { "id": "temporal" },
+    { "id": "bloom" },
+    { "id": "editor-overlay" },
+    { "id": "presentation" }
+  ],
+  "extensionPoints": {
+    "depth-prepass": ["gpu-visibility", "depth", "hiz-depth-pyramid", "shadows"],
+    "opaque": ["mesh", "velocity", "lighting", "forward"],
+    "transparent": ["transparent"],
+    "post-process": ["exposure", "temporal", "bloom", "presentation"],
+    "overlay": ["editor-overlay"]
+  },
+  "qualityProfile": "quality/high.woki-quality",
+  "fallbacks": [
+    { "pipeline": "desktop-forward.woki-pipeline", "missingCapabilities": ["hdr"] },
+    { "pipeline": "compatibility-forward.woki-pipeline", "missingCapabilities": ["depth-texture"] }
+  ]
+}

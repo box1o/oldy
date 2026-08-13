@@ -1,6 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include <woki/gfx.hpp>
+#include <woki/gfx/advanced.hpp>
 
 TEST_CASE("Variant planning is bounded and deterministic") {
     woki::gfx::ShaderDescriptor descriptor;

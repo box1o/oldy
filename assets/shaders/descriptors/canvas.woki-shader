@@ -1,0 +1,1 @@
+{"schema":1,"name":"canvas","language":"wgsl","sources":["shaders/entry/canvas.wgsl"],"entry_points":[{"stage":"vertex","name":"canvas_vs"},{"stage":"fragment","name":"canvas_fs"}]}

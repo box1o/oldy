@@ -3,7 +3,7 @@ Language: Cpp
 BasedOnStyle: LLVM
 Standard: Latest
 
-ColumnLimit: 220
+ColumnLimit: 120
 
 IndentWidth: 4
 ContinuationIndentWidth: 4
@@ -13,12 +13,13 @@ NamespaceIndentation: None
 AlignAfterOpenBracket: false
 
 BreakBeforeCloseBracketFunction: true
-BreakAfterOpenBracketFunction: false
+BreakAfterOpenBracketFunction: true
 BreakBeforeCloseBracketBracedList: false
 BreakAfterOpenBracketBracedList: false
 
 PenaltyBreakAssignment: 10000
-PenaltyBreakBeforeFirstCallParameter: 1
+PenaltyBreakBeforeFirstCallParameter: 0
+PenaltyBreakOpenParenthesis: 0
 PenaltyBreakBeforeMemberAccess: 0
 
 BreakBeforeBraces: Attach
@@ -28,7 +29,7 @@ AllowShortIfStatementsOnASingleLine: Never
 AllowShortLoopsOnASingleLine: false
 AllowShortCaseLabelsOnASingleLine: false
 
-BinPackArguments: true
+BinPackArguments: false
 BinPackParameters: false
 AllowAllArgumentsOnNextLine: false
 AllowAllParametersOfDeclarationOnNextLine: false

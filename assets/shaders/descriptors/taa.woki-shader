@@ -1,0 +1,1 @@
+{"schema":1,"name":"taa","language":"wgsl","sources":["shaders/post/fullscreen.wgsl","shaders/abi/post.wgsl","shaders/entry/taa.wgsl"],"entry_points":[{"stage":"vertex","name":"taa_vs"},{"stage":"fragment","name":"taa_fs"}]}

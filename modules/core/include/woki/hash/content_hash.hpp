@@ -2,16 +2,16 @@
 
 // IWYU pragma: private, include "woki/core.hpp"
 
+#include <span>
 #include <array>
+#include <string>
 #include <compare>
 #include <cstddef>
 #include <functional>
-#include <span>
-#include <string>
 #include <string_view>
 
-#include "../error/result.hpp"
 #include "../types/types.hpp"
+#include "../error/result.hpp"
 
 namespace woki {
 

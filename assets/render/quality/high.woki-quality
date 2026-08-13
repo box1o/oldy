@@ -1,0 +1,10 @@
+{
+  "$schema": "https://schemas.woki.dev/quality/v1.schema.json",
+  "schema": 1,
+  "name": "High",
+  "features": {
+    "shadows": { "enabled": true, "settings": { "resolution": 4096, "cascades": 4 } },
+    "bloom": { "enabled": true, "settings": { "threshold": 1.0, "intensity": 0.9, "levels": 5 } },
+    "temporal": { "enabled": true, "settings": { "historyWeight": 0.95, "jitter": true } }
+  }
+}

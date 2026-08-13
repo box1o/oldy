@@ -2,6 +2,7 @@
 
 #include <functional>
 #include <unordered_map>
+#include <filesystem>
 
 #include <woki/core.hpp>
 #include <woki/platform.hpp>
@@ -19,6 +20,8 @@ struct ApplicationSettings {
     bool fullscreen{false};
     bool resizable{true};
     bool decorated{true};
+    std::string dock_layout;
+    std::filesystem::path user_config_path;
 };
 
 class Application {
@@ -62,6 +65,7 @@ private:
     scope<LayerStack> layers_;
     std::unordered_map<CallbackId, EventCallback> event_callbacks_;
     CallbackId next_callback_id_{1};
+    u64 next_event_sequence_{1};
     CallbackId window_event_callback_id_{0};
     FrameTimer frame_timer_{};
     bool layers_configured_{false};

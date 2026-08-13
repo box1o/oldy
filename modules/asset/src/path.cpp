@@ -1,6 +1,6 @@
-#include <woki/asset/path.hpp>
-
 #include <cstddef>
+
+#include <woki/asset/path.hpp>
 
 namespace woki::asset {
 

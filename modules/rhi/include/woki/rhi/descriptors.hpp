@@ -30,7 +30,7 @@ struct SurfaceDesc final {
     std::string label{"Surface"};
 };
 
-// Matches wgpu::SurfaceDescriptor — `next_in_chain` points to a platform WGPUChainedStruct.
+// `next_in_chain` is reserved for backend-owned platform surface extensions.
 struct SurfaceDescriptor final {
     void* next_in_chain{nullptr};
     std::string label{};
@@ -165,7 +165,7 @@ struct TexelCopyBufferLayout final {
 
 struct TexelCopyBufferInfo final {
     TexelCopyBufferLayout layout{};
-    void* buffer{nullptr};
+    Buffer* buffer{nullptr};
 };
 
 struct Color final {
@@ -236,7 +236,7 @@ struct RenderPassDescTyped final {
 };
 
 struct TexelCopyTextureInfo final {
-    void* texture{nullptr};
+    Texture* texture{nullptr};
     u32 mip_level{0};
     Origin3D origin{};
     TextureAspect aspect{TextureAspect::Undefined};
@@ -338,12 +338,16 @@ struct BindGroupEntryDesc final {
     TextureView* texture_view{nullptr};
 };
 
+struct ConstantEntryDesc final {
+    std::string key{};
+    f64 value{0.0};
+};
+
 struct ComputeStateDesc final {
     void* next_in_chain{nullptr};
     ShaderModule* module{nullptr};
     std::string entry_point{"main"};
-    u32 constant_count{0};
-    void* constants{nullptr};
+    std::span<const ConstantEntryDesc> constants{};
 };
 
 struct TextureDesc final {
@@ -461,8 +465,7 @@ struct VertexStateDesc final {
     void* next_in_chain{nullptr};
     ShaderModule* module{nullptr};
     std::string entry_point{"main"};
-    u32 constant_count{0};
-    void* constants{nullptr};
+    std::span<const ConstantEntryDesc> constants{};
     std::span<const VertexBufferLayoutDesc> buffers{};
 };
 
@@ -477,8 +480,7 @@ struct FragmentStateDesc final {
     void* next_in_chain{nullptr};
     ShaderModule* module{nullptr};
     std::string entry_point{"main"};
-    u32 constant_count{0};
-    void* constants{nullptr};
+    std::span<const ConstantEntryDesc> constants{};
     std::span<const ColorTargetStateDesc> targets{};
 };
 
@@ -505,13 +507,19 @@ struct DepthStencilStateDesc final {
     f32 depth_bias_clamp{0.0f};
 };
 
+struct MultisampleStateDesc final {
+    u32 count{1};
+    u32 mask{0xFFFFFFFF};
+    bool alpha_to_coverage_enabled{false};
+};
+
 struct RenderPipelineDescTyped final {
     void* next_in_chain{nullptr};
     PipelineLayout* layout{nullptr};
     const VertexStateDesc* vertex{nullptr};
     const PrimitiveStateDesc* primitive{nullptr};
     const DepthStencilStateDesc* depth_stencil{nullptr};
-    void* multisample{nullptr};
+    MultisampleStateDesc multisample{};
     const FragmentStateDesc* fragment{nullptr};
     std::string label{"RenderPipeline"};
 };

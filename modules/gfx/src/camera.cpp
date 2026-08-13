@@ -1,8 +1,8 @@
-#include <woki/gfx/camera.hpp>
-
-#include <algorithm>
 #include <cmath>
 #include <limits>
+#include <algorithm>
+
+#include <woki/gfx/camera.hpp>
 
 namespace woki::gfx {
 namespace {

@@ -1,11 +1,11 @@
 #pragma once
 
-#include <atomic>
-#include <cstddef>
-#include <filesystem>
 #include <mutex>
-#include <utility>
+#include <atomic>
 #include <vector>
+#include <cstddef>
+#include <utility>
+#include <filesystem>
 
 #include <woki/platform/file_watcher.hpp>
 

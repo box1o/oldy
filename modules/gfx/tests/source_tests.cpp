@@ -1,6 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include <woki/gfx.hpp>
+#include <woki/gfx/advanced.hpp>
 
 namespace {
 woki::gfx::ShaderDescriptor Descriptor(std::string_view source) {

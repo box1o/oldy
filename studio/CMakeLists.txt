@@ -37,10 +37,13 @@ target_include_directories(studio
 )
 
 set(_DEPS
+    woki::config
     woki::core
+    woki::math
     woki::platform
     woki::rhi
     woki::gfx
+    woki::ui
     woki::gfx_asset_preload
     woki::extension
 )
@@ -163,7 +166,6 @@ else()
 
     list(APPEND _DEPS
         Threads::Threads
-        msdfgen::msdfgen
     )
 
     if(NOT TARGET dawn::webgpu_dawn)
@@ -192,6 +194,10 @@ else()
     endif()
 endif()
 
+if(NOT EMSCRIPTEN AND TARGET woki_gfx_cooked_assets)
+    add_dependencies(studio woki_gfx_cooked_assets)
+endif()
+
 if(TARGET woki_extensions)
     add_dependencies(studio woki_extensions)
 endif()
@@ -212,8 +218,44 @@ if(BUILD_TESTING AND NOT EMSCRIPTEN)
         Catch2::Catch2WithMain
     )
     add_test(NAME studio_layer_stack COMMAND studio_layer_stack_tests)
+
+    add_executable(studio_extension_event_tests
+        tests/extension_event_adapter_tests.cpp
+        src/layers/extension_event_adapter.cpp
+    )
+    target_compile_features(studio_extension_event_tests PRIVATE cxx_std_23)
+    target_include_directories(studio_extension_event_tests PRIVATE ${_SRC_DIR})
+    apply_compiler_options(studio_extension_event_tests)
+    target_link_libraries(studio_extension_event_tests PRIVATE
+        woki::core
+        woki::platform
+        woki::extension
+        Catch2::Catch2WithMain
+    )
+    add_test(NAME studio_extension_events COMMAND studio_extension_event_tests)
+
+    add_executable(studio_ui_integration_tests
+        tests/ui_integration_tests.cpp
+        src/editor/dock_workspace.cpp
+        src/editor/panel_registry.cpp
+        src/editor/platform_ui_adapter.cpp
+        src/editor/scene_panel.cpp
+    )
+    target_compile_features(studio_ui_integration_tests PRIVATE cxx_std_23)
+    target_include_directories(studio_ui_integration_tests PRIVATE ${_SRC_DIR})
+    apply_compiler_options(studio_ui_integration_tests)
+    target_link_libraries(studio_ui_integration_tests PRIVATE
+        woki::core
+        woki::math
+        woki::platform
+        woki::rhi
+        woki::gfx
+        woki::ui
+        Catch2::Catch2WithMain
+    )
+    add_test(NAME studio_ui_integration COMMAND studio_ui_integration_tests)
     if(TARGET woki_tests)
-        add_dependencies(woki_tests studio_layer_stack_tests)
+        add_dependencies(woki_tests studio_layer_stack_tests studio_extension_event_tests studio_ui_integration_tests)
     endif()
 endif()
 
@@ -309,7 +351,9 @@ if(BUILD_TESTING AND NOT EMSCRIPTEN AND TARGET wokiext AND TARGET woki_extension
             -D BINDIR=${CMAKE_INSTALL_BINDIR}
             -D DATADIR=${CMAKE_INSTALL_DATADIR}
             -D INCLUDEDIR=${CMAKE_INSTALL_INCLUDEDIR}
+            -D LIBDIR=${CMAKE_INSTALL_LIBDIR}
             -D WOKIEXT_NAME=$<TARGET_FILE_NAME:wokiext>
+            -D DEVELOPMENT_SOURCES=${WOKI_GFX_ENABLE_DEVELOPMENT_SOURCES}
             -D STUDIO_RELATIVE=${_INSTALLED_STUDIO_RELATIVE}
             -P ${CMAKE_SOURCE_DIR}/cmake/TestInstalledReleaseTree.cmake
     )

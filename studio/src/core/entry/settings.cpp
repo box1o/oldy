@@ -2,6 +2,7 @@
 #include <filesystem>
 
 #include <woki/core.hpp>
+#include <woki/config.hpp>
 
 #include "settings.hpp"
 
@@ -41,7 +42,7 @@ static std::filesystem::path WebConfigPath() {
 }
 
 static std::filesystem::path DefaultConfigPath() {
-    const std::array candidates{WebConfigPath(), DevelopmentConfigPath(), UserConfigPath(), SystemConfigPath()};
+    const std::array candidates{WebConfigPath(), UserConfigPath(), SystemConfigPath(), DevelopmentConfigPath()};
     for (const auto& path : candidates) {
         if (!path.empty() && std::filesystem::exists(path))
             return path;
@@ -68,24 +69,85 @@ static std::filesystem::path SelectedConfigPath(const woki::ArgumentParser& pars
     return DefaultConfigPath();
 }
 
-static void ApplyConfig(const woki::Config& config, woki::ApplicationSettings& settings) {
-    settings.title = config.GetOr<std::string>("window.title", settings.title);
-    settings.width = config.GetOr<woki::u32>("window.width", settings.width);
-    settings.height = config.GetOr<woki::u32>("window.height", settings.height);
-    settings.floating = config.GetOr<bool>("window.floating", settings.floating);
-    settings.fullscreen = config.GetOr<bool>("window.fullscreen", settings.fullscreen);
-    settings.resizable = config.GetOr<bool>("window.resizable", settings.resizable);
-    settings.decorated = config.GetOr<bool>("window.decorated", settings.decorated);
+static void ApplyConfig(const woki::config::Document& document, woki::ApplicationSettings& settings) {
+    woki::config::ObjectView root(document.Root());
+    const auto window = root.Object("window");
+    if (!window)
+        return;
+    if (auto value = window->String("title"))
+        settings.title = *value;
+    if (auto value = window->Unsigned("width"); value && *value <= std::numeric_limits<woki::u32>::max())
+        settings.width = static_cast<woki::u32>(*value);
+    if (auto value = window->Unsigned("height"); value && *value <= std::numeric_limits<woki::u32>::max())
+        settings.height = static_cast<woki::u32>(*value);
+    if (auto value = window->Boolean("floating"))
+        settings.floating = *value;
+    if (auto value = window->Boolean("fullscreen"))
+        settings.fullscreen = *value;
+    if (auto value = window->Boolean("resizable"))
+        settings.resizable = *value;
+    if (auto value = window->Boolean("decorated"))
+        settings.decorated = *value;
+    if (const auto ui = root.Object("ui"))
+        if (auto value = ui->String("dock"))
+            settings.dock_layout = *value;
 }
 
 static void LoadConfig(const std::filesystem::path& path, woki::ApplicationSettings& settings) {
+    if (path.empty())
+        return;
     if (!std::filesystem::exists(path)) {
         slog::Warn("Config file '{}' was not found, using defaults", path.string());
         return;
     }
-    auto config = woki::Config::LoadFromYamlFile(path);
+    auto config = woki::config::Document::ParseYamlFile(path);
     if (!config) {
-        config.error().Log();
+        slog::Error("{}", woki::config::FormatDiagnostics(config.error()));
+        return;
+    }
+    const auto* schema = woki::config::Registry::Global().Find("studio.settings", 1);
+    auto diagnostics = woki::config::Validate(*config, *schema);
+    woki::config::ObjectView root(config->Root());
+    constexpr std::array<std::string_view, 4> root_keys{"$schema", "app", "window", "ui"};
+    static_cast<void>(woki::config::RejectUnknown(root, root_keys, diagnostics));
+    if (const auto window = root.Object("window")) {
+        constexpr std::array<std::string_view, 7>
+            window_keys{"title", "width", "height", "floating", "fullscreen", "resizable", "decorated"};
+        static_cast<void>(woki::config::RejectUnknown(*window, window_keys, diagnostics));
+        const auto wrong = [&](std::string_view key, bool valid) {
+            if (const auto* value = window->Find(key); value && !valid)
+                diagnostics.push_back(
+                    {"STU1001",
+                        woki::config::Severity::Error,
+                        path.string(),
+                        value->Range(),
+                        value->Pointer(),
+                        "studio setting has the wrong type: " + std::string(key),
+                        {}}
+                );
+        };
+        wrong("title", window->String("title").has_value());
+        wrong("width", window->Unsigned("width").has_value());
+        wrong("height", window->Unsigned("height").has_value());
+        for (const auto key : {"floating", "fullscreen", "resizable", "decorated"})
+            wrong(key, window->Boolean(key).has_value());
+    }
+    if (const auto ui = root.Object("ui")) {
+        constexpr std::array<std::string_view, 1> ui_keys{"dock"};
+        static_cast<void>(woki::config::RejectUnknown(*ui, ui_keys, diagnostics));
+        if (const auto* value = ui->Find("dock"); value && !ui->String("dock"))
+            diagnostics.push_back(
+                {"STU1001",
+                    woki::config::Severity::Error,
+                    path.string(),
+                    value->Range(),
+                    value->Pointer(),
+                    "studio ui.dock setting must be a string",
+                    {}}
+            );
+    }
+    if (!diagnostics.empty()) {
+        slog::Error("{}", woki::config::FormatDiagnostics(diagnostics));
         return;
     }
     ApplyConfig(*config, settings);
@@ -129,7 +191,16 @@ woki::ApplicationSettings LoadSettings(int argc, char* argv[]) {
     }
 
     woki::ApplicationSettings settings;
-    LoadConfig(SelectedConfigPath(parser), settings);
+    settings.user_config_path = UserConfigPath();
+    const auto selected = SelectedConfigPath(parser);
+    if (parser.Has("config")) {
+        LoadConfig(selected, settings);
+    } else {
+        LoadConfig(SystemConfigPath(), settings);
+        LoadConfig(UserConfigPath(), settings);
+        if (selected != SystemConfigPath() && selected != UserConfigPath())
+            LoadConfig(selected, settings);
+    }
     ApplyOverrides(parser, settings);
     Validate(settings);
     return settings;

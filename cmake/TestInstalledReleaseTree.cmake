@@ -1,5 +1,5 @@
-if(NOT DEFINED BUILD_DIR OR NOT DEFINED TEST_ROOT OR NOT DEFINED WOKIEXT_NAME OR NOT DEFINED STUDIO_RELATIVE)
-    message(FATAL_ERROR "BUILD_DIR, TEST_ROOT, WOKIEXT_NAME, and STUDIO_RELATIVE are required")
+if(NOT DEFINED BUILD_DIR OR NOT DEFINED TEST_ROOT OR NOT DEFINED WOKIEXT_NAME OR NOT DEFINED STUDIO_RELATIVE OR NOT DEFINED DEVELOPMENT_SOURCES OR NOT DEFINED LIBDIR)
+    message(FATAL_ERROR "BUILD_DIR, TEST_ROOT, WOKIEXT_NAME, STUDIO_RELATIVE, DEVELOPMENT_SOURCES, and LIBDIR are required")
 endif()
 
 file(REMOVE_RECURSE "${TEST_ROOT}")
@@ -26,6 +26,7 @@ foreach(required IN ITEMS
     "${prefix}/${DATADIR}/woki/cmake/ExtensionManifest.cmake"
     "${prefix}/${DATADIR}/woki/cmake/ExtensionInputHash.cmake"
     "${prefix}/${DATADIR}/woki/cmake/CheckExtensionState.cmake"
+    "${prefix}/${DATADIR}/woki/cmake/WokiGfxAssetPreload.cmake"
     "${prefix}/${DATADIR}/woki/cmake/StageExtensionPackage.cmake"
     "${prefix}/${DATADIR}/woki/cmake/VerifyExtensionPackage.cmake"
     "${prefix}/${DATADIR}/woki/templates/extensions/c/CMakeLists.txt.in"
@@ -35,19 +36,52 @@ foreach(required IN ITEMS
     "${prefix}/${INCLUDEDIR}/woki/ext/sdk/ext.h"
     "${prefix}/${INCLUDEDIR}/woki/extension.hpp"
     "${prefix}/${INCLUDEDIR}/woki/ext/ext.hpp"
+    "${prefix}/${INCLUDEDIR}/woki/math.hpp"
     "${prefix}/${INCLUDEDIR}/woki/math/guest.hpp"
+    "${prefix}/${INCLUDEDIR}/woki/math/vec/vec3.hpp"
+    "${prefix}/${INCLUDEDIR}/woki/math/mat/mat4.hpp"
+    "${prefix}/${INCLUDEDIR}/woki/math/quat/quat.hpp"
+    "${prefix}/${INCLUDEDIR}/woki/task.hpp"
+    "${prefix}/${INCLUDEDIR}/woki/task/executor.hpp"
+    "${prefix}/${INCLUDEDIR}/woki/ui/render.hpp"
+    "${prefix}/${INCLUDEDIR}/woki/ui/render/adapter.hpp"
+    "${prefix}/${INCLUDEDIR}/woki/gfx/advanced/compiler.hpp"
+    "${prefix}/${INCLUDEDIR}/woki/gfx/advanced/model_import.hpp"
     "${prefix}/${INCLUDEDIR}/woki/ecs/guest.hpp"
     "${prefix}/${DATADIR}/woki/extensions/${CONFIG}/kitty/manifest.yaml"
     "${prefix}/${DATADIR}/woki/extensions/${CONFIG}/kitty/extension.wasm"
     "${prefix}/${DATADIR}/woki/extensions/${CONFIG}/dino-lab/manifest.yaml"
     "${prefix}/${DATADIR}/woki/extensions/${CONFIG}/dino-lab/extension.wasm"
     "${prefix}/${DATADIR}/woki/extensions/${CONFIG}/dino-lab/assets/field-guide.txt"
-    "${prefix}/${DATADIR}/woki/assets/shaders/descriptors/cube.woki-shader"
 )
     if(NOT EXISTS "${required}")
         message(FATAL_ERROR "Installed release tree is missing ${required}")
     endif()
 endforeach()
+
+file(READ "${prefix}/${LIBDIR}/cmake/woki/wokiTargets.cmake" installed_targets)
+if(installed_targets MATCHES "woki::(task|ui_gfx|gfx_tools)")
+    message(FATAL_ERROR "Installed target export contains an obsolete folded module target")
+endif()
+
+if(DEVELOPMENT_SOURCES)
+    foreach(required_source IN ITEMS
+        "${prefix}/${DATADIR}/woki/assets/shaders/descriptors/cube.woki-shader"
+        "${prefix}/${DATADIR}/woki/assets/render/cube.woki-pipeline"
+        "${prefix}/${DATADIR}/woki/assets/render/quality/high.woki-quality"
+        "${prefix}/${DATADIR}/woki/assets/materials/types/standard-unlit.woki-material-type"
+        "${prefix}/${DATADIR}/woki/assets/materials/types/standard-pbr.woki-material-type"
+        "${prefix}/${DATADIR}/woki/assets/materials/red-unlit.woki-material")
+        if(NOT EXISTS "${required_source}")
+            message(FATAL_ERROR "Development-source install is missing ${required_source}")
+        endif()
+    endforeach()
+endif()
+
+file(READ "${prefix}/${DATADIR}/woki/cmake/WokiGfxAssetPreload.cmake" preload_helper)
+if(preload_helper MATCHES "_woki_gfx_prefix}/share")
+    message(FATAL_ERROR "Installed graphics preload helper hard-codes share instead of the configured dataroot")
+endif()
 
 foreach(internal_header IN ITEMS host/api.hpp host/cabi.hpp registry.hpp runtime.hpp path_safety.hpp wasm/guest_module.hpp wasm/web_engine.hpp wasm/wasmtime_engine.hpp)
     if(EXISTS "${prefix}/${INCLUDEDIR}/woki/ext/${internal_header}")

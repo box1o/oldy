@@ -1,10 +1,10 @@
 #pragma once
 
-#include <optional>
 #include <variant>
+#include <optional>
 
 #include <woki/core.hpp>
-#include <woki/math/math.hpp>
+#include <woki/math.hpp>
 
 namespace woki::gfx {
 

@@ -11,6 +11,10 @@ namespace woki::rhi::wgpu::detail {
     return static_cast<WGPUBuffer>(buffer.GetNativeHandles().resource);
 }
 
+[[nodiscard]] inline WGPUTexture NativeTexture(const Texture& texture) noexcept {
+    return static_cast<WGPUTexture>(texture.GetNativeHandles().resource);
+}
+
 [[nodiscard]] inline WGPUCommandBuffer NativeCommandBuffer(const CommandBuffer& command_buffer) noexcept {
     return static_cast<WGPUCommandBuffer>(command_buffer.GetNativeHandles().resource);
 }
@@ -51,9 +55,11 @@ namespace woki::rhi::wgpu::detail {
     return static_cast<WGPURenderPipeline>(pipeline.GetNativeHandles().resource);
 }
 
+#ifndef __EMSCRIPTEN__
 [[nodiscard]] inline WGPUResourceTable NativeResourceTable(const ResourceTable* table) noexcept {
     return table == nullptr ? nullptr : static_cast<WGPUResourceTable>(table->GetNativeHandles().resource);
 }
+#endif
 
 [[nodiscard]] inline WGPURenderBundle NativeRenderBundle(RenderBundle* bundle) noexcept {
     return bundle == nullptr ? nullptr : static_cast<WGPURenderBundle>(bundle->GetNativeHandles().resource);

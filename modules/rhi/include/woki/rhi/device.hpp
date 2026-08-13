@@ -10,6 +10,7 @@
 #include "forward.hpp"
 #include "descriptors.hpp"
 #include "swapchain_desc.hpp"
+#include "capabilities.hpp"
 
 namespace woki::rhi {
 
@@ -60,6 +61,15 @@ public:
     [[nodiscard]] virtual Future GetLostFuture() const = 0;
     [[nodiscard]] virtual Queue& GetQueue() const noexcept = 0;
     [[nodiscard]] virtual bool HasFeature(FeatureName feature) const noexcept = 0;
+    [[nodiscard]] virtual const DeviceCapabilities& Capabilities() const noexcept;
+
+    [[nodiscard]] virtual bool IsLost() const noexcept {
+        return false;
+    }
+
+    [[nodiscard]] virtual DeviceLostReason LossReason() const noexcept {
+        return DeviceLostReason::Unknown;
+    }
 
     [[nodiscard]] virtual Result<scope<SharedBufferMemory>> ImportSharedBufferMemory(const SharedBufferMemoryDesc& desc = {}) = 0;
     [[nodiscard]] virtual Result<scope<SharedFence>> ImportSharedFence(const SharedFenceDesc& desc = {}) = 0;

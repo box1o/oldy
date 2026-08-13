@@ -8,6 +8,8 @@
 #include "dispatcher.hpp"
 #include "input/events.hpp"
 #include "window/events.hpp"
+#include "gamepad/events.hpp"
+#include "gesture/events.hpp"
 #include "renderer/events.hpp"
 #include "application/events.hpp"
 // IWYU pragma: end_exports

@@ -1,0 +1,10 @@
+{
+  "$schema": "https://schemas.woki.dev/feature/v1.schema.json",
+  // Stable shadow defaults shared by desktop pipelines.
+  "schema": 1,
+  "feature": "shadows",
+  "settings": {
+    "resolution": 2048,
+    "cascades": 4
+  }
+}

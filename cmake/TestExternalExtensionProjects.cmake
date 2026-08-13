@@ -22,8 +22,8 @@ file(COPY
     "${WOKI_SDK_DIR}/woki/extension"
     DESTINATION "${relocated_sdk}/woki"
 )
-if(EXISTS "${WOKI_CMAKE_DIR}/../modules/core/include/woki/math")
-    set(math_include "${WOKI_CMAKE_DIR}/../modules/core/include")
+if(EXISTS "${WOKI_CMAKE_DIR}/../modules/math/include/woki/math")
+    set(math_include "${WOKI_CMAKE_DIR}/../modules/math/include")
     set(ecs_include "${WOKI_CMAKE_DIR}/../modules/ecs/include")
 else()
     set(math_include "${WOKI_CMAKE_DIR}/../../../include")
@@ -57,7 +57,7 @@ foreach(language IN ITEMS C CXX)
         set(libraries_text "")
     endif()
     file(WRITE "${source_dir}/manifest.yaml"
-        "id: woki.test.external.${language_lower}\nname: External ${language}\nversion: 1.0.0\napiVersion: 1\nruntime:\n  wasm: ${wasm_relative}\npermissions:\n- log\n${libraries_text}")
+        "\$schema: https://schemas.woki.dev/extension.manifest/v1.schema.json\nid: woki.test.external.${language_lower}\nname: External ${language}\nversion: 1.0.0\napiVersion: 1\nruntime:\n  wasm: ${wasm_relative}\npermissions:\n- log\n${libraries_text}")
     file(WRITE "${source_dir}/assets/data.txt" "${language} asset\n")
 
     if(language STREQUAL "CXX")

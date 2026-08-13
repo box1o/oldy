@@ -192,7 +192,8 @@ void WritePackage(const fs::path& directory, std::string_view id, std::string_vi
     fs::create_directories(directory);
     std::ofstream manifest(directory / "manifest.yaml");
     REQUIRE(manifest.good());
-    manifest << "id: " << id << "\nname: Test\nversion: 1.0.0\napiVersion: 1\nruntime:\n  wasm: extension.wasm\npermissions: " << permissions << "\n" << commands;
+    manifest << "$schema: https://schemas.woki.dev/extension.manifest/v1.schema.json\nid: " << id << "\nname: Test\nversion: 1.0.0\napiVersion: 1\nruntime:\n  wasm: extension.wasm\npermissions: " << permissions << "\n"
+             << commands;
     std::ofstream wasm(directory / "extension.wasm", std::ios::binary);
     wasm.write("\0asm", 4);
 }

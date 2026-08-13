@@ -4,4 +4,7 @@ fn bloom_threshold(color: vec3f, threshold: f32, knee: f32) -> vec3f {
     let contribution = max(brightness - threshold, soft * soft / max(4.0 * knee, 0.000001));
     return color * contribution / max(brightness, 0.000001);
 }
-fn bloom_composite(scene: vec3f, bloom: vec3f, intensity: f32) -> vec3f { return scene + bloom * intensity; }
+
+fn bloom_composite(scene: vec3f, bloom: vec3f, intensity: f32) -> vec3f {
+    return scene + bloom * intensity;
+}

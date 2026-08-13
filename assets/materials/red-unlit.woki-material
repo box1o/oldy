@@ -1,0 +1,9 @@
+{
+  "$schema": "https://schemas.woki.dev/material/v1.schema.json",
+  "schema": 1,
+  "id": "51c90ad9-382b-545c-a531-8a1a2884b506",
+  "type": "398db147-4060-5923-bf8c-891905d4e26d",
+  "overrides": {
+    "base_color": [0.9, 0.08, 0.04, 1.0]
+  }
+}

@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <string_view>
-#include <yaml-cpp/yaml.h>
+#include <woki/config.hpp>
 #include <initializer_list>
 
 #include "woki/ext/manifest.hpp"
@@ -19,6 +19,7 @@ static_assert(kApiVersion == WOKI_EXT_API_VERSION);
 namespace {
 
 namespace fs = std::filesystem;
+using Json = config::Json;
 
 [[nodiscard]] std::string MissingFieldMessage(std::string_view field, std::string_view example) {
     return "Manifest is missing required field '" + std::string(field) + "'. Add:\n" + std::string(example);
@@ -174,62 +175,58 @@ namespace fs = std::filesystem;
     return Ok(std::move(contents));
 }
 
-[[nodiscard]] Result<std::string> RequiredString(const YAML::Node& root, const char* key, std::string_view example) {
-    const YAML::Node node = root[key];
+[[nodiscard]] Result<std::string> RequiredString(const Json& root, const char* key, std::string_view example) {
+    const Json node = root[key];
     if (!node) {
         return Err(ErrorCode::ParseMissingField, MissingFieldMessage(key, example));
     }
-    if (!node.IsScalar()) {
+    if (!node.is_string()) {
         return Err(ErrorCode::ParseTypeMismatch, WrongTypeMessage(key, "a string", example));
     }
-    return Ok(node.as<std::string>());
+    return Ok(node.get<std::string>());
 }
 
-[[nodiscard]] Result<u32> RequiredApiVersion(const YAML::Node& root) {
-    const YAML::Node node = root["apiVersion"];
+[[nodiscard]] Result<u32> RequiredApiVersion(const Json& root) {
+    const Json node = root["apiVersion"];
     if (!node) {
         return Err(ErrorCode::ParseMissingField, MissingFieldMessage("apiVersion", "apiVersion: 1"));
     }
-    if (!node.IsScalar()) {
+    if (!node.is_number_unsigned()) {
         return Err(ErrorCode::ParseTypeMismatch, WrongTypeMessage("apiVersion", "an integer", "apiVersion: 1"));
     }
 
-    try {
-        return Ok(node.as<u32>());
-    } catch (const YAML::Exception& exception) {
-        return Err(ErrorCode::ParseTypeMismatch, exception.what());
-    }
+    return Ok(node.get<u32>());
 }
 
-[[nodiscard]] Result<fs::path> RequiredWasmPath(const YAML::Node& root) {
-    const YAML::Node runtime = root["runtime"];
+[[nodiscard]] Result<fs::path> RequiredWasmPath(const Json& root) {
+    const Json runtime = root["runtime"];
     if (!runtime) {
         return Err(ErrorCode::ParseMissingField, MissingFieldMessage("runtime", "runtime:\n  wasm: extension.wasm"));
     }
-    if (!runtime.IsMap()) {
+    if (!runtime.is_object()) {
         return Err(ErrorCode::ParseTypeMismatch, WrongTypeMessage("runtime", "a map", "runtime:\n  wasm: extension.wasm"));
     }
 
-    const YAML::Node wasm = runtime["wasm"];
+    const Json wasm = runtime["wasm"];
     if (!wasm) {
         return Err(ErrorCode::ParseMissingField, MissingFieldMessage("runtime.wasm", "runtime:\n  wasm: extension.wasm"));
     }
-    if (!wasm.IsScalar()) {
+    if (!wasm.is_string()) {
         return Err(ErrorCode::ParseTypeMismatch, WrongTypeMessage("runtime.wasm", "a relative path string", "runtime:\n  wasm: extension.wasm"));
     }
-    const std::string text = wasm.as<std::string>();
+    const std::string text = wasm.get<std::string>();
     if (text.contains('\\')) {
         return Err(ErrorCode::ValidationInvalidState, "Manifest field 'runtime.wasm' must not contain backslashes.");
     }
     return Ok(fs::path(text));
 }
 
-[[nodiscard]] Result<std::vector<Permission>> ParsePermissions(const YAML::Node& root) {
-    const YAML::Node permissions = root["permissions"];
+[[nodiscard]] Result<std::vector<Permission>> ParsePermissions(const Json& root) {
+    const Json permissions = root["permissions"];
     if (!permissions) {
         return Err(ErrorCode::ParseMissingField, MissingFieldMessage("permissions", "permissions:\n  - log"));
     }
-    if (!permissions.IsSequence()) {
+    if (!permissions.is_array()) {
         return Err(ErrorCode::ParseTypeMismatch, WrongTypeMessage("permissions", "a sequence", "permissions:\n  - log"));
     }
     if (permissions.size() > AllPermissions().size()) {
@@ -238,12 +235,12 @@ namespace fs = std::filesystem;
 
     std::vector<Permission> parsed;
     parsed.reserve(permissions.size());
-    for (const YAML::Node& permission_node : permissions) {
-        if (!permission_node.IsScalar()) {
+    for (const Json& permission_node : permissions) {
+        if (!permission_node.is_string()) {
             return Err(ErrorCode::ParseTypeMismatch, "Each manifest permission must be a string. Use:\npermissions:\n  - log");
         }
 
-        auto permission = ParsePermission(permission_node.as<std::string>());
+        auto permission = ParsePermission(permission_node.get<std::string>());
         if (!permission) {
             return Err(permission.error());
         }
@@ -256,21 +253,21 @@ namespace fs = std::filesystem;
     return Ok(std::move(parsed));
 }
 
-[[nodiscard]] Result<std::vector<GuestLibrary>> ParseLibraries(const YAML::Node& root) {
-    const YAML::Node libraries = root["libraries"];
+[[nodiscard]] Result<std::vector<GuestLibrary>> ParseLibraries(const Json& root) {
+    const Json libraries = root["libraries"];
     if (!libraries)
         return Ok(std::vector<GuestLibrary>{});
-    if (!libraries.IsSequence())
+    if (!libraries.is_array())
         return Err(ErrorCode::ParseTypeMismatch, WrongTypeMessage("libraries", "a sequence", "libraries:\n  - math"));
     if (libraries.size() > kMaxManifestLibraries)
         return Err(ErrorCode::ValidationOutOfRange, "Manifest exceeds the number of supported guest libraries.");
 
     std::vector<GuestLibrary> parsed;
     parsed.reserve(libraries.size());
-    for (const YAML::Node& node : libraries) {
-        if (!node.IsScalar())
+    for (const Json& node : libraries) {
+        if (!node.is_string())
             return Err(ErrorCode::ParseTypeMismatch, "Each manifest library must be a string. Supported libraries are math and ecs.");
-        const std::string name = node.as<std::string>();
+        const std::string name = node.get<std::string>();
         const auto library = name == "math" ? GuestLibrary::Math : name == "ecs" ? GuestLibrary::Ecs : static_cast<GuestLibrary>(255);
         if (library != GuestLibrary::Math && library != GuestLibrary::Ecs)
             return Err(ErrorCode::ValidationInvalidState, "Unknown manifest library '" + name + "'. Supported libraries are math and ecs.");
@@ -281,36 +278,29 @@ namespace fs = std::filesystem;
     return Ok(std::move(parsed));
 }
 
-[[nodiscard]] Result<ActivationMetadata> ParseActivation(const YAML::Node& root) {
-    const YAML::Node activation = root["activation"];
+[[nodiscard]] Result<ActivationMetadata> ParseActivation(const Json& root) {
+    const Json activation = root["activation"];
     if (!activation)
         return Ok(ActivationMetadata{});
-    if (!activation.IsMap())
+    if (!activation.is_object())
         return Err(ErrorCode::ParseTypeMismatch, WrongTypeMessage("activation", "a map", "activation:\n  startup: true"));
 
     ActivationMetadata parsed;
     for (const auto& [key, target] : {std::pair{"startup", &parsed.startup}, std::pair{"tick", &parsed.tick}}) {
-        const YAML::Node value = activation[key];
+        const Json value = activation[key];
         if (!value)
             continue;
-        if (!value.IsScalar())
+        if (!value.is_boolean())
             return Err(ErrorCode::ParseTypeMismatch, WrongTypeMessage(std::string("activation.") + key, "a boolean", std::string(key) + ": true"));
-        try {
-            *target = value.as<bool>();
-        } catch (const YAML::Exception&) {
-            return Err(ErrorCode::ParseTypeMismatch, WrongTypeMessage(std::string("activation.") + key, "a boolean", std::string(key) + ": true"));
-        }
+        *target = value.get<bool>();
     }
 
     return Ok(std::move(parsed));
 }
 
-[[nodiscard]] Result<void> RejectUnknownFields(const YAML::Node& map, std::initializer_list<std::string_view> allowed, std::string_view field) {
-    for (const auto& entry : map) {
-        if (!entry.first.IsScalar()) {
-            return Err(ErrorCode::ParseTypeMismatch, "Manifest map keys must be strings.");
-        }
-        const std::string key = entry.first.as<std::string>();
+[[nodiscard]] Result<void> RejectUnknownFields(const Json& map, std::initializer_list<std::string_view> allowed, std::string_view field) {
+    for (const auto& [key, value] : map.items()) {
+        static_cast<void>(value);
         if (std::ranges::find(allowed, key) == allowed.end()) {
             return Err(ErrorCode::ParseUnexpectedToken, "Unknown manifest field '" + (field.empty() ? key : std::string(field) + "." + key) + "'.");
         }
@@ -318,27 +308,27 @@ namespace fs = std::filesystem;
     return Ok();
 }
 
-[[nodiscard]] Result<void> ValidateKnownFields(const YAML::Node& root) {
-    auto known = RejectUnknownFields(root, {"id", "name", "version", "apiVersion", "runtime", "libraries", "permissions", "activation", "contributes"}, {});
+[[nodiscard]] Result<void> ValidateKnownFields(const Json& root) {
+    auto known = RejectUnknownFields(root, {"$schema", "id", "name", "version", "apiVersion", "runtime", "libraries", "permissions", "activation", "contributes"}, {});
     if (!known) {
         return known;
     }
-    if (const YAML::Node runtime = root["runtime"]; runtime && runtime.IsMap()) {
+    if (const Json runtime = root["runtime"]; runtime && runtime.is_object()) {
         if (auto valid = RejectUnknownFields(runtime, {"wasm"}, "runtime"); !valid) {
             return valid;
         }
     }
-    if (const YAML::Node activation = root["activation"]; activation && activation.IsMap()) {
+    if (const Json activation = root["activation"]; activation && activation.is_object()) {
         if (auto valid = RejectUnknownFields(activation, {"startup", "tick"}, "activation"); !valid)
             return valid;
     }
-    if (const YAML::Node contributes = root["contributes"]; contributes && contributes.IsMap()) {
+    if (const Json contributes = root["contributes"]; contributes && contributes.is_object()) {
         if (auto valid = RejectUnknownFields(contributes, {"commands"}, "contributes"); !valid) {
             return valid;
         }
-        if (const YAML::Node commands = contributes["commands"]; commands && commands.IsSequence()) {
-            for (const YAML::Node& command : commands) {
-                if (command.IsMap()) {
+        if (const Json commands = contributes["commands"]; commands && commands.is_array()) {
+            for (const Json& command : commands) {
+                if (command.is_object()) {
                     if (auto valid = RejectUnknownFields(command, {"id", "title", "category"}, "contributes.commands[]"); !valid) {
                         return valid;
                     }
@@ -349,20 +339,20 @@ namespace fs = std::filesystem;
     return Ok();
 }
 
-[[nodiscard]] Result<std::vector<CommandContribution>> ParseCommands(const YAML::Node& root) {
-    const YAML::Node contributes = root["contributes"];
+[[nodiscard]] Result<std::vector<CommandContribution>> ParseCommands(const Json& root) {
+    const Json contributes = root["contributes"];
     if (!contributes) {
         return Ok(std::vector<CommandContribution>{});
     }
-    if (!contributes.IsMap()) {
+    if (!contributes.is_object()) {
         return Err(ErrorCode::ParseTypeMismatch, WrongTypeMessage("contributes", "a map", "contributes:\n  commands:\n    - id: woki.hello.say\n      title: Say Hello"));
     }
 
-    const YAML::Node commands = contributes["commands"];
+    const Json commands = contributes["commands"];
     if (!commands) {
         return Ok(std::vector<CommandContribution>{});
     }
-    if (!commands.IsSequence()) {
+    if (!commands.is_array()) {
         return Err(ErrorCode::ParseTypeMismatch, WrongTypeMessage("contributes.commands", "a sequence", "contributes:\n  commands:\n    - id: woki.hello.say\n      title: Say Hello"));
     }
     if (commands.size() > kMaxManifestCommands) {
@@ -371,8 +361,8 @@ namespace fs = std::filesystem;
 
     std::vector<CommandContribution> parsed;
     parsed.reserve(commands.size());
-    for (const YAML::Node& command_node : commands) {
-        if (!command_node.IsMap()) {
+    for (const Json& command_node : commands) {
+        if (!command_node.is_object()) {
             return Err(ErrorCode::ParseTypeMismatch, "Each command contribution must be a map. Use:\n"
                                                      "contributes:\n  commands:\n    - id: woki.hello.say\n      title: Say Hello");
         }
@@ -393,12 +383,12 @@ namespace fs = std::filesystem;
             .category = {},
         };
 
-        const YAML::Node category = command_node["category"];
+        const Json category = command_node["category"];
         if (category) {
-            if (!category.IsScalar()) {
+            if (!category.is_string()) {
                 return Err(ErrorCode::ParseTypeMismatch, WrongTypeMessage("category", "a string", "category: Tools"));
             }
-            command.category = category.as<std::string>();
+            command.category = category.get<std::string>();
         }
 
         parsed.push_back(std::move(command));
@@ -415,9 +405,16 @@ Result<Manifest> LoadManifest(const fs::path& path) {
         return Err(contents.error());
     }
 
-    try {
-        const YAML::Node root = YAML::Load(*contents);
-        if (!root || !root.IsMap()) {
+    {
+        auto document = config::Document::ParseYaml(*contents, path.string(), {.bytes = kMaxManifestBytes, .depth = 32, .nodes = 4096, .members = 4096, .string_bytes = 16 * 1024});
+        if (!document)
+            return Err(ErrorCode::ParseInvalidFormat, config::FormatDiagnostics(document.error()));
+        const auto* schema = config::Registry::Global().Find("extension.manifest", 1);
+        const auto schema_diagnostics = config::Validate(*document, *schema);
+        if (!schema_diagnostics.empty())
+            return Err(ErrorCode::ParseInvalidFormat, config::FormatDiagnostics(schema_diagnostics));
+        const Json root = Json::FromDocument(std::move(*document));
+        if (!root.is_object()) {
             return Err(ErrorCode::ParseInvalidFormat, "Manifest must be a YAML map. Minimal example:\nid: woki.hello\nname: "
                                                       "Hello\nversion: 0.1.0\napiVersion: 1\nruntime:\n  wasm: "
                                                       "extension.wasm\npermissions:\n  - log");
@@ -487,10 +484,6 @@ Result<Manifest> LoadManifest(const fs::path& path) {
         }
 
         return Ok(std::move(manifest));
-    } catch (const YAML::BadFile& exception) {
-        return Err(ErrorCode::FileNotFound, exception.what());
-    } catch (const YAML::Exception& exception) {
-        return Err(ErrorCode::ParseInvalidFormat, exception.what());
     }
 }
 

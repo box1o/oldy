@@ -72,6 +72,7 @@ using convert::ToWgpu;
     return native;
 }
 
+#ifndef __EMSCRIPTEN__
 [[nodiscard]] inline WGPUBindingResource ToWgpu(const BindingResourceDesc& desc) noexcept {
     WGPUBindingResource native = WGPU_BINDING_RESOURCE_INIT;
     native.nextInChain = static_cast<WGPUChainedStruct*>(desc.next_in_chain);
@@ -82,6 +83,7 @@ using convert::ToWgpu;
     native.textureView = NativeTextureView(desc.texture_view);
     return native;
 }
+#endif
 
 struct BindGroupLayoutDescriptorStorage final {
     std::vector<WGPUBindGroupLayoutEntry> entries{};

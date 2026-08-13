@@ -1,3 +1,6 @@
+#include <atomic>
+#include <limits>
+
 #include <woki/rhi/objects.hpp>
 #include <woki/rhi/command_buffer.hpp>
 
@@ -7,6 +10,13 @@
 #include "detail/copy_convert.hpp"
 
 namespace woki::rhi::wgpu {
+
+struct WgpuSubmissionState final {
+    std::atomic<u64> completed{};
+    std::atomic<SubmissionTrackingStatus> status{SubmissionTrackingStatus::Healthy};
+    u64 next{1};
+};
+
 namespace {
 
 using convert::FromWgpu;
@@ -14,6 +24,11 @@ using convert::ToWgpu;
 
 struct QueueWorkDoneCallbackState {
     QueueWorkDoneCallback callback;
+};
+
+struct SubmissionCallbackState {
+    std::shared_ptr<WgpuSubmissionState> state;
+    u64 epoch{};
 };
 
 void QueueWorkDoneThunk(WGPUQueueWorkDoneStatus status, WGPUStringView message, void* userdata1, void*) {
@@ -25,12 +40,36 @@ void QueueWorkDoneThunk(WGPUQueueWorkDoneStatus status, WGPUStringView message, 
     state->callback(FromWgpu(status), detail::StringFromView(message));
 }
 
+void SubmissionDoneThunk(WGPUQueueWorkDoneStatus status, WGPUStringView, void* userdata1, void*) {
+    auto callback = scope<SubmissionCallbackState>(static_cast<SubmissionCallbackState*>(userdata1));
+    if (callback == nullptr)
+        return;
+    if (status != WGPUQueueWorkDoneStatus_Success) {
+        callback->state->status.store(SubmissionTrackingStatus::CompletionCallbackFailed, std::memory_order_release);
+        return;
+    }
+
+    // Queue completion is ordered, so completion of this submission proves all
+    // lower tickets complete even if their individual callbacks ran later.
+    u64 completed = callback->state->completed.load(std::memory_order_relaxed);
+    while (completed < callback->epoch && !callback->state->completed.compare_exchange_weak(completed, callback->epoch, std::memory_order_release, std::memory_order_relaxed)) {
+    }
+}
+
 } // namespace
 
 WgpuQueueImpl::WgpuQueueImpl(WGPUQueue queue) noexcept
-    : queue_(queue) {}
+    : queue_(queue),
+      submission_state_(std::make_shared<WgpuSubmissionState>()) {}
 
 Result<void> WgpuQueueImpl::CopyExternalTextureForBrowser(const ImageCopyExternalTexture& source, const TexelCopyTextureInfo& destination, const Extent3D& copy_size, const CopyTextureForBrowserOptions& options) const {
+#ifdef __EMSCRIPTEN__
+    (void)source;
+    (void)destination;
+    (void)copy_size;
+    (void)options;
+    return Err(ErrorCode::GraphicsUnsupportedApi, "CopyExternalTextureForBrowser is unavailable with emdawnwebgpu");
+#else
     if (!queue_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Queue is invalid");
     }
@@ -42,9 +81,17 @@ Result<void> WgpuQueueImpl::CopyExternalTextureForBrowser(const ImageCopyExterna
 
     wgpuQueueCopyExternalTextureForBrowser(queue_.get(), &native_source, &native_destination, &native_size, &native_options);
     return Ok();
+#endif
 }
 
 Result<void> WgpuQueueImpl::CopyTextureForBrowser(const TexelCopyTextureInfo& source, const TexelCopyTextureInfo& destination, const Extent3D& copy_size, const CopyTextureForBrowserOptions& options) const {
+#ifdef __EMSCRIPTEN__
+    (void)source;
+    (void)destination;
+    (void)copy_size;
+    (void)options;
+    return Err(ErrorCode::GraphicsUnsupportedApi, "CopyTextureForBrowser is unavailable with emdawnwebgpu");
+#else
     if (!queue_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Queue is invalid");
     }
@@ -56,6 +103,7 @@ Result<void> WgpuQueueImpl::CopyTextureForBrowser(const TexelCopyTextureInfo& so
 
     wgpuQueueCopyTextureForBrowser(queue_.get(), &native_source, &native_destination, &native_size, &native_options);
     return Ok();
+#endif
 }
 
 Future WgpuQueueImpl::OnSubmittedWorkDone(CallbackMode callback_mode, QueueWorkDoneCallback callback) const {
@@ -93,14 +141,9 @@ void WgpuQueueImpl::SetLabel(const std::string_view label) const {
     }
 }
 
-Result<void> WgpuQueueImpl::Submit(std::span<CommandBuffer* const> commands) const {
+Result<SubmissionTicket> WgpuQueueImpl::Submit(std::span<CommandBuffer* const> commands) const {
     if (!queue_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Queue is invalid");
-    }
-
-    if (commands.empty()) {
-        wgpuQueueSubmit(queue_.get(), 0, nullptr);
-        return Ok();
     }
 
     std::vector<WGPUCommandBuffer> native_commands{};
@@ -114,8 +157,32 @@ Result<void> WgpuQueueImpl::Submit(std::span<CommandBuffer* const> commands) con
         native_commands.push_back(static_cast<WGPUCommandBuffer>(handles.resource));
     }
 
-    wgpuQueueSubmit(queue_.get(), native_commands.size(), native_commands.data());
-    return Ok();
+    std::lock_guard lock(submission_mutex_);
+    if (submission_state_->next == std::numeric_limits<u64>::max())
+        return Err(ErrorCode::OutOfRange, "Queue submission epoch exhausted");
+
+    wgpuQueueSubmit(queue_.get(), native_commands.size(), native_commands.empty() ? nullptr : native_commands.data());
+    const u64 epoch = submission_state_->next++;
+
+    auto callback_state = createScope<SubmissionCallbackState>(SubmissionCallbackState{submission_state_, epoch});
+    WGPUQueueWorkDoneCallbackInfo callback_info = WGPU_QUEUE_WORK_DONE_CALLBACK_INFO_INIT;
+    callback_info.mode = WGPUCallbackMode_AllowSpontaneous;
+    callback_info.callback = SubmissionDoneThunk;
+    callback_info.userdata1 = callback_state.release();
+    const WGPUFuture future = wgpuQueueOnSubmittedWorkDone(queue_.get(), callback_info);
+    if (future.id == 0) {
+        callback_state.reset(static_cast<SubmissionCallbackState*>(callback_info.userdata1));
+        submission_state_->status.store(SubmissionTrackingStatus::CompletionRegistrationFailed, std::memory_order_release);
+    }
+    return Ok(SubmissionTicket(epoch));
+}
+
+SubmissionEpoch WgpuQueueImpl::CompletedSubmission() const noexcept {
+    return SubmissionEpoch(submission_state_->completed.load(std::memory_order_acquire));
+}
+
+SubmissionTrackingStatus WgpuQueueImpl::SubmissionTracking() const noexcept {
+    return submission_state_->status.load(std::memory_order_acquire);
 }
 
 Result<void> WgpuQueueImpl::WriteBuffer(const Buffer& buffer, const u64 buffer_offset, const void* data, const u64 size) const {
@@ -133,7 +200,11 @@ Result<void> WgpuQueueImpl::WriteBuffer(const Buffer& buffer, const u64 buffer_o
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Buffer is invalid");
     }
 
-    wgpuQueueWriteBuffer(queue_.get(), native_buffer, buffer_offset, data, size);
+    if (size > std::numeric_limits<size_t>::max()) {
+        return Err(ErrorCode::GraphicsResourceCreationFailed, "WriteBuffer data is too large for this platform");
+    }
+
+    wgpuQueueWriteBuffer(queue_.get(), native_buffer, buffer_offset, data, static_cast<size_t>(size));
     return Ok();
 }
 
@@ -146,11 +217,15 @@ Result<void> WgpuQueueImpl::WriteTexture(const TexelCopyTextureInfo& destination
         return Err(ErrorCode::GraphicsResourceCreationFailed, "WriteTexture data is null");
     }
 
+    if (data_size > std::numeric_limits<size_t>::max()) {
+        return Err(ErrorCode::GraphicsResourceCreationFailed, "WriteTexture data is too large for this platform");
+    }
+
     const auto native_destination = detail::copy::ToWgpu(destination);
     const auto native_layout = detail::copy::ToWgpu(data_layout);
     const auto native_size = detail::copy::ToWgpu(write_size);
 
-    wgpuQueueWriteTexture(queue_.get(), &native_destination, data, data_size, &native_layout, &native_size);
+    wgpuQueueWriteTexture(queue_.get(), &native_destination, data, static_cast<size_t>(data_size), &native_layout, &native_size);
     return Ok();
 }
 

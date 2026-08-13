@@ -2,10 +2,10 @@
 
 // IWYU pragma: private, include "woki/core.hpp"
 
+#include <limits>
 #include <compare>
 #include <cstddef>
 #include <functional>
-#include <limits>
 
 #include "types.hpp"
 

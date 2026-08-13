@@ -1,0 +1,1 @@
+{"schema":1,"name":"SceneData","address_space":"uniform","layout_class":"wgsl-host-shareable","fields":[{"name":"ambient_color","type":{"type":"vector","element":"f32","width":3}},{"name":"directional_count","type":"u32"},{"name":"directional_lights","type":{"type":"array","element":{"type":"ref","name":"GpuLightRecord"},"count":4}}]}

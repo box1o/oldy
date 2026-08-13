@@ -1,0 +1,1 @@
+{"schema":1,"name":"PostData","address_space":"uniform","layout_class":"wgsl-host-shareable","fields":[{"name":"parameters","type":{"type":"vector","element":"f32","width":4}},{"name":"texel_size","type":{"type":"vector","element":"f32","width":2}},{"name":"padding","type":{"type":"vector","element":"f32","width":2}}]}

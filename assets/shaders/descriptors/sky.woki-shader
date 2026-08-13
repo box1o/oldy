@@ -1,1 +1,1 @@
-{"schema":1,"name":"sky","language":"wgsl","sources":["shaders/common/math.wgsl","shaders/common/transform.wgsl","shaders/post/fullscreen.wgsl","shaders/abi/view.wgsl","shaders/entry/sky.wgsl"],"entry_points":[{"stage":"vertex","name":"sky_vs"},{"stage":"fragment","name":"sky_fs"}]}
+{"schema":1,"name":"sky","language":"wgsl","sources":["shaders/common/math.wgsl","shaders/post/fullscreen.wgsl","shaders/entry/sky.wgsl"],"entry_points":[{"stage":"vertex","name":"sky_vs"},{"stage":"fragment","name":"sky_fs"}]}

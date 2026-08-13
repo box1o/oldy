@@ -8,6 +8,7 @@ endfunction()
 
 find_or_add(yaml
     GIT_REPOSITORY https://github.com/jbeder/yaml-cpp.git
+    GIT_TAG 0.8.0
 )
 mark_dependency_system(yaml-cpp)
 
@@ -25,15 +26,103 @@ find_or_add(Catch2
 mark_dependency_system(Catch2)
 mark_dependency_system(Catch2WithMain)
 
-find_or_add(nlohmann_json
-    NO_SYSTEM
-    GIT_REPOSITORY https://github.com/nlohmann/json.git
-    GIT_TAG v3.11.3
-    CMAKE_CACHE_VARS
-        "JSON_BuildTests=OFF"
-        "JSON_Install=OFF"
-)
-mark_dependency_system(nlohmann_json)
+if(NOT EMSCRIPTEN)
+    set(_WOKI_BUILD_SHARED_LIBS "${BUILD_SHARED_LIBS}")
+    set(BUILD_SHARED_LIBS OFF)
+    find_or_add(fastgltf
+        NO_SYSTEM
+        GIT_REPOSITORY https://github.com/spnda/fastgltf.git
+        GIT_TAG v0.9.0
+        DISABLE_INSTALL
+        CMAKE_CACHE_VARS
+            "FASTGLTF_ENABLE_TESTS=OFF"
+            "FASTGLTF_ENABLE_EXAMPLES=OFF"
+            "FASTGLTF_ENABLE_DOCS=OFF"
+    )
+    mark_dependency_system(fastgltf)
+
+    find_or_add(meshoptimizer
+        NO_SYSTEM
+        GIT_REPOSITORY https://github.com/zeux/meshoptimizer.git
+        GIT_TAG v0.25
+        DISABLE_INSTALL
+        CMAKE_CACHE_VARS
+            "MESHOPT_BUILD_DEMO=OFF"
+            "MESHOPT_BUILD_GLTFPACK=OFF"
+    )
+    mark_dependency_system(meshoptimizer)
+
+    set(UNZIP_FOUND OFF CACHE BOOL "Use Assimp's pinned minizip sources" FORCE)
+    find_or_add(assimp
+        NO_SYSTEM
+        GIT_REPOSITORY https://github.com/assimp/assimp.git
+        GIT_TAG v6.0.2
+        DISABLE_INSTALL
+        CMAKE_CACHE_VARS
+            "ASSIMP_BUILD_TESTS=OFF"
+            "ASSIMP_BUILD_ASSIMP_TOOLS=OFF"
+            "ASSIMP_BUILD_SAMPLES=OFF"
+            "ASSIMP_BUILD_ZLIB=ON"
+            "ASSIMP_INSTALL=OFF"
+            "ASSIMP_WARNINGS_AS_ERRORS=OFF"
+            "ASSIMP_BUILD_ALL_EXPORTERS_BY_DEFAULT=OFF"
+            "ASSIMP_BUILD_MINIZIP=ON"
+    )
+    target_include_directories(assimp PRIVATE "${CDEPS_ROOT}/assimp-src/contrib/unzip")
+    mark_dependency_system(assimp)
+
+    include(FetchContent)
+    FetchContent_Declare(woki_mikktspace
+        GIT_REPOSITORY https://github.com/mmikk/MikkTSpace.git
+        GIT_TAG 3e895b49d05ea07e4c2133156cfa94369e19e409
+        GIT_SHALLOW FALSE
+    )
+    FetchContent_MakeAvailable(woki_mikktspace)
+    add_library(woki_mikktspace STATIC "${woki_mikktspace_SOURCE_DIR}/mikktspace.c")
+    target_include_directories(woki_mikktspace SYSTEM PUBLIC "${woki_mikktspace_SOURCE_DIR}")
+    mark_dependency_system(woki_mikktspace)
+
+    find_or_add(KTX
+        NO_SYSTEM
+        GIT_REPOSITORY https://github.com/KhronosGroup/KTX-Software.git
+        GIT_TAG 936b655d10fe75f900967f524ba31005bebcbb47
+        RECURSE_SUBMODULES
+        DISABLE_INSTALL
+        CMAKE_CACHE_VARS
+            "KTX_FEATURE_DOC=OFF"
+            "KTX_FEATURE_GL_UPLOAD=OFF"
+            "KTX_FEATURE_JNI=OFF"
+            "KTX_FEATURE_KTX1=ON"
+            "KTX_FEATURE_LOADTEST_APPS=OFF"
+            "KTX_FEATURE_TESTS=OFF"
+            "KTX_FEATURE_TOOLS=OFF"
+            "KTX_FEATURE_VK_UPLOAD=OFF"
+    )
+    set(BUILD_SHARED_LIBS "${_WOKI_BUILD_SHARED_LIBS}")
+    unset(_WOKI_BUILD_SHARED_LIBS)
+    # KTX 4.4.2 applies this C++-only Clang option to bundled zstd.c when C and
+    # C++ use different compiler families. Its ASTC target keeps its own flags.
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
+        foreach(_WOKI_KTX_TARGET ktx ktx_read)
+            get_target_property(_WOKI_KTX_OPTIONS ${_WOKI_KTX_TARGET} COMPILE_OPTIONS)
+            list(FILTER _WOKI_KTX_OPTIONS EXCLUDE REGEX "ffp-model=precise")
+            set_target_properties(${_WOKI_KTX_TARGET} PROPERTIES COMPILE_OPTIONS "${_WOKI_KTX_OPTIONS}")
+        endforeach()
+        unset(_WOKI_KTX_OPTIONS)
+        unset(_WOKI_KTX_TARGET)
+    endif()
+    mark_dependency_system(ktx_read)
+
+    include(FetchContent)
+    FetchContent_Declare(woki_stb
+        GIT_REPOSITORY https://github.com/nothings/stb.git
+        GIT_TAG 2c980bb59875b0d32144a71867fbdebb2f77cd20
+        GIT_SHALLOW TRUE
+    )
+    FetchContent_MakeAvailable(woki_stb)
+    add_library(woki_stb INTERFACE)
+    target_include_directories(woki_stb SYSTEM INTERFACE "${woki_stb_SOURCE_DIR}")
+endif()
 
 if(NOT EMSCRIPTEN)
     find_package(LibArchive QUIET)
@@ -114,7 +203,7 @@ if(NOT EMSCRIPTEN)
 
     find_or_add(glfw
         GIT_REPOSITORY https://github.com/glfw/glfw.git
-        GIT_TAG master
+        GIT_TAG ed6452b13c76f7b4da216a9952bc7837aeb0f031
         DISABLE_INSTALL
         CMAKE_CACHE_VARS
             "GLFW_BUILD_WAYLAND=${_GLFW_WAYLAND}"

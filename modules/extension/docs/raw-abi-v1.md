@@ -135,40 +135,17 @@ active-session and effective-grant rule.
 
 ### Application events
 
-Known application events are binary, not JSON. Every integer and IEEE-754
-`float` field is little-endian and fields have no implicit padding. Decoders in
-`sdk/events.h` require the exact payload length, allocate no memory, and return
-`WOKI_EXT_INVALID` for malformed input.
+Known application events are binary, not JSON. Their payload schema is versioned
+independently from these raw host-call signatures. Current hosts emit
+application-event ABI v2, documented in [application-events-v2.md](application-events-v2.md).
 
 An inactive package requesting `events` is activated when the first supported
 public application event arrives. The event is delivered after activation only
 when capability policy grants `events`; all later public application events are
 delivered under the same effective grant.
 
-| Constant | ID | Payload bytes |
-|----------|---:|---------------|
-| `WOKI_EXT_EVENT_WINDOW_CLOSED` | 1 | empty |
-| `WOKI_EXT_EVENT_WINDOW_RESIZED` | 2 | `u32 width, u32 height` (8) |
-| `WOKI_EXT_EVENT_WINDOW_FOCUSED` | 3 | empty |
-| `WOKI_EXT_EVENT_WINDOW_LOST_FOCUS` | 4 | empty |
-| `WOKI_EXT_EVENT_WINDOW_MOVED` | 5 | `s32 x, s32 y` (8) |
-| `WOKI_EXT_EVENT_WINDOW_MINIMIZED` | 6 | empty |
-| `WOKI_EXT_EVENT_WINDOW_MAXIMIZED` | 7 | empty |
-| `WOKI_EXT_EVENT_WINDOW_RESTORED` | 8 | empty |
-| `WOKI_EXT_EVENT_KEY_PRESSED` | 100 | `u16 key, u32 repeat-count` (6) |
-| `WOKI_EXT_EVENT_KEY_RELEASED` | 101 | `u16 key` (2) |
-| `WOKI_EXT_EVENT_KEY_TYPED` | 102 | `u32 character` (4) |
-| `WOKI_EXT_EVENT_MOUSE_SCROLLED` | 151 | `f32 offset-x, f32 offset-y` (8) |
-| `WOKI_EXT_EVENT_MOUSE_BUTTON_PRESSED` | 152 | `u8 button, f32 x, f32 y` (9) |
-| `WOKI_EXT_EVENT_MOUSE_BUTTON_RELEASED` | 153 | `u8 button, f32 x, f32 y` (9) |
-| `WOKI_EXT_EVENT_MOUSE_BUTTON_CLICKED` | 154 | `u8 button, f32 x, f32 y` (9) |
-| `WOKI_EXT_EVENT_MOUSE_ENTERED` | 155 | empty |
-| `WOKI_EXT_EVENT_MOUSE_LEFT` | 156 | empty |
-| `WOKI_EXT_EVENT_WINDOW_SCALE_CHANGED` | 157 | `f32 x, f32 y` (8) |
-| `WOKI_EXT_EVENT_VIEWPORT_RESIZED` | 204 | `u32 width, u32 height` (8) |
-| `WOKI_EXT_EVENT_APP_SHUTDOWN` | 303 | empty |
-| `WOKI_EXT_EVENT_APP_SUSPEND` | 304 | empty |
-| `WOKI_EXT_EVENT_APP_RESUME` | 305 | empty |
+The stable IDs and generated decoders are defined by `sdk/event_schema.def` and
+`sdk/events.h`. Legacy mouse and `KeyTyped` events are not part of v2.
 
 Declare every imported capability in `manifest.yaml`. Verification rejects an
 import when its corresponding permission is absent, consistently across the

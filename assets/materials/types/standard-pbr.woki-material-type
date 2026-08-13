@@ -1,0 +1,57 @@
+{
+  "$schema": "https://schemas.woki.dev/material-type/v1.schema.json",
+  // Standard forward physically based material.
+  "schema": 1,
+  "id": "df1258a0-824a-54ec-b058-a77e0b52c017",
+  "name": "Standard PBR",
+  "shader": "85eb4828-6169-5ce0-aeae-0d1b00ce22dc",
+  "product_family": "standard-pbr",
+  "passes": ["forward", "velocity"],
+  "entry_points": {
+    "forward": {
+      "vertex": "pbr_static_vs",
+      "fragment": "pbr_fs"
+    },
+    "velocity": {
+      "vertex": "pbr_velocity_static_vs",
+      "fragment": "pbr_velocity_fs"
+    }
+  },
+  "render_state": {
+    "blend": "opaque",
+    "cull": "back",
+    "depth_compare": "less_equal",
+    "depth_write": true,
+    "alpha_test": false
+  },
+  "properties": [
+    { "name": "base_color_factor", "type": "vec4", "default": [1.0, 1.0, 1.0, 1.0] },
+    { "name": "emissive_factor", "type": "vec3", "default": [0.0, 0.0, 0.0] },
+    { "name": "normal_scale", "type": "f32", "default": 1.0 },
+    { "name": "metallic_factor", "type": "f32", "default": 1.0 },
+    { "name": "roughness_factor", "type": "f32", "default": 1.0 },
+    { "name": "occlusion_strength", "type": "f32", "default": 1.0 },
+    { "name": "alpha_cutoff", "type": "f32", "default": 0.5 }
+  ],
+  "textures": [
+    { "name": "base_color_texture", "type": "texture2d", "binding": 1, "semantic": "color", "default": "38dd26a9-cbc0-5891-9b82-9acf223ce533" },
+    { "name": "normal_texture", "type": "texture2d", "binding": 3, "semantic": "normal", "default": "c6fc1b2f-385c-5daa-9e08-560a6fbbd48a" },
+    { "name": "metallic_roughness_texture", "type": "texture2d", "binding": 4, "semantic": "data", "default": "0bf17e80-4283-5300-b2cc-1f2741a676ea" },
+    { "name": "emissive_texture", "type": "texture2d", "binding": 5, "semantic": "emissive", "default": "530a3c66-4a2f-57cb-aa70-8a9840956f85" },
+    { "name": "occlusion_texture", "type": "texture2d", "binding": 6, "semantic": "occlusion", "default": "1eec6f36-b507-5327-b284-7a2569ca5d28" }
+  ],
+  "samplers": [
+    {
+      "name": "material_sampler",
+      "binding": 2,
+      "default": {
+        "address_u": "repeat",
+        "address_v": "repeat",
+        "mag_filter": "linear",
+        "min_filter": "linear",
+        "mip_filter": "linear"
+      }
+    }
+  ],
+  "overrides": []
+}

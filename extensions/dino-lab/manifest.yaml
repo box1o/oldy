@@ -36,3 +36,4 @@ contributes:
     - id: woki.dinolab.speed
       title: Change Simulation Speed
       category: Dino Lab
+$schema: https://schemas.woki.dev/extension.manifest/v1.schema.json

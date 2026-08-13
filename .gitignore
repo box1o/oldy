@@ -87,3 +87,4 @@ Testing/
 .rewrite/
 /wokiext
 /woki-studio
+/ui-debug.json

@@ -1,0 +1,1 @@
+{"schema":1,"name":"UnlitMaterial","address_space":"uniform","layout_class":"wgsl-host-shareable","fields":[{"name":"base_color","type":{"type":"vector","element":"f32","width":4}},{"name":"alpha_cutoff","type":"f32"},{"name":"padding","type":{"type":"vector","element":"f32","width":3}}]}

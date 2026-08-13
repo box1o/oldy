@@ -25,7 +25,7 @@ function(apply_compiler_options target)
         if(WARNINGS_AS_ERRORS)
             target_compile_options(${target} PRIVATE /WX)
         endif()
-    else()
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "^(AppleClang|Clang|GNU)$")
         target_compile_options(${target} PRIVATE
             -Wall
             -Wextra

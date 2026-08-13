@@ -1,8 +1,8 @@
 #pragma once
 
+#include <vector>
 #include <cstddef>
 #include <filesystem>
-#include <vector>
 
 #include <woki/core.hpp>
 

@@ -1,16 +1,16 @@
 #pragma once
 
+// Stable application facade. Renderer-authoring and graph integration APIs are
+// available explicitly from <woki/gfx/advanced.hpp>.
 // IWYU pragma: begin_exports
-#include "gfx/compiler.hpp"
 #include "gfx/camera.hpp"
-#include "gfx/descriptor.hpp"
-#include "gfx/layout.hpp"
-#include "gfx/library.hpp"
-#include "gfx/pack.hpp"
-#include "gfx/product.hpp"
-#include "gfx/reflection.hpp"
-#include "gfx/reload.hpp"
-#include "gfx/source.hpp"
-#include "gfx/types.hpp"
-#include "gfx/variant.hpp"
+#include "gfx/canvas.hpp"
+#include "gfx/compute.hpp"
+#include "gfx/diagnostics.hpp"
+#include "gfx/handles.hpp"
+#include "gfx/presentation.hpp"
+#include "gfx/readback.hpp"
+#include "gfx/scene.hpp"
+#include "gfx/runtime.hpp"
+#include "gfx/view.hpp"
 // IWYU pragma: end_exports

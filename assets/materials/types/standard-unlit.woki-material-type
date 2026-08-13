@@ -1,0 +1,48 @@
+{
+  "$schema": "https://schemas.woki.dev/material-type/v1.schema.json",
+  // Standard forward unlit material.
+  "schema": 1,
+  "id": "398db147-4060-5923-bf8c-891905d4e26d",
+  "name": "Standard Unlit",
+  "shader": "18388743-afdf-5e65-aa2b-dd2ea73eabe7",
+  "product_family": "standard-unlit",
+  "passes": ["forward", "velocity"],
+  "entry_points": {
+    "forward": {
+      "vertex": "unlit_static_vs",
+      "fragment": "unlit_fs"
+    },
+    "velocity": {
+      "vertex": "unlit_velocity_static_vs",
+      "fragment": "unlit_velocity_fs"
+    }
+  },
+  "render_state": {
+    "blend": "opaque",
+    "cull": "back",
+    "depth_compare": "less_equal",
+    "depth_write": true,
+    "alpha_test": true
+  },
+  "properties": [
+    { "name": "base_color", "type": "vec4", "default": [1.0, 1.0, 1.0, 1.0] },
+    { "name": "alpha_cutoff", "type": "f32", "default": 0.5 }
+  ],
+  "textures": [
+    { "name": "base_color_texture", "type": "texture2d", "binding": 1, "semantic": "color", "default": "38dd26a9-cbc0-5891-9b82-9acf223ce533" }
+  ],
+  "samplers": [
+    {
+      "name": "material_sampler",
+      "binding": 2,
+      "default": {
+        "address_u": "repeat",
+        "address_v": "repeat",
+        "mag_filter": "linear",
+        "min_filter": "linear",
+        "mip_filter": "linear"
+      }
+    }
+  ],
+  "overrides": []
+}

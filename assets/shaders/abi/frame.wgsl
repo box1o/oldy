@@ -1,4 +1,15 @@
-struct FrameData { time: f32, delta_time: f32, exposure: f32, light_count: u32 };
-struct SceneData { ambient_color: vec3f, _padding: f32, lights: array<Light, 16> };
 @group(0) @binding(0) var<uniform> frame: FrameData;
 @group(0) @binding(1) var<uniform> scene: SceneData;
+@group(0) @binding(2) var<storage, read> local_lights: array<GpuLightRecord>;
+@group(0) @binding(3) var<storage, read> cluster_grid: array<ClusterGridRecord>;
+@group(0) @binding(4) var<storage, read> cluster_light_indices: array<u32>;
+@group(0) @binding(5) var<uniform> cluster_params: ClusterParams;
+@group(0) @binding(6) var shadow_atlas: texture_depth_2d_array;
+@group(0) @binding(7) var shadow_sampler: sampler_comparison;
+@group(0) @binding(8) var<uniform> shadow_data: ShadowData;
+@group(0) @binding(9) var environment_radiance: texture_cube<f32>;
+@group(0) @binding(10) var environment_irradiance: texture_cube<f32>;
+@group(0) @binding(11) var environment_prefiltered: texture_cube<f32>;
+@group(0) @binding(12) var environment_brdf_lut: texture_2d<f32>;
+@group(0) @binding(13) var environment_sampler: sampler;
+@group(0) @binding(14) var<uniform> environment_data: EnvironmentData;

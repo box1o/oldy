@@ -1,0 +1,1 @@
+{"schema":1,"name":"exposure","language":"wgsl","sources":["shaders/compute/exposure.wgsl"],"entry_points":[{"stage":"compute","name":"luminance_histogram_cs"},{"stage":"compute","name":"exposure_reduce_cs"}]}

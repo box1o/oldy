@@ -1,13 +1,13 @@
-#include <woki/gfx/descriptor.hpp>
-
 #include <set>
+#include <charconv>
+#include <woki/config.hpp>
 
-#include <nlohmann/json.hpp>
+#include <woki/gfx/advanced/descriptor.hpp>
 
 namespace woki::gfx {
 namespace {
 
-using Json = nlohmann::json;
+using Json = config::Json;
 
 void Add(std::vector<ShaderDiagnostic>& diagnostics, const asset::AssetPath& path, std::string code, std::string message, const u64 offset = 0) {
     diagnostics.push_back({std::move(code), DiagnosticSeverity::Error, std::move(message), SourceRange{path, offset, 1, 0, 0}, {}});
@@ -36,33 +36,53 @@ std::optional<PermutationValue> ParseValue(const Json& value) {
 }
 
 bool HasOnlyKeys(const Json& object, const std::initializer_list<std::string_view> keys) {
-    return std::ranges::all_of(object.items(), [&](const auto& item) { return std::ranges::find(keys, item.key()) != keys.end(); });
+    return std::ranges::all_of(object.items(), [&](const auto& item) { return std::ranges::find(keys, item.first) != keys.end(); });
+}
+
+bool SemanticName(const std::string_view value) {
+    if (value.empty() || (!(value.front() >= 'A' && value.front() <= 'Z') && !(value.front() >= 'a' && value.front() <= 'z') && value.front() != '_'))
+        return false;
+    return std::ranges::all_of(value.substr(1), [](const char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'; });
+}
+
+std::optional<std::pair<u32, u32>> BindingKey(const std::string_view value) {
+    const auto separator = value.find(':');
+    if (separator == std::string_view::npos || separator == 0 || separator + 1 == value.size() || value.find(':', separator + 1) != std::string_view::npos || (separator > 1 && value.front() == '0')
+        || (value.size() - separator - 1 > 1 && value[separator + 1] == '0'))
+        return std::nullopt;
+    u32 group{}, binding{};
+    const auto group_result = std::from_chars(value.data(), value.data() + separator, group);
+    const auto binding_result = std::from_chars(value.data() + separator + 1, value.data() + value.size(), binding);
+    if (group_result.ec != std::errc{} || group_result.ptr != value.data() + separator || binding_result.ec != std::errc{} || binding_result.ptr != value.data() + value.size())
+        return std::nullopt;
+    return std::pair{group, binding};
 }
 
 } // namespace
 
 DescriptorResult ParseShaderDescriptor(const asset::AssetPath& path, const std::string_view jsonc) {
     DescriptorResult result;
-    Json root;
-    try {
-        root = Json::parse(jsonc, nullptr, true, true);
-    } catch (const Json::parse_error& error) {
-        Add(result.diagnostics, path, "SHD1001", error.what(), error.byte > 0 ? error.byte - 1 : 0);
+    auto parsed_root = Json::Parse(jsonc, path.String());
+    if (!parsed_root) {
+        const auto& error = parsed_root.error().front();
+        Add(result.diagnostics, path, "SHD1001", error.message, error.range.begin.byte);
         return result;
     }
+    Json root = std::move(*parsed_root);
     if (!root.is_object()) {
         Add(result.diagnostics, path, "SHD1002", "shader descriptor root must be an object");
         return result;
     }
-    try {
-        if (!HasOnlyKeys(root, {"schema", "name", "language", "sources", "entry_points", "permutations", "capabilities", "compile_options"}))
+    {
+        if (!HasOnlyKeys(root, {"$schema", "schema", "name", "language", "sources", "entry_points", "permutations", "capabilities", "bindings", "groups", "compile_options"}))
             Add(result.diagnostics, path, "SHD1020", "shader descriptor contains an unsupported key");
 
         const auto schema = root.find("schema");
-        if (schema == root.end() || !schema->is_number_unsigned() || *schema != kShaderDescriptorSchema) {
-            Add(result.diagnostics, path, "SHD1003", "descriptor schema must be 1");
+        if (schema == root.end() || !schema->is_number_unsigned() || (*schema != 1 && *schema != kShaderDescriptorSchema)) {
+            Add(result.diagnostics, path, "SHD1003", "descriptor schema must be 1 or 2");
         } else {
-            result.descriptor.schema = schema->get<u32>();
+            // v1 has no semantic fields and migrates losslessly to the v2 in-memory model.
+            result.descriptor.schema = kShaderDescriptorSchema;
         }
         const auto name = root.find("name");
         if (name == root.end() || !name->is_string() || name->get_ref<const std::string&>().empty()) {
@@ -98,18 +118,23 @@ DescriptorResult ParseShaderDescriptor(const asset::AssetPath& path, const std::
             Add(result.diagnostics, path, "SHD1009", "entry_points must be a non-empty array");
         } else {
             for (const Json& entry : *entries) {
-                if (!entry.is_object() || !HasOnlyKeys(entry, {"stage", "name"}) || !entry.contains("stage") || !entry.contains("name") || !entry["stage"].is_string() || !entry["name"].is_string()) {
+                if (!entry.is_object() || !HasOnlyKeys(entry, {"stage", "name", "semantic"}) || !entry.contains("stage") || !entry.contains("name") || !entry["stage"].is_string() || !entry["name"].is_string()
+                    || (entry.contains("semantic") && !entry["semantic"].is_string())) {
                     Add(result.diagnostics, path, "SHD1010", "entry point requires string stage and name");
                     continue;
                 }
                 const auto stage = ParseStage(entry["stage"].get_ref<const std::string&>());
                 const std::string entry_name = entry["name"].get<std::string>();
-                if (!stage || entry_name.empty()) {
+                if (!stage || !SemanticName(entry_name)) {
                     Add(result.diagnostics, path, "SHD1011", "entry point stage or name is invalid");
                 } else if (!unique_entries.emplace(*stage, entry_name).second) {
                     Add(result.diagnostics, path, "SHD1012", "entry point is duplicated");
                 } else {
-                    result.descriptor.entry_points.push_back({*stage, entry_name});
+                    const std::string semantic = entry.value("semantic", entry_name);
+                    if (!SemanticName(semantic))
+                        Add(result.diagnostics, path, "SHD1026", "entry point semantic must be an identifier");
+                    else
+                        result.descriptor.entry_points.push_back({*stage, entry_name, semantic});
                 }
             }
         }
@@ -156,6 +181,42 @@ DescriptorResult ParseShaderDescriptor(const asset::AssetPath& path, const std::
                         result.descriptor.capabilities.push_back(capability.get<std::string>());
                 }
         }
+        const auto bindings = root.find("bindings");
+        if (bindings != root.end()) {
+            if (!bindings->is_object()) {
+                Add(result.diagnostics, path, "SHD1027", "bindings must be an object keyed by 'group:binding'");
+            } else {
+                for (const auto& [key, value] : bindings->items()) {
+                    const auto parsed = BindingKey(key);
+                    if (!parsed || !value.is_string() || !SemanticName(value.get_ref<const std::string&>()) || !result.descriptor.binding_semantics.emplace(*parsed, value.get<std::string>()).second)
+                        Add(result.diagnostics, path, "SHD1028", "binding semantics require unique canonical numeric keys and identifier values");
+                }
+            }
+        }
+        const auto groups = root.find("groups");
+        if (groups != root.end()) {
+            if (!groups->is_object()) {
+                Add(result.diagnostics, path, "SHD1029", "groups must be an object keyed by a canonical group number");
+            } else {
+                for (const auto& [key, value] : groups->items()) {
+                    u32 group{};
+                    const auto parsed = std::from_chars(key.data(), key.data() + key.size(), group);
+                    if (parsed.ec != std::errc{} || parsed.ptr != key.data() + key.size() || (key.size() > 1 && key.front() == '0') || !value.is_string() || !SemanticName(value.get_ref<const std::string&>())
+                        || !result.descriptor.group_semantics.emplace(group, value.get<std::string>()).second)
+                        Add(result.diagnostics, path, "SHD1030", "group semantics require unique canonical numeric keys and identifier values");
+                }
+            }
+        }
+        std::set<std::string, std::less<>> binding_semantic_names;
+        for (const auto& [coordinate, semantic] : result.descriptor.binding_semantics) {
+            static_cast<void>(coordinate);
+            if (!binding_semantic_names.insert(semantic).second)
+                Add(result.diagnostics, path, "SHD1031", "binding semantic names must be unique");
+        }
+        std::set<std::string, std::less<>> entry_semantic_names;
+        for (const auto& entry : result.descriptor.entry_points)
+            if (!entry_semantic_names.insert(entry.semantic).second)
+                Add(result.diagnostics, path, "SHD1032", "selected entry semantic names must be unique");
         const auto options = root.find("compile_options");
         if (options != root.end()) {
             if (!options->is_object())
@@ -179,8 +240,6 @@ DescriptorResult ParseShaderDescriptor(const asset::AssetPath& path, const std::
         }
         std::ranges::sort(result.descriptor.capabilities);
         result.descriptor.capabilities.erase(std::ranges::unique(result.descriptor.capabilities).begin(), result.descriptor.capabilities.end());
-    } catch (const Json::exception&) {
-        Add(result.diagnostics, path, "SHD1024", "shader descriptor contains a value outside its supported type or range");
     }
     return result;
 }

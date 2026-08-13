@@ -18,6 +18,8 @@ file(GLOB_RECURSE HEADERS CONFIGURE_DEPENDS
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
     src/*.cpp
     backend/wgpu/*.cpp
+    backend/null/*.cpp
+    backend/validation/*.cpp
 )
 
 if(APPLE)
@@ -31,6 +33,7 @@ set(RHI_DEPS
     woki::core
     woki::platform
 )
+set(RHI_PRIVATE_DEPS)
 
 if(EMSCRIPTEN)
     if(NOT DEFINED EMDAWNWEBGPU_PORT OR EMDAWNWEBGPU_PORT STREQUAL "")
@@ -49,7 +52,9 @@ else()
     endif()
 
     if(WGPU_TARGET)
-        list(APPEND RHI_DEPS ${WGPU_TARGET})
+        list(APPEND RHI_DEPS
+            "$<BUILD_INTERFACE:${WGPU_TARGET}>"
+            "$<INSTALL_INTERFACE:$<1:dawn::webgpu_dawn>>")
 
         include(CheckCXXSourceCompiles)
         set(CMAKE_REQUIRED_LIBRARIES ${WGPU_TARGET})
@@ -93,22 +98,22 @@ else()
         )
         unset(CMAKE_REQUIRED_LIBRARIES)
     endif()
+    list(APPEND RHI_PRIVATE_DEPS
+        "$<BUILD_INTERFACE:glfw>"
+        "$<INSTALL_INTERFACE:$<1:glfw>>")
 endif()
 
 add_module(rhi
     SOURCES ${SOURCES}
     HEADERS ${HEADERS}
-    DEPENDENCIES ${RHI_DEPS}
+    PUBLIC_DEPENDENCIES ${RHI_DEPS}
+    PRIVATE_DEPENDENCIES ${RHI_PRIVATE_DEPS}
 )
 
 target_include_directories(woki_rhi
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/backend
 )
-
-if(NOT EMSCRIPTEN)
-    target_link_libraries(woki_rhi PRIVATE glfw)
-endif()
 
 if(WOKI_WGPU_HAS_RESOURCE_TABLE_BINDING_NAMES)
     target_compile_definitions(woki_rhi PRIVATE WOKI_WGPU_HAS_RESOURCE_TABLE_BINDING_NAMES=1)

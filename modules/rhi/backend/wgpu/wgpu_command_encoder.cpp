@@ -147,9 +147,13 @@ Result<scope<CommandBuffer>> WgpuCommandEncoderImpl::Finish(const CommandBufferD
 }
 
 void WgpuCommandEncoderImpl::InjectValidationError(const std::string_view message) {
+#ifdef __EMSCRIPTEN__
+    (void)message;
+#else
     if (encoder_) {
         wgpuCommandEncoderInjectValidationError(encoder_.get(), detail::ToStringView(message));
     }
+#endif
 }
 
 void WgpuCommandEncoderImpl::InsertDebugMarker(const std::string_view marker_label) {
@@ -186,6 +190,13 @@ void WgpuCommandEncoderImpl::SetLabel(const std::string_view label) {
 }
 
 Result<void> WgpuCommandEncoderImpl::WriteBuffer(const Buffer& buffer, const u64 buffer_offset, const u8* data, const u64 size) {
+#ifdef __EMSCRIPTEN__
+    (void)buffer;
+    (void)buffer_offset;
+    (void)data;
+    (void)size;
+    return Err(ErrorCode::GraphicsUnsupportedApi, "Command encoder buffer writes are unavailable with emdawnwebgpu");
+#else
     if (!encoder_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Command encoder is invalid");
     }
@@ -196,6 +207,7 @@ Result<void> WgpuCommandEncoderImpl::WriteBuffer(const Buffer& buffer, const u64
 
     wgpuCommandEncoderWriteBuffer(encoder_.get(), detail::NativeBuffer(buffer), buffer_offset, data, size);
     return Ok();
+#endif
 }
 
 Result<void> WgpuCommandEncoderImpl::WriteTimestamp(const QuerySet& query_set, const u32 query_index) {

@@ -1,19 +1,18 @@
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
-#include <windows.h>
-
 #include <array>
-#include <atomic>
-#include <cstddef>
-#include <condition_variable>
-#include <filesystem>
 #include <mutex>
+#include <atomic>
 #include <string>
+#include <thread>
+#include <cstddef>
+#include <utility>
+#include <windows.h>
+#include <filesystem>
 #include <string_view>
 #include <system_error>
-#include <thread>
-#include <utility>
+#include <condition_variable>
 
 #include "file_watcher_internal.hpp"
 

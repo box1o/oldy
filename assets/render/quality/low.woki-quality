@@ -1,0 +1,10 @@
+{
+  "$schema": "https://schemas.woki.dev/quality/v1.schema.json",
+  "schema": 1,
+  "name": "Low",
+  "features": {
+    "shadows": { "enabled": false },
+    "bloom": { "enabled": false },
+    "temporal": { "enabled": false }
+  }
+}

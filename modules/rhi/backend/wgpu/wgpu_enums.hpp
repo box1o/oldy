@@ -17,7 +17,9 @@ static_assert(static_cast<u64>(BufferUsage::Uniform) == WGPUBufferUsage_Uniform)
 static_assert(static_cast<u64>(BufferUsage::Storage) == WGPUBufferUsage_Storage);
 static_assert(static_cast<u64>(BufferUsage::Indirect) == WGPUBufferUsage_Indirect);
 static_assert(static_cast<u64>(BufferUsage::QueryResolve) == WGPUBufferUsage_QueryResolve);
+#ifndef __EMSCRIPTEN__
 static_assert(static_cast<u64>(BufferUsage::TexelBuffer) == WGPUBufferUsage_TexelBuffer);
+#endif
 
 static_assert(static_cast<u64>(ShaderStage::None) == WGPUShaderStage_None);
 static_assert(static_cast<u64>(ShaderStage::Vertex) == WGPUShaderStage_Vertex);
@@ -31,7 +33,9 @@ static_assert(static_cast<u64>(TextureUsage::TextureBinding) == WGPUTextureUsage
 static_assert(static_cast<u64>(TextureUsage::StorageBinding) == WGPUTextureUsage_StorageBinding);
 static_assert(static_cast<u64>(TextureUsage::RenderAttachment) == WGPUTextureUsage_RenderAttachment);
 static_assert(static_cast<u64>(TextureUsage::TransientAttachment) == WGPUTextureUsage_TransientAttachment);
+#ifndef __EMSCRIPTEN__
 static_assert(static_cast<u64>(TextureUsage::StorageAttachment) == WGPUTextureUsage_StorageAttachment);
+#endif
 
 static_assert(static_cast<u64>(ColorWriteMask::None) == WGPUColorWriteMask_None);
 static_assert(static_cast<u64>(ColorWriteMask::Red) == WGPUColorWriteMask_Red);
@@ -40,12 +44,14 @@ static_assert(static_cast<u64>(ColorWriteMask::Blue) == WGPUColorWriteMask_Blue)
 static_assert(static_cast<u64>(ColorWriteMask::Alpha) == WGPUColorWriteMask_Alpha);
 static_assert(static_cast<u64>(ColorWriteMask::All) == WGPUColorWriteMask_All);
 
+#ifndef __EMSCRIPTEN__
 static_assert(static_cast<u64>(HeapProperty::None) == WGPUHeapProperty_None);
 static_assert(static_cast<u64>(HeapProperty::DeviceLocal) == WGPUHeapProperty_DeviceLocal);
 static_assert(static_cast<u64>(HeapProperty::HostVisible) == WGPUHeapProperty_HostVisible);
 static_assert(static_cast<u64>(HeapProperty::HostCoherent) == WGPUHeapProperty_HostCoherent);
 static_assert(static_cast<u64>(HeapProperty::HostUncached) == WGPUHeapProperty_HostUncached);
 static_assert(static_cast<u64>(HeapProperty::HostCached) == WGPUHeapProperty_HostCached);
+#endif
 
 static_assert(static_cast<u64>(MapMode::None) == WGPUMapMode_None);
 static_assert(static_cast<u64>(MapMode::Read) == WGPUMapMode_Read);
@@ -109,6 +115,7 @@ static_assert(static_cast<u64>(MapMode::Write) == WGPUMapMode_Write);
     }
 }
 
+#ifndef __EMSCRIPTEN__
 [[nodiscard]] inline WGPUAlphaMode ToWgpu(AlphaMode value) noexcept {
     switch (value) {
         case AlphaMode::Opaque:
@@ -133,6 +140,7 @@ static_assert(static_cast<u64>(MapMode::Write) == WGPUMapMode_Write);
             return AlphaMode::Opaque;
     }
 }
+#endif
 
 [[nodiscard]] inline WGPUBackendType ToWgpu(BackendType value) noexcept {
     switch (value) {
@@ -388,6 +396,7 @@ static_assert(static_cast<u64>(MapMode::Write) == WGPUMapMode_Write);
     }
 }
 
+#ifndef __EMSCRIPTEN__
 [[nodiscard]] inline WGPUColorSpacePrimariesDawn ToWgpu(ColorSpacePrimariesDawn value) noexcept {
     switch (value) {
         case ColorSpacePrimariesDawn::SRGB:
@@ -512,6 +521,7 @@ static_assert(static_cast<u64>(MapMode::Write) == WGPUMapMode_Write);
             return ColorSpaceYCbCrRangeDawn::Identity;
     }
 }
+#endif
 
 [[nodiscard]] inline WGPUCompareFunction ToWgpu(CompareFunction value) noexcept {
     switch (value) {
@@ -827,6 +837,7 @@ static_assert(static_cast<u64>(MapMode::Write) == WGPUMapMode_Write);
     }
 }
 
+#ifndef __EMSCRIPTEN__
 [[nodiscard]] inline WGPUExternalTextureRotation ToWgpu(ExternalTextureRotation value) noexcept {
     switch (value) {
         case ExternalTextureRotation::Rotate0Degrees:
@@ -855,6 +866,7 @@ static_assert(static_cast<u64>(MapMode::Write) == WGPUMapMode_Write);
             return ExternalTextureRotation::Rotate0Degrees;
     }
 }
+#endif
 
 [[nodiscard]] inline WGPUFeatureLevel ToWgpu(FeatureLevel value) noexcept {
     switch (value) {
@@ -881,6 +893,35 @@ static_assert(static_cast<u64>(MapMode::Write) == WGPUMapMode_Write);
     }
 }
 
+#ifdef __EMSCRIPTEN__
+[[nodiscard]] inline WGPUFeatureName ToWgpu(FeatureName value) noexcept {
+    const auto raw = static_cast<u32>(value) + 1;
+    if (raw <= static_cast<u32>(WGPUFeatureName_TextureComponentSwizzle)) {
+        return static_cast<WGPUFeatureName>(raw);
+    }
+    if (value == FeatureName::Unorm16TextureFormats) {
+        return WGPUFeatureName_Unorm16TextureFormats;
+    }
+    if (value == FeatureName::MultiDrawIndirect) {
+        return WGPUFeatureName_MultiDrawIndirect;
+    }
+    return WGPUFeatureName_Force32;
+}
+
+[[nodiscard]] inline FeatureName FromWgpu(WGPUFeatureName value) noexcept {
+    const auto raw = static_cast<u32>(value);
+    if (raw >= static_cast<u32>(WGPUFeatureName_CoreFeaturesAndLimits) && raw <= static_cast<u32>(WGPUFeatureName_TextureComponentSwizzle)) {
+        return static_cast<FeatureName>(raw - 1);
+    }
+    if (value == WGPUFeatureName_Unorm16TextureFormats) {
+        return FeatureName::Unorm16TextureFormats;
+    }
+    if (value == WGPUFeatureName_MultiDrawIndirect) {
+        return FeatureName::MultiDrawIndirect;
+    }
+    return FeatureName::CoreFeaturesAndLimits;
+}
+#else
 [[nodiscard]] inline WGPUFeatureName ToWgpu(FeatureName value) noexcept {
     switch (value) {
         case FeatureName::CoreFeaturesAndLimits:
@@ -1247,6 +1288,7 @@ static_assert(static_cast<u64>(MapMode::Write) == WGPUMapMode_Write);
             return FeatureName::CoreFeaturesAndLimits;
     }
 }
+#endif
 
 [[nodiscard]] inline WGPUFilterMode ToWgpu(FilterMode value) noexcept {
     switch (value) {
@@ -1356,8 +1398,13 @@ static_assert(static_cast<u64>(MapMode::Write) == WGPUMapMode_Write);
             return WGPULoadOp_Load;
         case LoadOp::Clear:
             return WGPULoadOp_Clear;
+#ifndef __EMSCRIPTEN__
         case LoadOp::ExpandResolveTexture:
             return WGPULoadOp_ExpandResolveTexture;
+#else
+        case LoadOp::ExpandResolveTexture:
+            return WGPULoadOp_Undefined;
+#endif
     }
     return WGPULoadOp_Undefined;
 }
@@ -1370,13 +1417,16 @@ static_assert(static_cast<u64>(MapMode::Write) == WGPUMapMode_Write);
             return LoadOp::Load;
         case WGPULoadOp_Clear:
             return LoadOp::Clear;
+#ifndef __EMSCRIPTEN__
         case WGPULoadOp_ExpandResolveTexture:
             return LoadOp::ExpandResolveTexture;
+#endif
         default:
             return LoadOp::Undefined;
     }
 }
 
+#ifndef __EMSCRIPTEN__
 [[nodiscard]] inline WGPULoggingType ToWgpu(LoggingType value) noexcept {
     switch (value) {
         case LoggingType::Verbose:
@@ -1405,6 +1455,7 @@ static_assert(static_cast<u64>(MapMode::Write) == WGPUMapMode_Write);
             return LoggingType::Verbose;
     }
 }
+#endif
 
 [[nodiscard]] inline WGPUMapAsyncStatus ToWgpu(MapAsyncStatus value) noexcept {
     switch (value) {
@@ -1516,12 +1567,19 @@ static_assert(static_cast<u64>(MapMode::Write) == WGPUMapMode_Write);
             return WGPUPredefinedColorSpace_SRGB;
         case PredefinedColorSpace::DisplayP3:
             return WGPUPredefinedColorSpace_DisplayP3;
+#ifndef __EMSCRIPTEN__
         case PredefinedColorSpace::SRGBLinear:
             return WGPUPredefinedColorSpace_SRGBLinear;
         case PredefinedColorSpace::DisplayP3Linear:
             return WGPUPredefinedColorSpace_DisplayP3Linear;
         case PredefinedColorSpace::Rec2020Linear:
             return WGPUPredefinedColorSpace_Rec2020Linear;
+#else
+        case PredefinedColorSpace::SRGBLinear:
+        case PredefinedColorSpace::DisplayP3Linear:
+        case PredefinedColorSpace::Rec2020Linear:
+            return WGPUPredefinedColorSpace_SRGB;
+#endif
     }
     return WGPUPredefinedColorSpace_SRGB;
 }
@@ -1532,12 +1590,14 @@ static_assert(static_cast<u64>(MapMode::Write) == WGPUMapMode_Write);
             return PredefinedColorSpace::SRGB;
         case WGPUPredefinedColorSpace_DisplayP3:
             return PredefinedColorSpace::DisplayP3;
+#ifndef __EMSCRIPTEN__
         case WGPUPredefinedColorSpace_SRGBLinear:
             return PredefinedColorSpace::SRGBLinear;
         case WGPUPredefinedColorSpace_DisplayP3Linear:
             return PredefinedColorSpace::DisplayP3Linear;
         case WGPUPredefinedColorSpace_Rec2020Linear:
             return PredefinedColorSpace::Rec2020Linear;
+#endif
         default:
             return PredefinedColorSpace::SRGB;
     }
@@ -1746,6 +1806,7 @@ static_assert(static_cast<u64>(MapMode::Write) == WGPUMapMode_Write);
     }
 }
 
+#ifndef __EMSCRIPTEN__
 [[nodiscard]] inline WGPUSharedFenceType ToWgpu(SharedFenceType value) noexcept {
     switch (value) {
         case SharedFenceType::VkSemaphoreOpaqueFD:
@@ -1782,6 +1843,7 @@ static_assert(static_cast<u64>(MapMode::Write) == WGPUMapMode_Write);
             return SharedFenceType::VkSemaphoreOpaqueFD;
     }
 }
+#endif
 
 [[nodiscard]] inline WGPUStatus ToWgpu(Status value) noexcept {
     switch (value) {
@@ -1911,6 +1973,7 @@ static_assert(static_cast<u64>(MapMode::Write) == WGPUMapMode_Write);
     }
 }
 
+#ifndef __EMSCRIPTEN__
 [[nodiscard]] inline WGPUSType ToWgpu(SType value) noexcept {
     switch (value) {
         case SType::ShaderSourceSPIRV:
@@ -2305,7 +2368,9 @@ static_assert(static_cast<u64>(MapMode::Write) == WGPUMapMode_Write);
             return SType::ShaderSourceSPIRV;
     }
 }
+#endif
 
+#ifndef __EMSCRIPTEN__
 [[nodiscard]] inline WGPUSubgroupMatrixComponentType ToWgpu(SubgroupMatrixComponentType value) noexcept {
     switch (value) {
         case SubgroupMatrixComponentType::F32:
@@ -2342,6 +2407,7 @@ static_assert(static_cast<u64>(MapMode::Write) == WGPUMapMode_Write);
             return SubgroupMatrixComponentType::F32;
     }
 }
+#endif
 
 [[nodiscard]] inline WGPUSurfaceGetCurrentTextureStatus ToWgpu(SurfaceGetCurrentTextureStatus value) noexcept {
     switch (value) {
@@ -2380,6 +2446,7 @@ static_assert(static_cast<u64>(MapMode::Write) == WGPUMapMode_Write);
     }
 }
 
+#ifndef __EMSCRIPTEN__
 [[nodiscard]] inline WGPUTexelBufferAccess ToWgpu(TexelBufferAccess value) noexcept {
     switch (value) {
         case TexelBufferAccess::Undefined:
@@ -2404,6 +2471,7 @@ static_assert(static_cast<u64>(MapMode::Write) == WGPUMapMode_Write);
             return TexelBufferAccess::Undefined;
     }
 }
+#endif
 
 [[nodiscard]] inline WGPUTextureAspect ToWgpu(TextureAspect value) noexcept {
     switch (value) {
@@ -2415,12 +2483,19 @@ static_assert(static_cast<u64>(MapMode::Write) == WGPUMapMode_Write);
             return WGPUTextureAspect_StencilOnly;
         case TextureAspect::DepthOnly:
             return WGPUTextureAspect_DepthOnly;
+#ifndef __EMSCRIPTEN__
         case TextureAspect::Plane0Only:
             return WGPUTextureAspect_Plane0Only;
         case TextureAspect::Plane1Only:
             return WGPUTextureAspect_Plane1Only;
         case TextureAspect::Plane2Only:
             return WGPUTextureAspect_Plane2Only;
+#else
+        case TextureAspect::Plane0Only:
+        case TextureAspect::Plane1Only:
+        case TextureAspect::Plane2Only:
+            return WGPUTextureAspect_All;
+#endif
     }
     return WGPUTextureAspect_Undefined;
 }
@@ -2435,12 +2510,14 @@ static_assert(static_cast<u64>(MapMode::Write) == WGPUMapMode_Write);
             return TextureAspect::StencilOnly;
         case WGPUTextureAspect_DepthOnly:
             return TextureAspect::DepthOnly;
+#ifndef __EMSCRIPTEN__
         case WGPUTextureAspect_Plane0Only:
             return TextureAspect::Plane0Only;
         case WGPUTextureAspect_Plane1Only:
             return TextureAspect::Plane1Only;
         case WGPUTextureAspect_Plane2Only:
             return TextureAspect::Plane2Only;
+#endif
         default:
             return TextureAspect::Undefined;
     }
@@ -2681,6 +2758,7 @@ static_assert(static_cast<u64>(MapMode::Write) == WGPUMapMode_Write);
             return WGPUTextureFormat_ASTC12x12Unorm;
         case TextureFormat::ASTC12x12UnormSrgb:
             return WGPUTextureFormat_ASTC12x12UnormSrgb;
+#ifndef __EMSCRIPTEN__
         case TextureFormat::R8BG8Biplanar420Unorm:
             return WGPUTextureFormat_R8BG8Biplanar420Unorm;
         case TextureFormat::R10X6BG10X6Biplanar420Unorm:
@@ -2697,6 +2775,17 @@ static_assert(static_cast<u64>(MapMode::Write) == WGPUMapMode_Write);
             return WGPUTextureFormat_R10X6BG10X6Biplanar444Unorm;
         case TextureFormat::OpaqueYCbCrAndroid:
             return WGPUTextureFormat_OpaqueYCbCrAndroid;
+#else
+        case TextureFormat::R8BG8Biplanar420Unorm:
+        case TextureFormat::R10X6BG10X6Biplanar420Unorm:
+        case TextureFormat::R8BG8A8Triplanar420Unorm:
+        case TextureFormat::R8BG8Biplanar422Unorm:
+        case TextureFormat::R8BG8Biplanar444Unorm:
+        case TextureFormat::R10X6BG10X6Biplanar422Unorm:
+        case TextureFormat::R10X6BG10X6Biplanar444Unorm:
+        case TextureFormat::OpaqueYCbCrAndroid:
+            return WGPUTextureFormat_Undefined;
+#endif
     }
     return WGPUTextureFormat_Undefined;
 }
@@ -2907,6 +2996,7 @@ static_assert(static_cast<u64>(MapMode::Write) == WGPUMapMode_Write);
             return TextureFormat::ASTC12x12Unorm;
         case WGPUTextureFormat_ASTC12x12UnormSrgb:
             return TextureFormat::ASTC12x12UnormSrgb;
+#ifndef __EMSCRIPTEN__
         case WGPUTextureFormat_R8BG8Biplanar420Unorm:
             return TextureFormat::R8BG8Biplanar420Unorm;
         case WGPUTextureFormat_R10X6BG10X6Biplanar420Unorm:
@@ -2923,6 +3013,7 @@ static_assert(static_cast<u64>(MapMode::Write) == WGPUMapMode_Write);
             return TextureFormat::R10X6BG10X6Biplanar444Unorm;
         case WGPUTextureFormat_OpaqueYCbCrAndroid:
             return TextureFormat::OpaqueYCbCrAndroid;
+#endif
         default:
             return TextureFormat::Undefined;
     }
@@ -3280,6 +3371,7 @@ static_assert(static_cast<u64>(MapMode::Write) == WGPUMapMode_Write);
             return WGPUWGSLLanguageFeatureName_TextureFormatsTier1;
         case WGSLLanguageFeatureName::LinearIndexing:
             return WGPUWGSLLanguageFeatureName_LinearIndexing;
+#ifndef __EMSCRIPTEN__
         case WGSLLanguageFeatureName::ImmediateAddressSpace:
             return WGPUWGSLLanguageFeatureName_ImmediateAddressSpace;
         case WGSLLanguageFeatureName::ChromiumTestingUnimplemented:
@@ -3304,6 +3396,21 @@ static_assert(static_cast<u64>(MapMode::Write) == WGPUMapMode_Write);
             return WGPUWGSLLanguageFeatureName_BufferView;
         case WGSLLanguageFeatureName::SwizzleAssignment:
             return WGPUWGSLLanguageFeatureName_SwizzleAssignment;
+#else
+        case WGSLLanguageFeatureName::ImmediateAddressSpace:
+        case WGSLLanguageFeatureName::ChromiumTestingUnimplemented:
+        case WGSLLanguageFeatureName::ChromiumTestingUnsafeExperimental:
+        case WGSLLanguageFeatureName::ChromiumTestingExperimental:
+        case WGSLLanguageFeatureName::ChromiumTestingShippedWithKillswitch:
+        case WGSLLanguageFeatureName::ChromiumTestingShipped:
+        case WGSLLanguageFeatureName::SizedBindingArray:
+        case WGSLLanguageFeatureName::TexelBuffers:
+        case WGSLLanguageFeatureName::ChromiumPrint:
+        case WGSLLanguageFeatureName::FragmentDepth:
+        case WGSLLanguageFeatureName::BufferView:
+        case WGSLLanguageFeatureName::SwizzleAssignment:
+            return WGPUWGSLLanguageFeatureName_Force32;
+#endif
     }
     return WGPUWGSLLanguageFeatureName_ReadonlyAndReadwriteStorageTextures;
 }
@@ -3330,6 +3437,7 @@ static_assert(static_cast<u64>(MapMode::Write) == WGPUMapMode_Write);
             return WGSLLanguageFeatureName::TextureFormatsTier1;
         case WGPUWGSLLanguageFeatureName_LinearIndexing:
             return WGSLLanguageFeatureName::LinearIndexing;
+#ifndef __EMSCRIPTEN__
         case WGPUWGSLLanguageFeatureName_ImmediateAddressSpace:
             return WGSLLanguageFeatureName::ImmediateAddressSpace;
         case WGPUWGSLLanguageFeatureName_ChromiumTestingUnimplemented:
@@ -3354,6 +3462,7 @@ static_assert(static_cast<u64>(MapMode::Write) == WGPUMapMode_Write);
             return WGSLLanguageFeatureName::BufferView;
         case WGPUWGSLLanguageFeatureName_SwizzleAssignment:
             return WGSLLanguageFeatureName::SwizzleAssignment;
+#endif
         default:
             return WGSLLanguageFeatureName::ReadonlyAndReadwriteStorageTextures;
     }
@@ -3375,6 +3484,7 @@ static_assert(static_cast<u64>(MapMode::Write) == WGPUMapMode_Write);
     return static_cast<ColorWriteMask>(static_cast<u64>(value));
 }
 
+#ifndef __EMSCRIPTEN__
 [[nodiscard]] inline WGPUHeapProperty ToWgpuHeapProperty(HeapProperty value) noexcept {
     return static_cast<WGPUHeapProperty>(static_cast<u64>(value));
 }
@@ -3382,6 +3492,7 @@ static_assert(static_cast<u64>(MapMode::Write) == WGPUMapMode_Write);
 [[nodiscard]] inline HeapProperty FromWgpuHeapProperty(WGPUHeapProperty value) noexcept {
     return static_cast<HeapProperty>(static_cast<u64>(value));
 }
+#endif
 
 [[nodiscard]] inline WGPUMapMode ToWgpuMapMode(MapMode value) noexcept {
     return static_cast<WGPUMapMode>(static_cast<u64>(value));

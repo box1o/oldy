@@ -1,7 +1,6 @@
-#include <catch2/catch_test_macros.hpp>
-
-#include <filesystem>
 #include <fstream>
+#include <filesystem>
+#include <catch2/catch_test_macros.hpp>
 
 #include <woki/asset.hpp>
 
@@ -68,5 +67,5 @@ TEST_CASE("Directory mounts reject symlink escapes") {
     const auto path = woki::asset::AssetPath::Parse("escape/secret");
     REQUIRE(mount);
     REQUIRE(path);
-    REQUIRE_FALSE((*mount)->Read(*path, 1024));
+    REQUIRE_FALSE((*mount)->Read(*path, 0, 1024));
 }

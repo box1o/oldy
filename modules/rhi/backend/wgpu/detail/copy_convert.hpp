@@ -5,6 +5,7 @@
 #include <woki/rhi/descriptors.hpp>
 
 #include "../wgpu_enums.hpp"
+#include "native_helpers.hpp"
 
 namespace woki::rhi::wgpu::detail::copy {
 
@@ -14,17 +15,21 @@ using namespace woki::rhi::wgpu::convert;
     return WGPUOrigin3D{origin.x, origin.y, origin.z};
 }
 
+#ifndef __EMSCRIPTEN__
 [[nodiscard]] inline WGPUOrigin2D ToWgpu(const Origin2D& origin) noexcept {
     return WGPUOrigin2D{origin.x, origin.y};
 }
+#endif
 
 [[nodiscard]] inline WGPUExtent3D ToWgpu(const Extent3D& extent) noexcept {
     return WGPUExtent3D{extent.width, extent.height, extent.depth_or_array_layers};
 }
 
+#ifndef __EMSCRIPTEN__
 [[nodiscard]] inline WGPUExtent2D ToWgpu(const Extent2D& extent) noexcept {
     return WGPUExtent2D{extent.width, extent.height};
 }
+#endif
 
 [[nodiscard]] inline WGPUTexelCopyBufferLayout ToWgpu(const TexelCopyBufferLayout& layout) noexcept {
     WGPUTexelCopyBufferLayout native = WGPU_TEXEL_COPY_BUFFER_LAYOUT_INIT;
@@ -37,19 +42,20 @@ using namespace woki::rhi::wgpu::convert;
 [[nodiscard]] inline WGPUTexelCopyBufferInfo ToWgpu(const TexelCopyBufferInfo& info) noexcept {
     WGPUTexelCopyBufferInfo native = WGPU_TEXEL_COPY_BUFFER_INFO_INIT;
     native.layout = ToWgpu(info.layout);
-    native.buffer = static_cast<WGPUBuffer>(info.buffer);
+    native.buffer = info.buffer == nullptr ? nullptr : NativeBuffer(*info.buffer);
     return native;
 }
 
 [[nodiscard]] inline WGPUTexelCopyTextureInfo ToWgpu(const TexelCopyTextureInfo& info) noexcept {
     WGPUTexelCopyTextureInfo native = WGPU_TEXEL_COPY_TEXTURE_INFO_INIT;
-    native.texture = static_cast<WGPUTexture>(info.texture);
+    native.texture = info.texture == nullptr ? nullptr : NativeTexture(*info.texture);
     native.mipLevel = info.mip_level;
     native.origin = ToWgpu(info.origin);
     native.aspect = convert::ToWgpu(info.aspect);
     return native;
 }
 
+#ifndef __EMSCRIPTEN__
 [[nodiscard]] inline WGPUCopyTextureForBrowserOptions ToWgpu(const CopyTextureForBrowserOptions& options) noexcept {
     WGPUCopyTextureForBrowserOptions native = WGPU_COPY_TEXTURE_FOR_BROWSER_OPTIONS_INIT;
     native.nextInChain = static_cast<WGPUChainedStruct*>(options.next_in_chain);
@@ -71,5 +77,6 @@ using namespace woki::rhi::wgpu::convert;
     native.naturalSize = ToWgpu(source.natural_size);
     return native;
 }
+#endif
 
 } // namespace woki::rhi::wgpu::detail::copy

@@ -13,5 +13,8 @@ include("${WOKI_REPO_ROOT}/cmake/ExtensionWasm.cmake")
 add_wokiext(kitty
     LANGUAGE CXX
     MANIFEST manifest.yaml
+    WASM extension.wasm
+    LIBRARIES math ecs
+    PERMISSIONS log
     SOURCES src/plugin.cpp
 )

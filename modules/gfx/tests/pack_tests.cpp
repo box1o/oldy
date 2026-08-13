@@ -1,8 +1,7 @@
+#include <filesystem>
 #include <catch2/catch_test_macros.hpp>
 
-#include <woki/gfx.hpp>
-
-#include <filesystem>
+#include <woki/gfx/advanced.hpp>
 
 namespace {
 woki::gfx::ShaderPack LoadStandardPack() {

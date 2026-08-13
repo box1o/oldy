@@ -1,12 +1,11 @@
-#include <CoreServices/CoreServices.h>
-
-#include <atomic>
-#include <condition_variable>
-#include <filesystem>
 #include <mutex>
+#include <atomic>
 #include <string>
 #include <thread>
 #include <utility>
+#include <filesystem>
+#include <condition_variable>
+#include <CoreServices/CoreServices.h>
 
 #include "file_watcher_internal.hpp"
 

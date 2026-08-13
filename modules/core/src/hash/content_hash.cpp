@@ -1,10 +1,10 @@
-#include <woki/hash/content_hash.hpp>
-
-#include <algorithm>
-#include <array>
 #include <bit>
-#include <cstring>
+#include <array>
 #include <limits>
+#include <cstring>
+#include <algorithm>
+
+#include <woki/hash/content_hash.hpp>
 
 namespace woki {
 namespace {

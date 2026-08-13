@@ -4,7 +4,7 @@
 
 #include <string>
 
-#include "../config/config.hpp"
+#include "../build_config.hpp"
 
 namespace woki {
 

@@ -1,0 +1,35 @@
+{
+  "$schema": "https://schemas.woki.dev/pipeline/v1.schema.json",
+  "schema": 1,
+  "name": "Mobile Forward",
+  "renderPath": "mobile-forward",
+  "targets": {
+    "color": ["surface"],
+    "depth": "depth24plus",
+    "samples": 1
+  },
+  "features": [
+    { "id": "mesh" },
+    { "id": "gpu-visibility" },
+    { "id": "depth" },
+    { "id": "hiz-depth-pyramid" },
+    { "id": "lighting" },
+    { "id": "forward", "settings": { "shader": "shaders/descriptors/pbr.woki-shader" } },
+    { "id": "transparent" },
+    { "id": "sky" },
+    { "id": "presentation" }
+  ],
+  "extensionPoints": {
+    "depth-prepass": ["gpu-visibility", "depth", "hiz-depth-pyramid"],
+    "opaque": ["mesh", "lighting", "forward"],
+    "transparent": ["transparent"],
+    "post-process": ["presentation"]
+  },
+  "qualityProfile": "quality/medium.woki-quality",
+  "fallbacks": [
+    {
+      "pipeline": "compatibility-forward.woki-pipeline",
+      "missingCapabilities": ["depth-texture"]
+    }
+  ]
+}

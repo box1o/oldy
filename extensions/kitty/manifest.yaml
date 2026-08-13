@@ -21,3 +21,4 @@ contributes:
     - id: woki.kitty.complex
       title: Complex command
       category: Fun
+$schema: https://schemas.woki.dev/extension.manifest/v1.schema.json

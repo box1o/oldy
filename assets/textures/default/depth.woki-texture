@@ -1,0 +1,1 @@
+{"$schema":"https://schemas.woki.dev/texture/v1.schema.json","schema":1,"asset_id":"a3c2678b-6cc9-50be-950d-2e5be6473194","source":"engine://textures/default/white.ppm","semantic":"depth","color_space":"linear","mips":"none","target":"rgba8"}

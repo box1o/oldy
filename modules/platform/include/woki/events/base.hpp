@@ -8,6 +8,33 @@
 
 namespace woki::events {
 
+using WindowId = u32;
+using DeviceId = u64;
+using PointerId = u64;
+
+enum class EventSource : u8 { kUnknown, kNative, kWeb, kSynthetic };
+
+enum class Modifier : u16 {
+    kNone = 0,
+    kShift = 1 << 0,
+    kControl = 1 << 1,
+    kAlt = 1 << 2,
+    kSuper = 1 << 3,
+    kCapsLock = 1 << 4,
+    kNumLock = 1 << 5,
+};
+
+using ModifierFlags = u16;
+
+struct EventMetadata final {
+    f64 timestamp{0.0};
+    u64 sequence{0};
+    WindowId window{0};
+    DeviceId device{0};
+    ModifierFlags modifiers{0};
+    EventSource source{EventSource::kUnknown};
+};
+
 template <typename T>
 concept EventLike = requires(const T event) {
     { T::GetStaticType() } -> std::same_as<EventType>;
@@ -29,7 +56,11 @@ public:
     }
 
     bool handled{false};
-    f64 timestamp{0.0};
+    EventMetadata metadata{};
+
+    [[nodiscard]] f64 Timestamp() const noexcept {
+        return metadata.timestamp;
+    }
 };
 
 template <EventType Type, EventCategory... Categories>

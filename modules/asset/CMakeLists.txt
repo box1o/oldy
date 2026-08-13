@@ -20,6 +20,14 @@ add_module(asset
     DEPENDENCIES woki::core
 )
 
+if(NOT EMSCRIPTEN)
+    add_executable(woki-asset tool/main.cpp)
+    target_compile_features(woki-asset PRIVATE cxx_std_23)
+    target_link_libraries(woki-asset PRIVATE woki::asset)
+    apply_compiler_options(woki-asset)
+    install(TARGETS woki-asset RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
+
 if(BUILD_TESTING)
     add_subdirectory(tests)
 endif()

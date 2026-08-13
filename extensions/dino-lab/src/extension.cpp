@@ -1,5 +1,5 @@
-#include <woki/extension.hpp>
 #include <woki/ecs/guest.hpp>
+#include <woki/extension.hpp>
 #include <woki/math/guest.hpp>
 
 namespace {
@@ -121,13 +121,15 @@ public:
             }
         });
         dispatcher.Dispatch<events::KeyReleasedEvent>([](events::KeyReleasedEvent value) noexcept { slog::Debug("Key released: ", value.key); });
-        dispatcher.Dispatch<events::KeyTypedEvent>([](events::KeyTypedEvent value) noexcept { slog::Debug("Character typed: ", value.character); });
-        dispatcher.Dispatch<events::MouseScrolledEvent>([](events::MouseScrolledEvent) noexcept { slog::Debug("Mouse scrolled"); });
-        dispatcher.Dispatch<events::MouseButtonPressedEvent>([](events::MouseButtonPressedEvent value) noexcept { slog::Debug("Mouse button pressed: ", value.button); });
-        dispatcher.Dispatch<events::MouseButtonReleasedEvent>([](events::MouseButtonReleasedEvent value) noexcept { slog::Debug("Mouse button released: ", value.button); });
-        dispatcher.Dispatch<events::MouseButtonClickedEvent>([](events::MouseButtonClickedEvent value) noexcept { slog::Debug("Mouse button clicked: ", value.button); });
-        dispatcher.Dispatch<events::MouseEnteredEvent>([](events::MouseEnteredEvent) noexcept { slog::Debug("Mouse entered"); });
-        dispatcher.Dispatch<events::MouseLeftEvent>([](events::MouseLeftEvent) noexcept { slog::Debug("Mouse left"); });
+        dispatcher.Dispatch<events::TextInputEvent>([](events::TextInputEvent value) noexcept { slog::Debug("Text input bytes: ", value.text_size); });
+        dispatcher.Dispatch<events::ScrolledEvent>([](events::ScrolledEvent) noexcept { slog::Debug("Pointer scrolled"); });
+        dispatcher.Dispatch<events::PointerDownEvent>([](events::PointerDownEvent value) noexcept { slog::Debug("Pointer down: ", static_cast<u32>(value.pointer_id)); });
+        dispatcher.Dispatch<events::PointerUpEvent>([](events::PointerUpEvent value) noexcept { slog::Debug("Pointer up: ", static_cast<u32>(value.pointer_id)); });
+        dispatcher.Dispatch<events::PointerCancelEvent>([](events::PointerCancelEvent value) noexcept { slog::Debug("Pointer canceled: ", static_cast<u32>(value.pointer_id)); });
+        dispatcher.Dispatch<events::PointerEnteredEvent>([](events::PointerEnteredEvent value) noexcept { slog::Debug("Pointer entered: ", static_cast<u32>(value.pointer_id)); });
+        dispatcher.Dispatch<events::PointerLeftEvent>([](events::PointerLeftEvent value) noexcept { slog::Debug("Pointer left: ", static_cast<u32>(value.pointer_id)); });
+        dispatcher.Dispatch<events::PinchEvent>([](events::PinchEvent) noexcept { slog::Debug("Pointer pinch"); });
+        dispatcher.Dispatch<events::GamepadButtonChangedEvent>([](events::GamepadButtonChangedEvent value) noexcept { slog::Debug("Gamepad button: ", value.button); });
         dispatcher.Dispatch<events::AppSuspendEvent>([](events::AppSuspendEvent) noexcept { slog::Info("Application suspended"); });
         dispatcher.Dispatch<events::AppResumeEvent>([](events::AppResumeEvent) noexcept { slog::Info("Application resumed"); });
         dispatcher.Dispatch<events::AppShutdownEvent>([this](events::AppShutdownEvent) noexcept { (void)SavePark(); });

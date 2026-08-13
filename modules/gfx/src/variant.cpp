@@ -1,7 +1,7 @@
-#include <woki/gfx/variant.hpp>
-
-#include <charconv>
 #include <limits>
+#include <charconv>
+
+#include <woki/gfx/advanced/variant.hpp>
 
 namespace woki::gfx {
 namespace {

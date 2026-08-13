@@ -84,7 +84,9 @@ using CommandBufferHandle = GpuHandle<WGPUCommandBuffer, wgpuCommandBufferAddRef
 using CommandEncoderHandle = GpuHandle<WGPUCommandEncoder, wgpuCommandEncoderAddRef, wgpuCommandEncoderRelease>;
 using ComputePassEncoderHandle = GpuHandle<WGPUComputePassEncoder, wgpuComputePassEncoderAddRef, wgpuComputePassEncoderRelease>;
 using RenderPassEncoderHandle = GpuHandle<WGPURenderPassEncoder, wgpuRenderPassEncoderAddRef, wgpuRenderPassEncoderRelease>;
+#ifndef __EMSCRIPTEN__
 using TexelBufferViewHandle = GpuHandle<WGPUTexelBufferView, wgpuTexelBufferViewAddRef, wgpuTexelBufferViewRelease>;
+#endif
 using RenderBundleHandle = GpuHandle<WGPURenderBundle, wgpuRenderBundleAddRef, wgpuRenderBundleRelease>;
 using BindGroupHandle = GpuHandle<WGPUBindGroup, wgpuBindGroupAddRef, wgpuBindGroupRelease>;
 using BindGroupLayoutHandle = GpuHandle<WGPUBindGroupLayout, wgpuBindGroupLayoutAddRef, wgpuBindGroupLayoutRelease>;
@@ -94,11 +96,15 @@ using PipelineLayoutHandle = GpuHandle<WGPUPipelineLayout, wgpuPipelineLayoutAdd
 using QuerySetHandle = GpuHandle<WGPUQuerySet, wgpuQuerySetAddRef, wgpuQuerySetRelease>;
 using RenderBundleEncoderHandle = GpuHandle<WGPURenderBundleEncoder, wgpuRenderBundleEncoderAddRef, wgpuRenderBundleEncoderRelease>;
 using RenderPipelineHandle = GpuHandle<WGPURenderPipeline, wgpuRenderPipelineAddRef, wgpuRenderPipelineRelease>;
+#ifndef __EMSCRIPTEN__
 using ResourceTableHandle = GpuHandle<WGPUResourceTable, wgpuResourceTableAddRef, wgpuResourceTableRelease>;
+#endif
 using SamplerHandle = GpuHandle<WGPUSampler, wgpuSamplerAddRef, wgpuSamplerRelease>;
 using ShaderModuleHandle = GpuHandle<WGPUShaderModule, wgpuShaderModuleAddRef, wgpuShaderModuleRelease>;
+#ifndef __EMSCRIPTEN__
 using SharedBufferMemoryHandle = GpuHandle<WGPUSharedBufferMemory, wgpuSharedBufferMemoryAddRef, wgpuSharedBufferMemoryRelease>;
 using SharedFenceHandle = GpuHandle<WGPUSharedFence, wgpuSharedFenceAddRef, wgpuSharedFenceRelease>;
 using SharedTextureMemoryHandle = GpuHandle<WGPUSharedTextureMemory, wgpuSharedTextureMemoryAddRef, wgpuSharedTextureMemoryRelease>;
+#endif
 
 } // namespace woki::rhi::wgpu::detail

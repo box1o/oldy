@@ -1,0 +1,26 @@
+{
+  "$schema": "https://schemas.woki.dev/pipeline/v1.schema.json",
+  "schema": 1,
+  "name": "Compatibility Forward",
+  "renderPath": "compatibility-forward",
+  "targets": {
+    "color": ["surface"],
+    "depth": "depth24plus",
+    "samples": 1
+  },
+  "features": [
+    { "id": "mesh" },
+    { "id": "depth" },
+    { "id": "forward", "settings": { "shader": "shaders/descriptors/unlit.woki-shader" } },
+    { "id": "transparent" },
+    { "id": "presentation" }
+  ],
+  "extensionPoints": {
+    "depth-prepass": ["depth"],
+    "opaque": ["mesh", "forward"],
+    "transparent": ["transparent"],
+    "post-process": ["presentation"]
+  },
+  "qualityProfile": "quality/low.woki-quality",
+  "fallbacks": []
+}

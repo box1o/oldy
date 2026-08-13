@@ -1,6 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include <woki/gfx.hpp>
+#include <woki/gfx/advanced.hpp>
 
 TEST_CASE("JSONC shader descriptors parse all declared domains") {
     const auto path = *woki::asset::AssetPath::Parse("shaders/example.woki-shader");

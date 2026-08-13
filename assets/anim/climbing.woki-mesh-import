@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schemas.woki.dev/mesh-import/v1.schema.json",
+  "schema": 1,
+  "id": "77ee2538-19d3-57ef-956f-890eac1ac253",
+  "source": "engine://anim/climbing.fbx",
+  "importer": "assimp",
+  "coordinates": "canonical",
+  "unit_scale": 1.0,
+  "tangents": "generate_if_missing",
+  "optimize": false,
+  "lod_ratios": [1.0],
+  "lod_errors": [0.0],
+  "meshlets": {
+    "enabled": false,
+    "max_vertices": 64,
+    "max_triangles": 124
+  },
+  "quantize": false,
+  "compress": false,
+  "animations": true
+}

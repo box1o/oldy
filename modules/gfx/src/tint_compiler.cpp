@@ -1,15 +1,15 @@
-#include <woki/gfx/compiler.hpp>
-
-#include <algorithm>
-#include <cmath>
-#include <limits>
 #include <map>
 #include <set>
+#include <cmath>
+#include <limits>
+#include <algorithm>
+
+#include <woki/gfx/advanced/compiler.hpp>
 
 #include "src/tint/api/tint.h"
-#include "src/tint/lang/wgsl/inspector/inspector.h"
 #include "src/tint/lang/wgsl/reader/reader.h"
 #include "src/tint/utils/text/string_stream.h"
+#include "src/tint/lang/wgsl/inspector/inspector.h"
 
 namespace woki::gfx {
 namespace {
@@ -134,7 +134,23 @@ StorageFormat Format(const tint::inspector::ResourceBinding::TexelFormat value) 
 
 BindingInfo Binding(const tint::inspector::ResourceBinding& source, const ShaderStage stage) {
     using R = tint::inspector::ResourceBinding;
-    BindingInfo result{.group = source.bind_group, .binding = source.binding, .stages = StageBit(stage), .min_binding_size = source.size, .array_size = source.array_size.value_or(0)};
+    BindingInfo result{
+        .group = source.bind_group,
+        .binding = source.binding,
+        .stages = StageBit(stage),
+        .kind = ResourceKind::UniformBuffer,
+        .dimension = TextureDimension::None,
+        .sample_type = SampleType::None,
+        .storage_access = StorageAccess::None,
+        .storage_format = StorageFormat::None,
+        .min_binding_size = source.size,
+        .array_size = source.array_size.value_or(0),
+        .semantic = {},
+        .group_semantic = {},
+        .visible_entries = {},
+        .buffer_type = {},
+        .buffer_members = {},
+    };
     switch (source.resource_type) {
         case R::ResourceType::kUniformBuffer:
             result.kind = ResourceKind::UniformBuffer;
@@ -198,34 +214,6 @@ BindingInfo Binding(const tint::inspector::ResourceBinding& source, const Shader
     return result;
 }
 
-u64 ByteOffset(const std::string_view source, const tint::Source::Location location) {
-    if (location.line == 0 || location.column == 0)
-        return 0;
-    u64 offset = 0;
-    for (u32 line = 1; line < location.line && offset < source.size(); ++line) {
-        const auto newline = source.find('\n', offset);
-        offset = newline == std::string_view::npos ? source.size() : newline + 1;
-    }
-    return std::min<u64>(source.size(), offset + location.column - 1);
-}
-
-void AddDiagnostics(CompileOutput& output, const CompileRequest& request, const tint::diag::List& diagnostics) {
-    for (const auto& diagnostic : diagnostics) {
-        const u64 begin = ByteOffset(request.source.code, diagnostic.source.range.begin);
-        const u64 end = ByteOffset(request.source.code, diagnostic.source.range.end);
-        const DiagnosticSeverity tint_severity = diagnostic.severity == tint::diag::Severity::Note      ? DiagnosticSeverity::Note
-                                                 : diagnostic.severity == tint::diag::Severity::Warning ? DiagnosticSeverity::Warning
-                                                                                                        : DiagnosticSeverity::Error;
-        const DiagnosticSeverity severity = tint_severity == DiagnosticSeverity::Warning && request.descriptor.compile_options.warnings_as_errors ? DiagnosticSeverity::Error : tint_severity;
-        SourceRange range = MapGeneratedRange(request.source, begin, end > begin ? end - begin : 1);
-        if (!range.path) {
-            range.line = diagnostic.source.range.begin.line;
-            range.column = diagnostic.source.range.begin.column;
-        }
-        output.diagnostics.push_back({"SHD3002", severity, diagnostic.message.Plain(), std::move(range), {}});
-    }
-}
-
 bool VariantTypeMatches(const PermutationValue& value, const ValueType type) {
     return std::visit(
         [type](const auto& scalar) {
@@ -252,8 +240,8 @@ public:
         output.code = request.source.code;
         tint::Source::File file(request.descriptor.name, output.code);
         tint::Program program = tint::wgsl::reader::Parse(&file);
-        AddDiagnostics(output, request, program.Diagnostics());
         if (!program.IsValid()) {
+            output.diagnostics.push_back({"SHD3002", DiagnosticSeverity::Error, "Tint rejected the composed WGSL source", {}, {}});
             return output;
         }
         tint::inspector::Inspector inspector(program);
@@ -273,6 +261,8 @@ public:
             reflected.emplace(entry.stage, entry.name);
             if (!selected.contains({entry.stage, entry.name}))
                 continue;
+            const auto selected_entry = std::ranges::find_if(request.descriptor.entry_points, [&](const EntryPointDesc& value) { return value.stage == entry.stage && value.name == entry.name; });
+            entry.semantic = selected_entry == request.descriptor.entry_points.end() || selected_entry->semantic.empty() ? entry.name : selected_entry->semantic;
             for (const auto& input : source.input_variables)
                 if (input.attributes.location)
                     entry.inputs.push_back({*input.attributes.location, Type(input.component_type, input.composition_type)});
@@ -286,7 +276,13 @@ public:
                     output.diagnostics.push_back({"SHD3007", DiagnosticSeverity::Error, "external-texture bindings are unsupported by the RHI layout model", {}, {}});
                     continue;
                 }
-                output.interface.bindings.push_back(Binding(binding, entry.stage));
+                auto reflected_binding = Binding(binding, entry.stage);
+                reflected_binding.visible_entries.push_back(entry.name);
+                if (const auto semantic = request.descriptor.binding_semantics.find({reflected_binding.group, reflected_binding.binding}); semantic != request.descriptor.binding_semantics.end())
+                    reflected_binding.semantic = semantic->second;
+                if (const auto semantic = request.descriptor.group_semantics.find(reflected_binding.group); semantic != request.descriptor.group_semantics.end())
+                    reflected_binding.group_semantic = semantic->second;
+                output.interface.bindings.push_back(std::move(reflected_binding));
             }
             for (const auto& override_value : source.overrides) {
                 ValueType type = override_value.type == tint::inspector::Override::Type::kBool      ? ValueType::Bool
@@ -302,6 +298,13 @@ public:
             if (!reflected.contains({descriptor_entry.stage, descriptor_entry.name}))
                 output.diagnostics.push_back({"SHD3004", DiagnosticSeverity::Error, "descriptor entry point was not found with the declared stage: " + descriptor_entry.name, {}, {}});
         output.interface.capabilities = request.descriptor.capabilities;
+        for (const auto& [coordinate, semantic] : request.descriptor.binding_semantics)
+            if (std::ranges::none_of(output.interface.bindings, [&](const BindingInfo& binding) { return binding.group == coordinate.first && binding.binding == coordinate.second; }))
+                output.diagnostics.push_back({"SHD3010", DiagnosticSeverity::Error,
+                    "semantic refers to a binding absent from the selected entry-point union: " + std::to_string(coordinate.first) + ":" + std::to_string(coordinate.second), {}, {}});
+        for (const auto& [group, semantic] : request.descriptor.group_semantics)
+            if (std::ranges::none_of(output.interface.bindings, [&](const BindingInfo& binding) { return binding.group == group; }))
+                output.diagnostics.push_back({"SHD3011", DiagnosticSeverity::Error, "semantic refers to a group absent from the selected entry-point union: " + std::to_string(group), {}, {}});
         NormalizeInterface(output.interface);
         for (const auto& permutation : request.descriptor.permutations) {
             const auto override_value = std::ranges::find(output.interface.overrides, permutation.name, &OverrideInfo::name);

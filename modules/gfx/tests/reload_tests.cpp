@@ -1,12 +1,15 @@
+#include <cstdlib>
 #include <catch2/catch_test_macros.hpp>
 
-#include <cstdlib>
-#include <woki/gfx.hpp>
+#include <woki/gfx/advanced.hpp>
 
 namespace {
 class FakeModule final : public woki::rhi::ShaderModule {
 public:
-    woki::rhi::Future GetCompilationInfo(woki::rhi::CallbackMode, woki::rhi::ShaderModuleCompilationInfoCallback callback) const override {
+    woki::rhi::Future GetCompilationInfo(
+        woki::rhi::CallbackMode,
+        woki::rhi::ShaderModuleCompilationInfoCallback callback
+    ) const override {
         callback(woki::rhi::CompilationInfoRequestStatus::Success, nullptr, {});
         return {.id = 0, .completed = true, .success = true, .message = {}};
     }
@@ -21,15 +24,29 @@ public:
 woki::asset::Product Product(std::string code, std::vector<woki::asset::AssetPath> dependencies = {}) {
     woki::gfx::ShaderPayload payload;
     payload.code = std::move(code);
-    payload.interface.entry_points.push_back({.name = "main", .stage = woki::gfx::ShaderStage::Vertex, .inputs = {}, .outputs = {}, .workgroup_size = {1, 1, 1}});
+    payload.interface.entry_points.push_back(
+        {.name = "main",
+            .stage = woki::gfx::ShaderStage::Vertex,
+            .inputs = {},
+            .outputs = {},
+            .workgroup_size = {1, 1, 1}}
+    );
     woki::gfx::NormalizeInterface(payload.interface);
     payload.module_hash = woki::Sha256(payload.code);
     payload.interface_hash = payload.interface.hash;
     payload.variant_hash = woki::Sha256("default");
     payload.dependencies = std::move(dependencies);
     std::ranges::sort(payload.dependencies);
-    std::vector<woki::ContentHash> dependency_hashes(payload.dependencies.size(), woki::Sha256("dependency"));
-    return *woki::gfx::MakeShaderProduct(payload, woki::Sha256(payload.code), std::move(dependency_hashes));
+    std::vector<woki::asset::ProductDependency> product_dependencies;
+    for (const auto& dependency : payload.dependencies)
+        product_dependencies
+            .push_back({woki::asset::AssetId::FromName("engine://" + dependency.String()), woki::Sha256("dependency")});
+    return *woki::gfx::MakeShaderProduct(
+        woki::asset::AssetId::FromName("engine://test-shader"),
+        payload,
+        woki::Sha256(payload.code),
+        std::move(product_dependencies)
+    );
 }
 } // namespace
 
@@ -48,7 +65,11 @@ TEST_CASE("Dependency graph replaces reverse edges deterministically") {
 }
 
 TEST_CASE("Reload publication rejects stale and failed candidates without replacing last known good") {
-    woki::gfx::ShaderLibrary library([](const woki::rhi::ShaderModuleDesc&) -> woki::Result<woki::ref<woki::rhi::ShaderModule>> { return woki::Ok(woki::ref<woki::rhi::ShaderModule>(new FakeModule)); });
+    woki::gfx::ShaderLibrary library(
+        [](const woki::rhi::ShaderModuleDesc&) -> woki::Result<woki::ref<woki::rhi::ShaderModule>> {
+            return woki::Ok(woki::ref<woki::rhi::ShaderModule>(new FakeModule));
+        }
+    );
     const auto handle = library.Create();
     REQUIRE(library.Publish(handle, Product("first")));
     const auto original = *library.Borrow(handle);
@@ -56,16 +77,19 @@ TEST_CASE("Reload publication rejects stale and failed candidates without replac
     tampered.source_hash = woki::Sha256("mutable caller metadata");
     CHECK_FALSE(library.Publish(handle, tampered));
     const auto dependency = *woki::asset::AssetPath::Parse("dependency.wgsl");
-    auto inconsistent = Product("inconsistent", {dependency});
-    inconsistent.dependency_hashes.clear();
-    inconsistent.product_hash = woki::asset::HashProduct(inconsistent);
-    CHECK_FALSE(library.Publish(handle, inconsistent));
+    auto source_only = Product("source-only", {dependency});
+    source_only.dependencies.clear();
+    source_only.product_hash = woki::asset::HashProduct(source_only);
+    REQUIRE(library.Publish(handle, source_only));
     woki::gfx::ShaderDependencyGraph graph;
-    woki::gfx::ShaderReloadCoordinator coordinator(library, graph, [](auto) -> woki::gfx::ReloadCandidate { std::abort(); }, {});
+    woki::gfx::ShaderReloadCoordinator
+        coordinator(library, graph, [](auto) -> woki::gfx::ReloadCandidate { std::abort(); }, {});
 
     auto stale = coordinator.Publish({handle, 0, woki::Ok(Product("stale"))});
     CHECK(stale.outcome == woki::gfx::ReloadOutcome::Stale);
-    auto failed = coordinator.Publish({handle, original.Version(), woki::Err(woki::ErrorCode::ParseInvalidFormat, "candidate failed")});
+    auto failed = coordinator.Publish(
+        {handle, original.Version(), woki::Err(woki::ErrorCode::ParseInvalidFormat, "candidate failed")}
+    );
     CHECK(failed.outcome == woki::gfx::ReloadOutcome::Rejected);
     const auto current = *library.Borrow(handle);
     CHECK(current.Version() == original.Version());
@@ -73,7 +97,11 @@ TEST_CASE("Reload publication rejects stale and failed candidates without replac
 }
 
 TEST_CASE("Reload publication retains borrowed generations and atomically replaces dependencies") {
-    woki::gfx::ShaderLibrary library([](const woki::rhi::ShaderModuleDesc&) -> woki::Result<woki::ref<woki::rhi::ShaderModule>> { return woki::Ok(woki::ref<woki::rhi::ShaderModule>(new FakeModule)); });
+    woki::gfx::ShaderLibrary library(
+        [](const woki::rhi::ShaderModuleDesc&) -> woki::Result<woki::ref<woki::rhi::ShaderModule>> {
+            return woki::Ok(woki::ref<woki::rhi::ShaderModule>(new FakeModule));
+        }
+    );
     const auto handle = library.Create();
     const auto descriptor = *woki::asset::AssetPath::Parse("shader.woki-shader");
     const auto old_include = *woki::asset::AssetPath::Parse("old.wgsl");
@@ -83,9 +111,12 @@ TEST_CASE("Reload publication retains borrowed generations and atomically replac
     woki::gfx::ShaderDependencyGraph graph;
     const std::array old_dependencies{descriptor, old_include};
     graph.Replace(handle, old_dependencies);
-    woki::gfx::ShaderReloadCoordinator coordinator(library, graph, [](auto) -> woki::gfx::ReloadCandidate { std::abort(); }, {});
+    woki::gfx::ShaderReloadCoordinator
+        coordinator(library, graph, [](auto) -> woki::gfx::ReloadCandidate { std::abort(); }, {});
 
-    const auto event = coordinator.Publish({handle, borrowed.Version(), woki::Ok(Product("second", {descriptor, new_include}))});
+    const auto event = coordinator.Publish(
+        {handle, borrowed.Version(), woki::Ok(Product("second", {descriptor, new_include}))}
+    );
     REQUIRE(event.outcome == woki::gfx::ReloadOutcome::Published);
     CHECK(graph.Dependents(old_include).empty());
     CHECK(graph.Dependents(new_include) == std::vector{handle});
@@ -97,7 +128,11 @@ TEST_CASE("Reload publication retains borrowed generations and atomically replac
 TEST_CASE("Borrowed shader generations outlive their library") {
     std::optional<woki::gfx::BorrowedShader> borrowed;
     {
-        woki::gfx::ShaderLibrary library([](const woki::rhi::ShaderModuleDesc&) -> woki::Result<woki::ref<woki::rhi::ShaderModule>> { return woki::Ok(woki::ref<woki::rhi::ShaderModule>(new FakeModule)); });
+        woki::gfx::ShaderLibrary library(
+            [](const woki::rhi::ShaderModuleDesc&) -> woki::Result<woki::ref<woki::rhi::ShaderModule>> {
+                return woki::Ok(woki::ref<woki::rhi::ShaderModule>(new FakeModule));
+            }
+        );
         const auto handle = library.Create();
         REQUIRE(library.Publish(handle, Product("retained")));
         borrowed = *library.Borrow(handle);

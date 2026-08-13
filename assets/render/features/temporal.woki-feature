@@ -1,0 +1,9 @@
+{
+  "$schema": "https://schemas.woki.dev/feature/v1.schema.json",
+  "schema": 1,
+  "feature": "temporal",
+  "settings": {
+    "historyWeight": 0.92,
+    "jitter": true
+  }
+}

@@ -6,6 +6,7 @@
 #include "wgpu_surface.hpp"
 #include "detail/string.hpp"
 #include "wgpu_instance.hpp"
+#include "../null/null_backend.hpp"
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten/emscripten.h>
@@ -184,6 +185,8 @@ WGPURequestAdapterOptions WgpuInstanceImpl::BuildRequestAdapterOptions(const Req
 }
 
 Result<scope<Adapter>> WgpuInstanceImpl::RequestAdapter(RequestAdapterDesc desc) {
+    if (desc.backend_type == BackendType::Null)
+        return null::CreateAdapter();
     if (!handle_) {
         return Err(ErrorCode::GraphicsInitFailed, "Instance is invalid");
     }

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json.schemastore.org/schema-catalog.json",
+  "schemas": [
+    {
+      "name": "Woki shader descriptor v2",
+      "description": "Shader source selection and semantic annotations",
+      "fileMatch": ["*.woki-shader"],
+      "url": "https://woki.local/schemas/woki-shader-v2.schema.json"
+    },
+    {
+      "name": "Woki GPU struct v1",
+      "description": "Host-shareable CPU/WGSL ABI record",
+      "fileMatch": ["*.woki-gpu-struct"],
+      "url": "https://woki.local/schemas/woki-gpu-struct-v1.schema.json"
+    }
+  ]
+}

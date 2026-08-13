@@ -38,6 +38,12 @@ const char* ToString(ErrorCode code) noexcept {
             return "InvalidState";
         case ErrorCode::OutOfRange:
             return "OutOfRange";
+        case ErrorCode::Cancelled:
+            return "Cancelled";
+        case ErrorCode::QueueFull:
+            return "QueueFull";
+        case ErrorCode::ExecutorStopped:
+            return "ExecutorStopped";
         case ErrorCode::FileNotFound:
             return "FileNotFound";
         case ErrorCode::FileAccessDenied:

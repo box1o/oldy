@@ -1,17 +1,16 @@
-#include <woki/gfx/pack.hpp>
-
-#include <algorithm>
-#include <cctype>
-#include <cstring>
-#include <limits>
 #include <set>
+#include <cctype>
+#include <limits>
+#include <cstring>
+#include <algorithm>
+#include <woki/config.hpp>
 
-#include <nlohmann/json.hpp>
+#include <woki/gfx/advanced/pack.hpp>
 
 namespace woki::gfx {
 namespace {
 
-using Json = nlohmann::json;
+using Json = config::Json;
 constexpr std::array<std::byte, 8> kMagic{std::byte{'W'}, std::byte{'S'}, std::byte{'P'}, std::byte{'I'}, std::byte{'D'}, std::byte{'X'}, std::byte{0}, std::byte{1}};
 
 Result<asset::AssetPath> RelativeTo(const asset::AssetPath& parent, const std::string_view child) {
@@ -87,7 +86,7 @@ bool ValidIdentity(const std::string_view value) {
 }
 
 bool HasOnlyKeys(const Json& object, const std::initializer_list<std::string_view> keys) {
-    return std::ranges::all_of(object.items(), [&](const auto& item) { return std::ranges::find(keys, item.key()) != keys.end(); });
+    return std::ranges::all_of(object.items(), [&](const auto& item) { return std::ranges::find(keys, item.first) != keys.end(); });
 }
 
 ContentHash AggregateHash(const ShaderPackIndex& index) {
@@ -126,14 +125,13 @@ Result<ShaderPack> LoadShaderPack(const asset::Vfs& vfs, const asset::AssetPath&
     auto text = vfs.ReadText(manifest_path);
     if (!text)
         return Err(std::move(text).error());
-    Json root;
-    try {
-        root = Json::parse(*text, nullptr, true, true);
-    } catch (const Json::exception&) {
+    auto parsed_root = Json::Parse(*text, manifest_path.String());
+    if (!parsed_root) {
         return Err(ErrorCode::ParseInvalidFormat, "shader pack manifest is not valid JSONC");
     }
-    try {
-        if (!root.is_object() || !HasOnlyKeys(root, {"schema", "id", "version", "dependencies", "shaders"}) || !root.contains("schema") || !root["schema"].is_number_unsigned()
+    Json root = std::move(*parsed_root);
+    {
+        if (!root.is_object() || !HasOnlyKeys(root, {"$schema", "schema", "id", "version", "dependencies", "shaders"}) || !root.contains("schema") || !root["schema"].is_number_unsigned()
             || root["schema"].get<u32>() != kShaderPackSchema || !root.contains("id") || !root["id"].is_string() || !root.contains("version") || !root["version"].is_string() || !root.contains("shaders")
             || !root["shaders"].is_array())
             return Err(ErrorCode::ParseInvalidFormat, "shader pack manifest requires schema 1, id, version, and shaders");
@@ -183,7 +181,16 @@ Result<ShaderPack> LoadShaderPack(const asset::Vfs& vfs, const asset::AssetPath&
             std::string content;
             CanonicalString(content, entry.name);
             CanonicalString(content, entry.descriptor_path.String());
-            CanonicalString(content, *descriptor_text);
+            auto descriptor_document = config::Document::Parse(*descriptor_text, entry.descriptor_path.String(), config::ParsePolicy{true, true, false, {}});
+            if (descriptor_document) {
+                config::ObjectView descriptor_root(descriptor_document->Root());
+                if (descriptor_root.Unsigned("schema") == 1) {
+                    auto migrated = config::Registry::Global().Migrate(*descriptor_document, "gfx.shader", 1, kShaderDescriptorSchema);
+                    if (migrated)
+                        descriptor_document = std::move(migrated);
+                }
+            }
+            CanonicalString(content, descriptor_document ? config::CanonicalHash(*descriptor_document, "gfx.shader", kShaderDescriptorSchema).Hex() : Sha256(*descriptor_text).Hex());
             for (const auto& dependency : entry.source.dependencies) {
                 auto source = vfs.ReadText(dependency);
                 if (!source)
@@ -201,8 +208,6 @@ Result<ShaderPack> LoadShaderPack(const asset::Vfs& vfs, const asset::AssetPath&
         ShaderPackIndex index = MakeShaderPackIndex(pack);
         pack.content_hash = AggregateHash(index);
         return Ok(std::move(pack));
-    } catch (const Json::exception&) {
-        return Err(ErrorCode::ParseInvalidFormat, "shader pack manifest contains an invalid value type");
     }
 }
 

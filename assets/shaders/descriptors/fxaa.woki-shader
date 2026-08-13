@@ -1,0 +1,1 @@
+{"schema":1,"name":"fxaa","language":"wgsl","sources":["shaders/post/fullscreen.wgsl","shaders/abi/post.wgsl","shaders/entry/fxaa.wgsl"],"entry_points":[{"stage":"vertex","name":"fxaa_vs"},{"stage":"fragment","name":"fxaa_fs"}]}

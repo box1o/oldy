@@ -6,6 +6,7 @@
 #include <woki/core.hpp>
 
 #include "types.hpp"
+#include "submission.hpp"
 #include "descriptors.hpp"
 
 namespace woki::rhi {
@@ -28,7 +29,12 @@ public:
 
     virtual void SetLabel(std::string_view label) const = 0;
 
-    [[nodiscard]] virtual Result<void> Submit(std::span<CommandBuffer* const> commands) const = 0;
+    // A valid ticket is allocated only after the backend has accepted the work.
+    [[nodiscard]] virtual Result<SubmissionTicket> Submit(std::span<CommandBuffer* const> commands) const = 0;
+
+    // Queue progress is monotonic and independent of CPU frame numbering.
+    [[nodiscard]] virtual SubmissionEpoch CompletedSubmission() const noexcept = 0;
+    [[nodiscard]] virtual SubmissionTrackingStatus SubmissionTracking() const noexcept = 0;
 
     [[nodiscard]] virtual Result<void> WriteBuffer(const Buffer& buffer, u64 buffer_offset, const void* data, u64 size) const = 0;
 

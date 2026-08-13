@@ -1,5 +1,8 @@
 #pragma once
 
+#include <mutex>
+#include <memory>
+
 #include <woki/rhi/queue.hpp>
 
 #include "detail/handle.hpp"
@@ -7,6 +10,7 @@
 namespace woki::rhi::wgpu {
 
 class WgpuDeviceImpl;
+struct WgpuSubmissionState;
 
 class WgpuQueueImpl final : public Queue {
 public:
@@ -24,7 +28,10 @@ public:
 
     void SetLabel(std::string_view label) const override;
 
-    [[nodiscard]] Result<void> Submit(std::span<CommandBuffer* const> commands) const override;
+    [[nodiscard]] Result<SubmissionTicket> Submit(std::span<CommandBuffer* const> commands) const override;
+
+    [[nodiscard]] SubmissionEpoch CompletedSubmission() const noexcept override;
+    [[nodiscard]] SubmissionTrackingStatus SubmissionTracking() const noexcept override;
 
     [[nodiscard]] Result<void> WriteBuffer(const Buffer& buffer, u64 buffer_offset, const void* data, u64 size) const override;
 
@@ -36,6 +43,8 @@ public:
 
 private:
     detail::QueueHandle queue_;
+    std::shared_ptr<WgpuSubmissionState> submission_state_;
+    mutable std::mutex submission_mutex_;
 };
 
 } // namespace woki::rhi::wgpu

@@ -1,9 +1,13 @@
-#include <woki/gfx.hpp>
-
-#include <algorithm>
-#include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <algorithm>
+#include <filesystem>
+#include <iomanip>
+#include <cctype>
+
+#include <woki/gfx/advanced.hpp>
+#include <woki/gfx/advanced/product.hpp>
+#include <woki/gfx/advanced/variant.hpp>
 
 namespace {
 using namespace woki;
@@ -63,11 +67,58 @@ Result<Input> Load(const std::filesystem::path& root, const std::string_view des
 void Reflect(const gfx::ShaderInterface& interface) {
     std::cout << "interface " << interface.hash.Hex() << '\n';
     for (const auto& entry : interface.entry_points)
-        std::cout << "entry " << static_cast<u32>(entry.stage) << ' ' << entry.name << '\n';
+        std::cout << "entry " << static_cast<u32>(entry.stage) << ' ' << entry.name << ' ' << entry.semantic << '\n';
     for (const auto& binding : interface.bindings)
-        std::cout << "binding " << binding.group << ' ' << binding.binding << ' ' << static_cast<u32>(binding.kind) << ' ' << static_cast<u32>(binding.stages) << '\n';
+        std::cout << "binding " << binding.group << ' ' << binding.binding << ' ' << static_cast<u32>(binding.kind) << ' ' << static_cast<u32>(binding.stages) << ' ' << binding.semantic << ' ' << binding.group_semantic
+                  << '\n';
     for (const auto& value : interface.overrides)
         std::cout << "override " << value.id << ' ' << value.name << '\n';
+}
+
+std::string Identifier(std::string value) {
+    for (char& character : value)
+        if (!std::isalnum(static_cast<unsigned char>(character)) && character != '_')
+            character = '_';
+    if (value.empty() || std::isdigit(static_cast<unsigned char>(value.front())))
+        value.insert(value.begin(), '_');
+    return value;
+}
+
+Result<void> GenerateInterfaceHeader(const gfx::ShaderDescriptor& descriptor, const gfx::ShaderInterface& interface, const std::filesystem::path& output) {
+    if (!output.parent_path().empty())
+        std::filesystem::create_directories(output.parent_path());
+    std::ofstream stream(output, std::ios::binary | std::ios::trunc);
+    if (!stream)
+        return Err(ErrorCode::FileWriteError, "unable to create generated shader interface header");
+    stream << "#pragma once\n#include <array>\n#include <string_view>\n#include <woki/gfx/advanced/reflection.hpp>\n\nnamespace woki::gfx::generated::" << Identifier(descriptor.name) << " {\n";
+    stream << "inline constexpr ContentHash kInterfaceHash{std::array<u8, ContentHash::kSize>{";
+    for (std::size_t index = 0; index < interface.hash.Bytes().size(); ++index) {
+        if (index != 0)
+            stream << ',';
+        stream << static_cast<u32>(interface.hash.Bytes()[index]);
+    }
+    stream << "}};\n";
+    for (const auto& binding : interface.bindings) {
+        const auto name = Identifier(binding.semantic.empty() ? "Binding_" + std::to_string(binding.group) + "_" + std::to_string(binding.binding) : binding.semantic);
+        stream << "inline constexpr ShaderBindingId k" << name << "{" << binding.group << "U," << binding.binding << "U};\n";
+    }
+    for (const auto& entry : interface.entry_points) {
+        const auto semantic = Identifier(entry.semantic.empty() ? entry.name : entry.semantic);
+        stream << "inline constexpr std::string_view k" << semantic << "Entry = \"" << entry.name << "\";\n";
+        stream << "inline constexpr std::string_view k" << semantic << "Semantic = \"" << entry.semantic << "\";\n";
+    }
+    stream << "} // namespace woki::gfx::generated::" << Identifier(descriptor.name) << "\n";
+    return stream ? Ok() : Result<void>(Err(ErrorCode::FileWriteError, "unable to write generated shader interface header"));
+}
+
+Result<gfx::ShaderPayload> ReadShaderPayload(const std::filesystem::path& path) {
+    auto bytes = ReadBinary(path);
+    if (!bytes)
+        return Err(std::move(bytes).error());
+    auto product = asset::ParseProduct(*bytes);
+    if (!product || product->type != gfx::kShaderProductType)
+        return Err(ErrorCode::ParseInvalidFormat, "not a shader product");
+    return gfx::ParseShaderPayload(product->payload);
 }
 
 int SourceCommand(const std::string_view command, const std::filesystem::path& root, const std::string_view descriptor_name, const std::filesystem::path& output) {
@@ -101,8 +152,21 @@ int SourceCommand(const std::string_view command, const std::filesystem::path& r
         std::cout << "valid (tint)\n";
         return 0;
     }
-    if (command == "reflect") {
+    if (command == "reflect" || command == "interface") {
         Reflect(compiled.interface);
+        return 0;
+    }
+    if (command == "bindings") {
+        for (const auto& binding : compiled.interface.bindings)
+            std::cout << binding.group << ':' << binding.binding << ' ' << binding.semantic << ' ' << binding.group_semantic << ' ' << static_cast<u32>(binding.kind) << '\n';
+        return 0;
+    }
+    if (command == "generate-interface") {
+        auto generated = GenerateInterfaceHeader(input->descriptor, compiled.interface, output);
+        if (!generated) {
+            std::cerr << generated.error().Message() << '\n';
+            return 1;
+        }
         return 0;
     }
     if (command != "compile" || output.empty())
@@ -126,14 +190,12 @@ int SourceCommand(const std::string_view command, const std::filesystem::path& r
     payload.module_hash = Sha256(payload.code);
     payload.interface_hash = payload.interface.hash;
     payload.variant_hash = variants.variants.front().hash;
-    std::vector<ContentHash> dependency_hashes;
-    for (const auto& dependency : payload.dependencies) {
-        auto text = input->vfs.ReadText(dependency);
-        if (!text)
-            return 1;
-        dependency_hashes.push_back(Sha256(*text));
-    }
-    auto product = gfx::MakeShaderProduct(payload, Sha256(input->source.code), std::move(dependency_hashes));
+    auto product = gfx::MakeShaderProduct(
+        asset::AssetId::FromName("engine://" + std::string(descriptor_name)),
+        payload,
+        Sha256(input->source.code),
+        {}
+    );
     if (!product) {
         std::cerr << product.error().Message() << '\n';
         return 1;
@@ -164,21 +226,43 @@ int Inspect(const std::filesystem::path& path) {
         std::cerr << payload.error().Message() << '\n';
         return 1;
     }
-    std::cout << "module " << payload->module_hash.Hex() << '\n' << "variant " << payload->variant_hash.Hex() << '\n';
+    std::cout << "asset " << product->asset_id.String() << '\n'
+              << "product " << product->product_hash.Hex() << '\n'
+              << "module " << payload->module_hash.Hex() << '\n'
+              << "variant " << payload->variant_hash.Hex() << '\n';
     Reflect(payload->interface);
     return 0;
+}
+
+int DiffInterface(const std::filesystem::path& expected_path, const std::filesystem::path& actual_path) {
+    auto expected = ReadShaderPayload(expected_path);
+    auto actual = ReadShaderPayload(actual_path);
+    if (!expected || !actual) {
+        std::cerr << (!expected ? expected.error().Message() : actual.error().Message()) << '\n';
+        return 1;
+    }
+    const auto diff = gfx::DiffInterfaces(expected->interface, actual->interface);
+    std::cout << "expected " << diff.expected_hash.Hex() << "\nactual " << diff.actual_hash.Hex() << '\n';
+    for (const auto& item : diff.differences)
+        std::cout << static_cast<u32>(item.kind) << ' ' << item.path << " expected=\"" << item.expected << "\" actual=\"" << item.actual << "\"\n";
+    return diff.Compatible() ? 0 : 1;
 }
 } // namespace
 
 int main(const int argc, const char* const* argv) {
     if (argc < 3) {
-        std::cerr << "usage: woki-shader <validate|compile|reflect|variants|deps|compose> <descriptor> [output] [root]\n       woki-shader inspect <product>\n";
+        std::cerr << "usage: woki-shader <validate|compile|reflect|interface|bindings|variants|deps|compose> <descriptor> [root]\n"
+                     "       woki-shader <compile|generate-interface> <descriptor> <output> [root]\n"
+                     "       woki-shader inspect <product>\n       woki-shader diff-interface <expected-product> <actual-product>\n";
         return 2;
     }
     const std::string_view command = argv[1];
     if (command == "inspect")
         return Inspect(argv[2]);
-    const std::filesystem::path output = command == "compile" && argc >= 4 ? argv[3] : "";
-    const std::filesystem::path root = command == "compile" ? (argc >= 5 ? argv[4] : ".") : (argc >= 4 ? argv[3] : ".");
+    if (command == "diff-interface")
+        return argc >= 4 ? DiffInterface(argv[2], argv[3]) : 2;
+    const bool writes_output = command == "compile" || command == "generate-interface";
+    const std::filesystem::path output = writes_output && argc >= 4 ? argv[3] : "";
+    const std::filesystem::path root = writes_output ? (argc >= 5 ? argv[4] : ".") : (argc >= 4 ? argv[3] : ".");
     return SourceCommand(command, root, argv[2], output);
 }

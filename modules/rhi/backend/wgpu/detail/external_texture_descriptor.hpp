@@ -13,6 +13,7 @@ namespace woki::rhi::wgpu::detail {
 
 using convert::ToWgpu;
 
+#ifndef __EMSCRIPTEN__
 struct ExternalTextureDescriptorStorage final {
     WGPUExternalTextureDescriptor native = WGPU_EXTERNAL_TEXTURE_DESCRIPTOR_INIT;
 
@@ -33,5 +34,6 @@ struct ExternalTextureDescriptorStorage final {
         native.rotation = ToWgpu(desc.rotation);
     }
 };
+#endif
 
 } // namespace woki::rhi::wgpu::detail

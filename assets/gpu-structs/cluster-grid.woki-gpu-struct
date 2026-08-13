@@ -1,0 +1,1 @@
+{"schema":1,"name":"ClusterGridRecord","address_space":"storage","layout_class":"wgsl-host-shareable","fields":[{"name":"offset","type":"u32"},{"name":"count","type":"u32"},{"name":"overflow","type":"u32"},{"name":"padding","type":"u32"}]}

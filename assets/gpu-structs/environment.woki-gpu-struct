@@ -1,0 +1,1 @@
+{"schema":1,"name":"EnvironmentData","address_space":"uniform","layout_class":"wgsl-host-shareable","fields":[{"name":"specular_mip_count","type":"f32"},{"name":"lighting_enabled","type":"u32"},{"name":"sky_visible","type":"u32"},{"name":"padding","type":"u32"}]}

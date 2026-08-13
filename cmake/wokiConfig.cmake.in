@@ -1,0 +1,28 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+find_dependency(cxxopts CONFIG)
+find_dependency(yaml-cpp CONFIG)
+if(@WOKI_PACKAGE_NATIVE@)
+    find_dependency(fmt CONFIG)
+    find_dependency(spdlog CONFIG)
+    find_dependency(LibArchive)
+    find_dependency(Threads)
+    find_dependency(glfw3 CONFIG)
+    find_dependency(Dawn CONFIG)
+@WOKI_CONFIG_FIND_WASMTIME@
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/wokiTargets.cmake")
+set(woki_MODULE_TARGETS
+    woki::core
+    woki::math
+    woki::config
+    woki::ecs
+    woki::platform
+    woki::asset
+    woki::extension
+    woki::rhi
+    woki::gfx
+    woki::ui)
+check_required_components(woki)

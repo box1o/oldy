@@ -325,7 +325,7 @@ def check_static_contract() -> None:
             re.M,
         )
     }
-    if len(sdk_events) != 22 or len(set(sdk_events.values())) != len(sdk_events):
+    if len(sdk_events) != 46 or len(set(sdk_events.values())) != len(sdk_events):
         fail("event schema IDs must be complete and unique")
 
     expected_limits = {
@@ -529,6 +529,8 @@ def check_compilers(cc: str, cxx: str) -> None:
 #include <woki/ext/sdk/host_imports.h>
 #include <woki/ext/sdk/guest_alloc.h>
 _Static_assert(WOKI_EXT_EVENT_WINDOW_RESIZED == 2u, "event id");
+_Static_assert(WOKI_EXT_EVENT_ABI_VERSION == 2u, "application event ABI version");
+_Static_assert(WOKI_EXT_EVENT_POINTER_DOWN == 152u, "pointer event id");
 _Static_assert(WOKI_EXT_EVENT_EXTENSION_ID(42u) == 0x8000002au, "extension event id");
 _Static_assert(sizeof(float) == 4u, "wire f32");
 _Static_assert(WOKI_EXT_API_VERSION == 1u, "api version");
@@ -537,6 +539,8 @@ _Static_assert(WOKI_EXT_OK == 0 && WOKI_EXT_INVALID == -5, "status");
     cxx_source = r"""
 #include <woki/extension.hpp>
 static_assert(WOKI_EXT_EVENT_APP_RESUME == 305u);
+static_assert(WOKI_EXT_EVENT_GAMEPAD_CONNECTED == 400u);
+static_assert(WOKI_EXT_EVENT_ABI_VERSION == 2u);
 static_assert(WOKI_EXT_EVENT_EXTENSION_ID(42u) == 0x8000002au);
 static_assert(WOKI_EXT_API_VERSION == 1u);
 static_assert(WOKI_EXT_MAX_EVENT_LEN == WOKI_EXT_GUEST_BUFFER_SIZE);
@@ -568,7 +572,7 @@ struct TestPlugin {
     woki::Status OnAttach() noexcept { return woki::Status::Success(); }
     void OnEvent(woki::events::Event& event) noexcept {
         woki::events::EventDispatcher dispatcher{event};
-        (void)dispatcher.Dispatch<woki::events::MouseScrolledEvent>([](const auto& value) noexcept { return value.offset_y != 0.0f; });
+        (void)dispatcher.Dispatch<woki::events::ScrolledEvent>([](const auto& value) noexcept { return value.delta_y != 0.0f; });
     }
 };
 WOKI_EXTENSION(TestPlugin)

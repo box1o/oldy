@@ -1,0 +1,10 @@
+{
+  "$schema": "https://schemas.woki.dev/quality/v1.schema.json",
+  "schema": 1,
+  "name": "Medium",
+  "features": {
+    "shadows": { "enabled": true, "settings": { "resolution": 1024, "cascades": 3 } },
+    "bloom": { "enabled": false, "settings": { "intensity": 0.6, "levels": 3 } },
+    "temporal": { "enabled": false }
+  }
+}

@@ -55,9 +55,11 @@ void ShaderModuleCompilationInfoThunk(const WGPUCompilationInfoRequestStatus sta
     return Ok();
 }
 
+#ifndef __EMSCRIPTEN__
 [[nodiscard]] WGPUTexture NativeTexture(const Texture& texture) noexcept {
     return static_cast<WGPUTexture>(texture.GetNativeHandles().resource);
 }
+#endif
 
 [[nodiscard]] bool IsMappedRangeValid(const WGPUBuffer buffer, const size_t offset, const size_t size, const bool allow_whole_size) noexcept {
     if (buffer == nullptr) {
@@ -137,6 +139,7 @@ private:
     detail::RenderBundleHandle handle_;
 };
 
+#ifndef __EMSCRIPTEN__
 class WgpuTexelBufferViewImpl final : public TexelBufferView {
 public:
     explicit WgpuTexelBufferViewImpl(WGPUTexelBufferView handle) noexcept
@@ -148,6 +151,7 @@ public:
 private:
     detail::TexelBufferViewHandle handle_;
 };
+#endif
 
 class WgpuTextureViewImpl final : public TextureView {
 public:
@@ -293,6 +297,7 @@ private:
     detail::RenderBundleEncoderHandle encoder_;
 };
 
+#ifndef __EMSCRIPTEN__
 class WgpuResourceTableImpl final : public ResourceTable {
 public:
     explicit WgpuResourceTableImpl(WGPUResourceTable handle) noexcept
@@ -309,6 +314,7 @@ public:
 private:
     detail::ResourceTableHandle handle_;
 };
+#endif
 
 class WgpuShaderModuleImpl final : public ShaderModule {
 public:
@@ -323,6 +329,7 @@ private:
     detail::ShaderModuleHandle handle_;
 };
 
+#ifndef __EMSCRIPTEN__
 class WgpuSharedBufferMemoryImpl final : public SharedBufferMemory {
 public:
     explicit WgpuSharedBufferMemoryImpl(WGPUSharedBufferMemory handle) noexcept
@@ -369,9 +376,12 @@ public:
 private:
     detail::SharedTextureMemoryHandle handle_;
 };
+#endif
 
 [[nodiscard]] scope<RenderBundle> CreateRenderBundleObject(WGPURenderBundle handle);
+#ifndef __EMSCRIPTEN__
 [[nodiscard]] scope<TexelBufferView> CreateTexelBufferViewObject(WGPUTexelBufferView handle);
+#endif
 
 void WgpuBindGroupImpl::SetLabel(const std::string_view label) {
     if (handle_) {
@@ -433,6 +443,7 @@ NativeHandles WgpuRenderBundleImpl::GetNativeHandles() const noexcept {
     return handles;
 }
 
+#ifndef __EMSCRIPTEN__
 void WgpuTexelBufferViewImpl::SetLabel(const std::string_view label) {
     if (handle_) {
         wgpuTexelBufferViewSetLabel(handle_.get(), detail::ToStringView(label));
@@ -444,6 +455,7 @@ NativeHandles WgpuTexelBufferViewImpl::GetNativeHandles() const noexcept {
     handles.resource = handle_.get();
     return handles;
 }
+#endif
 
 void WgpuTextureViewImpl::SetLabel(const std::string_view label) {
     if (handle_) {
@@ -532,21 +544,27 @@ NativeHandles WgpuQuerySetImpl::GetNativeHandles() const noexcept {
 }
 
 void WgpuExternalTextureImpl::Destroy() {
+#ifndef __EMSCRIPTEN__
     if (handle_) {
         wgpuExternalTextureDestroy(handle_.get());
     }
+#endif
 }
 
 void WgpuExternalTextureImpl::Expire() {
+#ifndef __EMSCRIPTEN__
     if (handle_) {
         wgpuExternalTextureExpire(handle_.get());
     }
+#endif
 }
 
 void WgpuExternalTextureImpl::Refresh() {
+#ifndef __EMSCRIPTEN__
     if (handle_) {
         wgpuExternalTextureRefresh(handle_.get());
     }
+#endif
 }
 
 void WgpuExternalTextureImpl::SetLabel(const std::string_view label) {
@@ -562,6 +580,10 @@ NativeHandles WgpuExternalTextureImpl::GetNativeHandles() const noexcept {
 }
 
 Result<scope<TexelBufferView>> WgpuBufferImpl::CreateTexelView(const TexelBufferViewDesc& desc) const {
+#ifdef __EMSCRIPTEN__
+    (void)desc;
+    return Err(ErrorCode::GraphicsUnsupportedApi, "Texel buffer views are unavailable with emdawnwebgpu");
+#else
     if (!handle_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Buffer is invalid");
     }
@@ -572,6 +594,7 @@ Result<scope<TexelBufferView>> WgpuBufferImpl::CreateTexelView(const TexelBuffer
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Failed to create texel buffer view");
     }
     return Ok(CreateTexelBufferViewObject(view));
+#endif
 }
 
 void WgpuBufferImpl::Destroy() {
@@ -703,12 +726,17 @@ NativeHandles WgpuBufferImpl::GetNativeHandles() const noexcept {
 }
 
 scope<TextureView> WgpuTextureImpl::CreateErrorView(const TextureViewDesc& desc) const {
+#ifdef __EMSCRIPTEN__
+    (void)desc;
+    return nullptr;
+#else
     if (!handle_) {
         return nullptr;
     }
 
     const detail::TextureViewDescriptorStorage storage(desc);
     return CreateTextureViewObject(wgpuTextureCreateErrorView(handle_.get(), &storage.native));
+#endif
 }
 
 scope<TextureView> WgpuTextureImpl::CreateView(const TextureViewDesc& desc) const {
@@ -810,9 +838,13 @@ void WgpuTextureImpl::SetLabel(const std::string_view label) {
 }
 
 void WgpuTextureImpl::SetOwnershipForMemoryDump(const u64 owner_guid) {
+#ifdef __EMSCRIPTEN__
+    (void)owner_guid;
+#else
     if (handle_) {
         wgpuTextureSetOwnershipForMemoryDump(handle_.get(), owner_guid);
     }
+#endif
 }
 
 void WgpuTextureImpl::Unpin() {}
@@ -891,9 +923,15 @@ void WgpuRenderBundleEncoderImpl::SetBindGroup(const u32 group_index, const Bind
 }
 
 void WgpuRenderBundleEncoderImpl::SetImmediates(const u32 offset, const void* data, const size_t size) {
+#ifdef __EMSCRIPTEN__
+    (void)offset;
+    (void)data;
+    (void)size;
+#else
     if (encoder_) {
         wgpuRenderBundleEncoderSetImmediates(encoder_.get(), offset, data, size);
     }
+#endif
 }
 
 void WgpuRenderBundleEncoderImpl::SetIndexBuffer(const Buffer& buffer, const IndexFormat format, const u64 offset, const u64 size) {
@@ -936,6 +974,7 @@ NativeHandles WgpuRenderBundleEncoderImpl::GetNativeHandles() const noexcept {
     return handles;
 }
 
+#ifndef __EMSCRIPTEN__
 void WgpuResourceTableImpl::Destroy() {
     if (handle_) {
         wgpuResourceTableDestroy(handle_.get());
@@ -1001,6 +1040,7 @@ NativeHandles WgpuResourceTableImpl::GetNativeHandles() const noexcept {
     handles.resource = handle_.get();
     return handles;
 }
+#endif
 
 Future WgpuShaderModuleImpl::GetCompilationInfo(const CallbackMode callback_mode, ShaderModuleCompilationInfoCallback callback) const {
     Future future{};
@@ -1043,6 +1083,7 @@ NativeHandles WgpuShaderModuleImpl::GetNativeHandles() const noexcept {
     return handles;
 }
 
+#ifndef __EMSCRIPTEN__
 Result<void> WgpuSharedBufferMemoryImpl::BeginAccess(const Buffer& buffer, const SharedBufferMemoryBeginAccessDesc& desc) const {
     if (!handle_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Shared buffer memory is invalid");
@@ -1213,14 +1254,17 @@ NativeHandles WgpuSharedTextureMemoryImpl::GetNativeHandles() const noexcept {
     handles.resource = handle_.get();
     return handles;
 }
+#endif
 
 [[nodiscard]] scope<RenderBundle> CreateRenderBundleObject(const WGPURenderBundle handle) {
     return createScope<WgpuRenderBundleImpl>(handle);
 }
 
+#ifndef __EMSCRIPTEN__
 [[nodiscard]] scope<TexelBufferView> CreateTexelBufferViewObject(const WGPUTexelBufferView handle) {
     return createScope<WgpuTexelBufferViewImpl>(handle);
 }
+#endif
 
 [[nodiscard]] scope<TextureView> CreateTextureViewObject(const WGPUTextureView handle) {
     return createScope<WgpuTextureViewImpl>(handle);
@@ -1262,9 +1306,11 @@ scope<RenderPipeline> CreateRenderPipelineObject(const WGPURenderPipeline handle
     return createScope<WgpuRenderPipelineImpl>(handle);
 }
 
+#ifndef __EMSCRIPTEN__
 scope<ResourceTable> CreateResourceTableObject(const WGPUResourceTable handle) {
     return createScope<WgpuResourceTableImpl>(handle);
 }
+#endif
 
 scope<Sampler> CreateSamplerObject(const WGPUSampler handle) {
     return createScope<WgpuSamplerImpl>(handle);
@@ -1274,6 +1320,7 @@ scope<ShaderModule> CreateShaderModuleObject(const WGPUShaderModule handle) {
     return createScope<WgpuShaderModuleImpl>(handle);
 }
 
+#ifndef __EMSCRIPTEN__
 scope<SharedBufferMemory> CreateSharedBufferMemoryObject(const WGPUSharedBufferMemory handle) {
     return createScope<WgpuSharedBufferMemoryImpl>(handle);
 }
@@ -1285,6 +1332,7 @@ scope<SharedFence> CreateSharedFenceObject(const WGPUSharedFence handle) {
 scope<SharedTextureMemory> CreateSharedTextureMemoryObject(const WGPUSharedTextureMemory handle) {
     return createScope<WgpuSharedTextureMemoryImpl>(handle);
 }
+#endif
 
 scope<Texture> CreateTextureObject(const WGPUTexture handle) {
     return createScope<WgpuTextureImpl>(handle);

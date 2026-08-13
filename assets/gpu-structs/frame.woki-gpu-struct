@@ -1,0 +1,1 @@
+{"schema":1,"name":"FrameData","address_space":"uniform","layout_class":"wgsl-host-shareable","fields":[{"name":"time","type":"f32"},{"name":"delta_time","type":"f32"},{"name":"exposure","type":"f32"},{"name":"light_count","type":"u32"}]}

@@ -10,6 +10,7 @@
 
 #include "string.hpp"
 #include "copy_convert.hpp"
+#include "constant_entry.hpp"
 #include "native_helpers.hpp"
 #include "bind_group_descriptor.hpp"
 #include "external_texture_descriptor.hpp"
@@ -139,17 +140,22 @@ struct PipelineLayoutDescriptorStorage final {
 };
 
 struct ComputeStateStorage final {
+    std::string entry_point{};
+    ConstantEntryStorage constants;
     WGPUComputeState native = WGPU_COMPUTE_STATE_INIT;
 
-    explicit ComputeStateStorage(const ComputeStateDesc& desc) {
+    explicit ComputeStateStorage(const ComputeStateDesc& desc)
+        : entry_point(desc.entry_point),
+          constants(desc.constants) {
         native.nextInChain = static_cast<WGPUChainedStruct*>(desc.next_in_chain);
         native.module = NativeShaderModule(desc.module);
-        native.entryPoint = ToStringView(desc.entry_point);
-        native.constantCount = desc.constant_count;
-        native.constants = static_cast<const WGPUConstantEntry*>(desc.constants);
+        native.entryPoint = ToStringView(entry_point);
+        native.constantCount = constants.entries.size();
+        native.constants = constants.entries.empty() ? nullptr : constants.entries.data();
     }
 };
 
+#ifndef __EMSCRIPTEN__
 struct TexelBufferViewDescriptorStorage final {
     WGPUTexelBufferViewDescriptor native = WGPU_TEXEL_BUFFER_VIEW_DESCRIPTOR_INIT;
 
@@ -161,6 +167,7 @@ struct TexelBufferViewDescriptorStorage final {
         native.size = desc.size;
     }
 };
+#endif
 
 struct ComputePipelineDescriptorStorage final {
     ComputeStateStorage compute;
@@ -230,6 +237,7 @@ struct CommandEncoderDescriptorStorage final {
     }
 };
 
+#ifndef __EMSCRIPTEN__
 struct ResourceTableDescriptorStorage final {
     WGPUResourceTableDescriptor native = WGPU_RESOURCE_TABLE_DESCRIPTOR_INIT;
 
@@ -239,5 +247,6 @@ struct ResourceTableDescriptorStorage final {
         native.size = desc.size;
     }
 };
+#endif
 
 } // namespace woki::rhi::wgpu::detail

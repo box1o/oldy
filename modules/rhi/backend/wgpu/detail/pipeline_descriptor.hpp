@@ -8,6 +8,7 @@
 
 #include "string.hpp"
 #include "../wgpu_enums.hpp"
+#include "constant_entry.hpp"
 #include "native_helpers.hpp"
 
 namespace woki::rhi::wgpu::detail {
@@ -53,9 +54,11 @@ struct VertexStateStorage final {
     std::vector<VertexBufferLayoutStorage> buffer_storage{};
     std::vector<WGPUVertexBufferLayout> buffers{};
     std::string entry_point{};
+    ConstantEntryStorage constants;
     WGPUVertexState native = WGPU_VERTEX_STATE_INIT;
 
-    explicit VertexStateStorage(const VertexStateDesc& desc) {
+    explicit VertexStateStorage(const VertexStateDesc& desc)
+        : constants(desc.constants) {
         buffer_storage.reserve(desc.buffers.size());
         buffers.reserve(desc.buffers.size());
         for (const VertexBufferLayoutDesc& buffer : desc.buffers) {
@@ -67,8 +70,8 @@ struct VertexStateStorage final {
         native.nextInChain = static_cast<WGPUChainedStruct*>(desc.next_in_chain);
         native.module = NativeShaderModule(desc.module);
         native.entryPoint = ToStringView(entry_point);
-        native.constantCount = desc.constant_count;
-        native.constants = static_cast<const WGPUConstantEntry*>(desc.constants);
+        native.constantCount = constants.entries.size();
+        native.constants = constants.entries.empty() ? nullptr : constants.entries.data();
         native.bufferCount = buffers.size();
         native.buffers = buffers.empty() ? nullptr : buffers.data();
     }
@@ -100,9 +103,11 @@ struct FragmentStateStorage final {
     std::vector<ColorTargetStateStorage> target_storage{};
     std::vector<WGPUColorTargetState> targets{};
     std::string entry_point{};
+    ConstantEntryStorage constants;
     WGPUFragmentState native = WGPU_FRAGMENT_STATE_INIT;
 
-    explicit FragmentStateStorage(const FragmentStateDesc& desc) {
+    explicit FragmentStateStorage(const FragmentStateDesc& desc)
+        : constants(desc.constants) {
         target_storage.reserve(desc.targets.size());
         targets.reserve(desc.targets.size());
         for (const ColorTargetStateDesc& target : desc.targets) {
@@ -114,8 +119,8 @@ struct FragmentStateStorage final {
         native.nextInChain = static_cast<WGPUChainedStruct*>(desc.next_in_chain);
         native.module = NativeShaderModule(desc.module);
         native.entryPoint = ToStringView(entry_point);
-        native.constantCount = desc.constant_count;
-        native.constants = static_cast<const WGPUConstantEntry*>(desc.constants);
+        native.constantCount = constants.entries.size();
+        native.constants = constants.entries.empty() ? nullptr : constants.entries.data();
         native.targetCount = targets.size();
         native.targets = targets.empty() ? nullptr : targets.data();
     }
@@ -158,6 +163,14 @@ struct DepthStencilStateStorage final {
     }
 };
 
+[[nodiscard]] inline WGPUMultisampleState ToWgpu(const MultisampleStateDesc& desc) noexcept {
+    WGPUMultisampleState native = WGPU_MULTISAMPLE_STATE_INIT;
+    native.count = desc.count;
+    native.mask = desc.mask;
+    native.alphaToCoverageEnabled = desc.alpha_to_coverage_enabled ? WGPU_TRUE : WGPU_FALSE;
+    return native;
+}
+
 struct RenderPipelineTypedDescriptorStorage final {
     std::optional<VertexStateStorage> vertex{};
     std::optional<PrimitiveStateStorage> primitive{};
@@ -179,10 +192,8 @@ struct RenderPipelineTypedDescriptorStorage final {
             depth_stencil.emplace(*desc.depth_stencil);
             native.depthStencil = &depth_stencil->native;
         }
-        if (desc.multisample != nullptr) {
-            multisample = *static_cast<const WGPUMultisampleState*>(desc.multisample);
-            native.multisample = multisample;
-        }
+        multisample = ToWgpu(desc.multisample);
+        native.multisample = multisample;
         if (desc.fragment != nullptr) {
             fragment.emplace(*desc.fragment);
             native.fragment = &fragment->native;

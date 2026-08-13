@@ -192,12 +192,12 @@ TEST_CASE("Registry separates discovery failures from valid packages") {
     fs::create_directories(root / "extensions" / "woki.bad");
     {
         std::ofstream manifest(root / "extensions" / "woki.good" / "manifest.yaml");
-        manifest << "id: woki.good\nname: Good\nversion: 1.0.0\napiVersion: 1\nruntime:\n  wasm: extension.wasm\npermissions: []\n";
+        manifest << "$schema: https://schemas.woki.dev/extension.manifest/v1.schema.json\nid: woki.good\nname: Good\nversion: 1.0.0\napiVersion: 1\nruntime:\n  wasm: extension.wasm\npermissions: []\n";
     }
     std::ofstream(root / "extensions" / "woki.good" / "extension.wasm", std::ios::binary).write("\0asm", 4);
     {
         std::ofstream manifest(root / "extensions" / "woki.bad" / "manifest.yaml");
-        manifest << "id: woki.bad\nname: Bad\nversion: 1.0.0\napiVersion: 1\nruntime:\n  wasm: missing.wasm\npermissions: []\n";
+        manifest << "$schema: https://schemas.woki.dev/extension.manifest/v1.schema.json\nid: woki.bad\nname: Bad\nversion: 1.0.0\napiVersion: 1\nruntime:\n  wasm: missing.wasm\npermissions: []\n";
     }
     woki::ext::Registry registry;
     REQUIRE(registry.Scan({root / "extensions", root / "data", root / "cache"}).has_value());

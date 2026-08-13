@@ -1,9 +1,9 @@
-#include <woki/gfx/source.hpp>
-#include <woki/gfx/compiler.hpp>
-#include <woki/rhi.hpp>
-
-#include <algorithm>
 #include <set>
+#include <algorithm>
+
+#include <woki/rhi.hpp>
+#include <woki/gfx/advanced/source.hpp>
+#include <woki/gfx/advanced/compiler.hpp>
 
 namespace woki::gfx {
 namespace {
@@ -167,6 +167,12 @@ ComposedSource ShaderSourceResolver::Compose(const ShaderDescriptor& descriptor,
     Composer composer(vfs_);
     if (descriptor_path)
         result.dependencies.push_back(std::move(*descriptor_path));
+    const auto generated_abi = *asset::AssetPath::Parse("shaders/generated/render_abi.wgsl");
+    if (vfs_.ReadText(generated_abi)) {
+        composer.File(generated_abi, result);
+        if (!result.code.empty() && result.code.back() != '\n')
+            result.code.push_back('\n');
+    }
     for (const auto& source : descriptor.sources) {
         composer.File(source, result);
         if (!result.code.empty() && result.code.back() != '\n')

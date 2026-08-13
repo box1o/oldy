@@ -1,0 +1,1 @@
+{"schema":1,"name":"ShadowData","address_space":"uniform","layout_class":"wgsl-host-shareable","fields":[{"name":"matrices","type":{"type":"array","element":{"type":"matrix","columns":4,"rows":4},"count":4}},{"name":"split_depths","type":{"type":"vector","element":"f32","width":4}},{"name":"atlas_size_count","type":{"type":"vector","element":"f32","width":4}}]}

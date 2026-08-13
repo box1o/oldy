@@ -19,6 +19,8 @@ namespace fs = std::filesystem;
 void WriteFile(const fs::path& path, std::string_view contents) {
     std::ofstream output(path);
     REQUIRE(output.good());
+    if (path.filename() == "manifest.yaml" && !contents.contains("$schema:"))
+        output << "$schema: https://schemas.woki.dev/extension.manifest/v1.schema.json\n";
     output << contents;
 }
 

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://schemas.woki.dev/pipeline/v1.schema.json",
+  "schema": 1,
+  "name": "Desktop Forward",
+  "renderPath": "forward",
+  "targets": {
+    "color": ["surface"],
+    "depth": "depth24plus",
+    "samples": 1
+  },
+  "features": [
+    { "id": "mesh" },
+    { "id": "gpu-visibility" },
+    { "id": "depth" },
+    { "id": "hiz-depth-pyramid" },
+    { "id": "velocity" },
+    { "id": "lighting" },
+    { "id": "shadows" },
+    { "id": "forward" },
+    { "id": "transparent" },
+    { "id": "sky" },
+    { "id": "exposure" },
+    { "id": "temporal" },
+    { "id": "bloom" },
+    { "id": "presentation" }
+  ],
+  "extensionPoints": {
+    "depth-prepass": ["gpu-visibility", "depth", "hiz-depth-pyramid", "shadows"],
+    "opaque": ["mesh", "velocity", "lighting", "forward"],
+    "transparent": ["transparent"],
+    "post-process": ["exposure", "temporal", "bloom", "presentation"]
+  },
+  "qualityProfile": "quality/high.woki-quality",
+  "fallbacks": [
+    { "pipeline": "mobile-forward.woki-pipeline", "missingCapabilities": ["hdr"] },
+    { "pipeline": "compatibility-forward.woki-pipeline", "missingCapabilities": ["depth-texture"] }
+  ]
+}

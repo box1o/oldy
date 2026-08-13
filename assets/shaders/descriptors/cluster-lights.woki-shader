@@ -1,0 +1,1 @@
+{"schema":1,"name":"cluster-lights","language":"wgsl","sources":["shaders/compute/cluster_lights.wgsl"],"entry_points":[{"stage":"compute","name":"assign_clusters"}]}

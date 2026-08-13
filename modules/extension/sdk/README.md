@@ -94,7 +94,8 @@ and ECS inputs. Run the complete ABI/WIT check with:
 python3 modules/extension/sdk/check_contract.py --cc clang --cxx clang++
 ```
 
-Raw ABI v1 details are documented in `docs/raw-abi-v1.md`. Component Model
+Raw host-call ABI v1 details are documented in `docs/raw-abi-v1.md`; application
+event payload ABI v2 is documented in `docs/application-events-v2.md`. Component Model
 binaries are not yet accepted by the C/C++ Wasmtime embedding API used here;
 the generated WIT adapter keeps the public service model independent of that
 temporary lowering.

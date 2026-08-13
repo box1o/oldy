@@ -1,86 +1,21 @@
 #include <algorithm>
-#include <array>
 #include <cmath>
-#include <cstddef>
-#include <cstring>
 #include <filesystem>
-#include <vector>
+#include <map>
+#include <mutex>
+#include <set>
 
 #include <woki/asset.hpp>
 #include <woki/gfx.hpp>
-#include <woki/rhi.hpp>
+#include <woki/gfx/advanced/pipeline_product.hpp>
+#include <woki/math.hpp>
 
 #include "render.hpp"
 
 namespace woki {
 namespace {
 
-constexpr rhi::Color kBackgroundColor{14.0f / 255.0f, 17.0f / 255.0f, 23.0f / 255.0f, 1.0f};
-
-struct CubeVertex {
-    math::vec3f position;
-    math::vec3f normal;
-    math::vec4f tangent;
-    math::vec2f uv;
-    math::vec4f color;
-};
-
-struct alignas(16) ViewUniforms {
-    math::mat4f view_projection;
-    math::mat4f inverse_view_projection;
-    math::vec3f camera_position;
-    f32 near_plane;
-    math::vec2f viewport_size;
-    f32 far_plane;
-    f32 padding{};
-};
-
-struct alignas(16) ObjectUniforms {
-    math::mat4f model;
-    math::mat4f normal_matrix;
-};
-
-constexpr std::array<math::vec4f, 6> kFaceColors = {
-    math::vec4f{0.94f, 0.29f, 0.23f, 1.0f},
-    math::vec4f{0.18f, 0.54f, 0.96f, 1.0f},
-    math::vec4f{0.25f, 0.80f, 0.43f, 1.0f},
-    math::vec4f{0.98f, 0.72f, 0.20f, 1.0f},
-    math::vec4f{0.68f, 0.42f, 0.94f, 1.0f},
-    math::vec4f{0.08f, 0.74f, 0.76f, 1.0f},
-};
-
-constexpr std::array<CubeVertex, 24> kCubeVertices = {
-    CubeVertex{{-1, -1, 1}, {0, 0, 1}, {1, 0, 0, 1}, {0, 0}, kFaceColors[0]},
-    CubeVertex{{1, -1, 1}, {0, 0, 1}, {1, 0, 0, 1}, {1, 0}, kFaceColors[0]},
-    CubeVertex{{1, 1, 1}, {0, 0, 1}, {1, 0, 0, 1}, {1, 1}, kFaceColors[0]},
-    CubeVertex{{-1, 1, 1}, {0, 0, 1}, {1, 0, 0, 1}, {0, 1}, kFaceColors[0]},
-    CubeVertex{{1, -1, -1}, {0, 0, -1}, {-1, 0, 0, 1}, {0, 0}, kFaceColors[1]},
-    CubeVertex{{-1, -1, -1}, {0, 0, -1}, {-1, 0, 0, 1}, {1, 0}, kFaceColors[1]},
-    CubeVertex{{-1, 1, -1}, {0, 0, -1}, {-1, 0, 0, 1}, {1, 1}, kFaceColors[1]},
-    CubeVertex{{1, 1, -1}, {0, 0, -1}, {-1, 0, 0, 1}, {0, 1}, kFaceColors[1]},
-    CubeVertex{{-1, -1, -1}, {-1, 0, 0}, {0, 0, 1, 1}, {0, 0}, kFaceColors[2]},
-    CubeVertex{{-1, -1, 1}, {-1, 0, 0}, {0, 0, 1, 1}, {1, 0}, kFaceColors[2]},
-    CubeVertex{{-1, 1, 1}, {-1, 0, 0}, {0, 0, 1, 1}, {1, 1}, kFaceColors[2]},
-    CubeVertex{{-1, 1, -1}, {-1, 0, 0}, {0, 0, 1, 1}, {0, 1}, kFaceColors[2]},
-    CubeVertex{{1, -1, 1}, {1, 0, 0}, {0, 0, -1, 1}, {0, 0}, kFaceColors[3]},
-    CubeVertex{{1, -1, -1}, {1, 0, 0}, {0, 0, -1, 1}, {1, 0}, kFaceColors[3]},
-    CubeVertex{{1, 1, -1}, {1, 0, 0}, {0, 0, -1, 1}, {1, 1}, kFaceColors[3]},
-    CubeVertex{{1, 1, 1}, {1, 0, 0}, {0, 0, -1, 1}, {0, 1}, kFaceColors[3]},
-    CubeVertex{{-1, 1, 1}, {0, 1, 0}, {1, 0, 0, 1}, {0, 0}, kFaceColors[4]},
-    CubeVertex{{1, 1, 1}, {0, 1, 0}, {1, 0, 0, 1}, {1, 0}, kFaceColors[4]},
-    CubeVertex{{1, 1, -1}, {0, 1, 0}, {1, 0, 0, 1}, {1, 1}, kFaceColors[4]},
-    CubeVertex{{-1, 1, -1}, {0, 1, 0}, {1, 0, 0, 1}, {0, 1}, kFaceColors[4]},
-    CubeVertex{{-1, -1, -1}, {0, -1, 0}, {1, 0, 0, 1}, {0, 0}, kFaceColors[5]},
-    CubeVertex{{1, -1, -1}, {0, -1, 0}, {1, 0, 0, 1}, {1, 0}, kFaceColors[5]},
-    CubeVertex{{1, -1, 1}, {0, -1, 0}, {1, 0, 0, 1}, {1, 1}, kFaceColors[5]},
-    CubeVertex{{-1, -1, 1}, {0, -1, 0}, {1, 0, 0, 1}, {0, 1}, kFaceColors[5]},
-};
-
-constexpr std::array<u16, 36> kCubeIndices = {0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7, 8, 9, 10, 8, 10, 11, 12, 13, 14, 12, 14, 15, 16, 17, 18, 16, 18, 19, 20, 21, 22, 20, 22, 23};
-
-u32 AlignUp(u32 value, u32 alignment) {
-    return alignment == 0 ? value : (value + alignment - 1) / alignment * alignment;
-}
+const asset::AssetId kClimbingId = *asset::AssetId::Parse("77ee2538-19d3-57ef-956f-890eac1ac253");
 
 Result<std::filesystem::path> StudioAssetRoot() {
 #ifdef __EMSCRIPTEN__
@@ -97,19 +32,297 @@ Result<std::filesystem::path> StudioAssetRoot() {
 #endif
 }
 
-} // namespace
+Result<asset::Product> ReadCompatibilityPipeline(const asset::Vfs& vfs, const asset::AssetManifest& manifest) {
+    for (const auto& entry : manifest.Entries()) {
+        if (entry.type != gfx::kPipelineProductType)
+            continue;
+        auto reader = asset::ProductReader::Open(
+            vfs,
+            entry.locator,
+            {.max_payload_bytes = 1024U * 1024U * 1024U, .max_decompressed_chunk_bytes = 1024U * 1024U * 1024U}
+        );
+        if (!reader)
+            return Err(std::move(reader).error());
+        auto product = reader->ReadProduct();
+        if (!product)
+            return Err(std::move(product).error());
+        auto pipeline = gfx::ParsePipelineProduct(product->payload);
+        if (!pipeline)
+            return Err(std::move(pipeline).error());
+        if (pipeline->render_path == ToStringId("compatibility-forward"))
+            return product;
+    }
+    return Err(ErrorCode::FileNotFound, "compatibility pipeline is absent from the shipping manifest");
+}
 
-struct CubePassState {
-    ref<rhi::RenderPipeline> pipeline;
-    ref<rhi::BindGroup> view_bind_group;
-    ref<rhi::BindGroup> object_bind_group;
-    ref<rhi::Buffer> vertex_buffer;
-    ref<rhi::Buffer> index_buffer;
-    std::array<gfx::PixelRect, 4> viewports{};
-    u32 uniform_stride{};
+math::vec3f TransformPoint(const math::mat4f& transform, const math::vec3f& point) noexcept {
+    const auto value = transform * math::vec4f{point.x, point.y, point.z, 1.0F};
+    return {value.x, value.y, value.z};
+}
+
+gfx::RenderBounds TransformBounds(const gfx::RenderBounds& bounds, const math::mat4f& transform) noexcept {
+    const std::array corners{
+        math::vec3f{bounds.minimum.x, bounds.minimum.y, bounds.minimum.z},
+        math::vec3f{bounds.maximum.x, bounds.minimum.y, bounds.minimum.z},
+        math::vec3f{bounds.minimum.x, bounds.maximum.y, bounds.minimum.z},
+        math::vec3f{bounds.maximum.x, bounds.maximum.y, bounds.minimum.z},
+        math::vec3f{bounds.minimum.x, bounds.minimum.y, bounds.maximum.z},
+        math::vec3f{bounds.maximum.x, bounds.minimum.y, bounds.maximum.z},
+        math::vec3f{bounds.minimum.x, bounds.maximum.y, bounds.maximum.z},
+        math::vec3f{bounds.maximum.x, bounds.maximum.y, bounds.maximum.z},
+    };
+
+    gfx::RenderBounds result;
+    result.minimum = TransformPoint(transform, corners.front());
+    result.maximum = result.minimum;
+    for (const auto& corner : corners) {
+        const auto point = TransformPoint(transform, corner);
+        result.minimum = math::min(result.minimum, point);
+        result.maximum = math::max(result.maximum, point);
+    }
+    result.center = (result.minimum + result.maximum) * 0.5F;
+    const auto extent = result.maximum - result.center;
+    result.radius = math::length(extent);
+    return result;
+}
+
+class StudioSurfaceSource final : public gfx::SurfaceSource {
+public:
+    explicit StudioSurfaceSource(Window& window)
+        : window_(&window) {}
+
+    gfx::SurfacePlatformSource Describe() const noexcept override {
+        return {
+            .platform = gfx::SurfacePlatform::WokiWindow,
+            .display = nullptr,
+            .window = window_,
+            .selector = {},
+        };
+    }
+
+    std::string Label() const override {
+        return "Studio window";
+    }
+
+private:
+    Window* window_{};
 };
 
-RenderLayer::RenderLayer() = default;
+} // namespace
+
+struct StudioRenderDemo final {
+    ref<asset::Vfs> vfs;
+    scope<gfx::RenderRuntime> runtime;
+    gfx::SurfaceHandle surface;
+    gfx::OffscreenTargetHandle scene_target;
+    gfx::SceneHandle scene;
+    gfx::PipelineHandle pipeline;
+    gfx::MeshHandle mesh;
+    gfx::MaterialInstanceHandle material;
+    gfx::RenderObjectId object;
+    std::array<gfx::ViewId, 4> view_ids{};
+    std::array<gfx::ViewDescriptor, 4> views{};
+    gfx::AnimationPlaybackHandle animation;
+    gfx::SkinPaletteHandle palette;
+    gfx::RenderBounds bounds{{}, 1.0F, {-1.0F, -1.0F, -1.0F}, {1.0F, 1.0F, 1.0F}};
+    math::mat4f model_transform{math::mat4f::identity()};
+    bool animation_paused{};
+    bool animation_initialized{};
+    bool static_diagnostic_logged{};
+    u64 last_visible_objects{~u64{0}};
+    u64 last_draw_packets{~u64{0}};
+    u64 last_draw_calls{~u64{0}};
+    u64 last_skipped_resources{~u64{0}};
+    u64 last_fallback_textures{~u64{0}};
+
+    static Result<scope<StudioRenderDemo>> Create(
+        ref<const gfx::SurfaceSource> source,
+        const std::filesystem::path& root,
+        const u32 width,
+        const u32 height,
+        const bool offscreen
+    ) {
+        auto result = createScope<StudioRenderDemo>();
+        result->vfs = createRef<asset::Vfs>();
+        ref<asset::DirectoryMount> mount;
+        TRY_ASSIGN(mount, asset::DirectoryMount::Create(root));
+        TRY_VOID(result->vfs->MountAt("studio-engine", asset::AssetScheme::Engine, {}, 0, mount));
+        auto manifest_uri = asset::AssetUri::Parse("engine://cooked/manifest.wkam");
+        if (!manifest_uri)
+            return Err(manifest_uri.error());
+        asset::AssetManifest manifest;
+        TRY_ASSIGN(manifest, asset::AssetManifest::Load(*result->vfs, *manifest_uri));
+        gfx::RenderRuntimeDescriptor descriptor;
+        descriptor.assets.roots.push_back(root);
+        TRY_ASSIGN(result->runtime, gfx::RenderRuntime::Create(std::move(descriptor)));
+        TRY_ASSIGN(
+            result->surface,
+            result->runtime
+                ->CreateSurface({.source = std::move(source), .width = width, .height = height, .label = "Studio"})
+        );
+        if (offscreen)
+            TRY_ASSIGN(
+                result->scene_target,
+                result->runtime->CreateOffscreenTarget(
+                    {.width = width,
+                        .height = height,
+                        .format = gfx::PixelFormat::RGBA8Unorm,
+                        .sampled = true,
+                        .label = "Scene viewport"}
+                )
+            );
+        TRY_ASSIGN(result->scene, result->runtime->CreateScene({.label = "Studio demo"}));
+        TRY_ASSIGN(result->pipeline, result->runtime->CreatePipeline());
+        asset::Product pipeline_product;
+        TRY_ASSIGN(pipeline_product, ReadCompatibilityPipeline(*result->vfs, manifest));
+        TRY_VOID(result->runtime->PublishPipeline(result->pipeline, pipeline_product));
+        TRY_ASSIGN(result->mesh, result->runtime->RequestMesh(kClimbingId));
+        gfx::SceneMutation mutation;
+        TRY_ASSIGN(mutation, result->runtime->MutateScene(result->scene));
+        gfx::RenderObjectData object_data;
+        object_data.mesh = result->mesh;
+        // Leave the material unset so the mesh feature resolves each cooked
+        // submesh's imported material (including its base-color texture).
+        object_data.material = {};
+        object_data.bounds = result->bounds;
+        TRY_ASSIGN(result->object, mutation.CreateObject(object_data));
+
+        gfx::RenderLightId light;
+        TRY_ASSIGN(
+            light,
+            mutation.CreateLight(
+                {
+                    .type = gfx::LightType::Directional,
+                    .direction = {-0.45F, -0.80F, -0.40F},
+                    .color = {1.0F, 0.96F, 0.90F},
+                    .intensity = 4.0F,
+                }
+            )
+        );
+        TRY_ASSIGN(
+            light,
+            mutation.CreateLight(
+                {
+                    .type = gfx::LightType::Directional,
+                    .direction = {0.55F, -0.35F, 0.75F},
+                    .color = {0.52F, 0.68F, 1.0F},
+                    .intensity = 1.5F,
+                }
+            )
+        );
+        static_cast<void>(light);
+        TRY_VOID(mutation.Commit());
+        for (u32 index = 0; index < result->view_ids.size(); ++index) {
+            gfx::ViewDescriptor view;
+            view.scene = result->scene;
+            view.family = 1;
+            view.pipeline = result->pipeline;
+            view.output = offscreen ? gfx::ViewOutput{gfx::OffscreenOutput{result->scene_target}}
+                                    : gfx::ViewOutput{gfx::SurfaceOutput{result->surface}};
+            view.active = index == 0;
+            result->views[index] = view;
+            TRY_ASSIGN(result->view_ids[index], result->runtime->CreateView(view));
+        }
+        slog::Info("Loading the packaged climbing mesh asynchronously");
+        return Ok(std::move(result));
+    }
+
+    void PatchObject(gfx::RenderObjectPatch patch) {
+        auto mutation = runtime->MutateScene(scene);
+        if (!mutation) {
+            slog::Warn("Scene mutation failed: {}", mutation.error().Message());
+            return;
+        }
+        if (auto updated = mutation->UpdateObject(object, std::move(patch)); !updated)
+            slog::Warn("Object update failed: {}", updated.error().Message());
+        else if (auto committed = mutation->Commit(); !committed)
+            slog::Warn("Scene commit failed: {}", committed.error().Message());
+    }
+
+    [[nodiscard]] bool PumpAssets() {
+        if (animation_initialized)
+            return false;
+        auto prepared = runtime->CreateAnimationPlayback(mesh);
+        if (!prepared) {
+            if (runtime->MeshStatus(mesh) == gfx::MeshState::Failed && !static_diagnostic_logged) {
+                slog::Warn("climbing mesh has no usable animation: {}", prepared.error().Message());
+                static_diagnostic_logged = true;
+                animation_initialized = true;
+            }
+            return false;
+        }
+        animation = prepared->playback;
+        palette = prepared->palette;
+        const auto imported_bounds = TransformBounds(prepared->bounds, prepared->model_transform);
+        const f32 normalization = 2.0F / std::max(imported_bounds.radius, 0.001F);
+        model_transform = math::scale(normalization) * math::translate(-imported_bounds.center)
+                          * prepared->model_transform;
+        bounds = TransformBounds(prepared->bounds, model_transform);
+        slog::Info(
+            "climbing world bounds: center=({:.3f}, {:.3f}, {:.3f}) radius={:.3f} min=({:.3f}, {:.3f}, "
+            "{:.3f}) max=({:.3f}, {:.3f}, {:.3f})",
+            bounds.center.x,
+            bounds.center.y,
+            bounds.center.z,
+            bounds.radius,
+            bounds.minimum.x,
+            bounds.minimum.y,
+            bounds.minimum.z,
+            bounds.maximum.x,
+            bounds.maximum.y,
+            bounds.maximum.z
+        );
+        gfx::RenderObjectPatch patch;
+        patch.palette = palette;
+        patch.transform = model_transform;
+        patch.bounds = bounds;
+        PatchObject(std::move(patch));
+        animation_initialized = true;
+        slog::Info(
+            "climbing ready: meshes={} LODs={} joints={}; playing '{}' ({:.3f}s)",
+            prepared->mesh_count,
+            prepared->lod_count,
+            prepared->joint_count,
+            prepared->clip_name,
+            prepared->duration
+        );
+        return true;
+    }
+
+    [[nodiscard]] bool Advance(const f32 delta_seconds) {
+        const bool became_ready = PumpAssets();
+        if (!animation.IsValid())
+            return became_ready;
+        if (auto advanced = runtime->AdvanceAnimation(animation, delta_seconds); !advanced) {
+            slog::Warn("Animation evaluation failed: {}", advanced.error().Message());
+            return became_ready;
+        }
+        gfx::RenderObjectPatch patch;
+        patch.palette = palette;
+        PatchObject(std::move(patch));
+        return became_ready;
+    }
+
+    void TogglePause() {
+        if (animation.IsValid()) {
+            animation_paused = !animation_paused;
+            static_cast<void>(runtime->SetAnimationPaused(animation, animation_paused));
+        }
+    }
+
+    void Restart() {
+        if (animation.IsValid())
+            static_cast<void>(runtime->RestartAnimation(animation));
+    }
+
+    void ChangeSpeed(const f32 amount) {
+        if (animation.IsValid())
+            static_cast<void>(runtime->ChangeAnimationSpeed(animation, amount));
+    }
+};
+
+RenderLayer::RenderLayer(const bool offscreen)
+    : offscreen_(offscreen) {}
 
 RenderLayer::~RenderLayer() {
     Shutdown();
@@ -127,16 +340,23 @@ void RenderLayer::OnDetach(Context&) {
     Shutdown();
 }
 
-void RenderLayer::OnUpdate(Context&, f64 delta_ms) {
+void RenderLayer::OnUpdate(Context&, const f64 delta_ms) {
     if (!ready_ || minimized_)
         return;
     if (auto rendered = RenderFrame(static_cast<f32>(std::clamp(delta_ms * 0.001, 0.0, 0.1))); !rendered)
         slog::Warn("Render frame failed: {}", rendered.error().Message());
 }
 
-void RenderLayer::SelectViewport(f32 logical_x, f32 logical_y) noexcept {
+void RenderLayer::SelectViewport(const f32 logical_x, const f32 logical_y) noexcept {
     for (u32 index = 0; index < camera_viewports_.size(); ++index) {
-        const auto hit = camera_viewports_[index].HitTest(logical_x, logical_y, window_->GetContentScaleX(), window_->GetContentScaleY(), width_, height_);
+        const auto hit = camera_viewports_[index].HitTest(
+            logical_x - scene_origin_x_,
+            logical_y - scene_origin_y_,
+            window_->GetContentScaleX(),
+            window_->GetContentScaleY(),
+            width_,
+            height_
+        );
         if (hit && *hit) {
             selected_view_ = index;
             return;
@@ -145,20 +365,11 @@ void RenderLayer::SelectViewport(f32 logical_x, f32 logical_y) noexcept {
 }
 
 void RenderLayer::OnEvent(Context&, events::Event& event) {
-    if (!ready_) {
-        if (event.GetEventType() == events::EventType::kWindowResized && window_ != nullptr) {
-            const auto& value = static_cast<const events::WindowResizeEvent&>(event);
-            if (value.width != 0 && value.height != 0) {
-                Window* window = window_;
-                if (auto initialized = Initialize(*window); !initialized)
-                    slog::Error("Render layer initialization failed: {}", initialized.error().Message());
-            }
-        }
+    if (!ready_)
         return;
-    }
     switch (event.GetEventType()) {
-        case events::EventType::kWindowResized: {
-            const auto& value = static_cast<const events::WindowResizeEvent&>(event);
+        case events::EventType::kFramebufferResized: {
+            const auto& value = static_cast<const events::FramebufferResizeEvent&>(event);
             if (auto resized = Resize(value.width, value.height); !resized)
                 slog::Warn("Render resize failed: {}", resized.error().Message());
             break;
@@ -171,63 +382,85 @@ void RenderLayer::OnEvent(Context&, events::Event& event) {
             minimized_ = false;
             break;
         case events::EventType::kWindowLostFocus:
-        case events::EventType::kMouseLeft:
+        case events::EventType::kPointerLeft:
             ClearInput();
             break;
-        case events::EventType::kMouseButtonPressed: {
-            const auto& value = static_cast<const events::MouseButtonPressedEvent&>(event);
-            SelectViewport(value.x, value.y);
-            left_drag_ |= value.button == events::MouseButton::kLeft;
-            middle_drag_ |= value.button == events::MouseButton::kMiddle;
-            right_drag_ |= value.button == events::MouseButton::kRight;
-            if (right_drag_ && selected_view_ == 0) {
-                fly_.yaw = orbit_.yaw;
-                fly_.pitch = -orbit_.pitch;
+        case events::EventType::kPointerDown: {
+            const auto& value = static_cast<const events::PointerDownEvent&>(event).pointer_data;
+            if (value.button == events::PointerButton::kMiddle) {
+                SelectViewport(value.x, value.y);
+                middle_drag_ = true;
+                event.handled = true;
             }
-            event.handled = true;
             break;
         }
-        case events::EventType::kMouseButtonReleased: {
-            const auto& value = static_cast<const events::MouseButtonReleasedEvent&>(event);
-            if (value.button == events::MouseButton::kLeft)
-                left_drag_ = false;
-            if (value.button == events::MouseButton::kMiddle)
+        case events::EventType::kPointerUp: {
+            const auto& value = static_cast<const events::PointerUpEvent&>(event).pointer_data;
+            if (value.button == events::PointerButton::kMiddle) {
                 middle_drag_ = false;
-            if (value.button == events::MouseButton::kRight) {
-                right_drag_ = false;
-                fly_.Stop();
+                event.handled = true;
             }
+            break;
+        }
+        case events::EventType::kPointerMoved: {
+            const auto& value = static_cast<const events::PointerMoveEvent&>(event).pointer_data;
+            if (!middle_drag_)
+                SelectViewport(value.x, value.y);
+            if (middle_drag_) {
+                auto& orbit = orbits_[selected_view_];
+                if (left_shift_down_ || right_shift_down_)
+                    orbit.Rotate(value.delta_x, value.delta_y);
+                else if (const auto* projection = std::get_if<gfx::OrthographicCamera>(
+                             &camera_projections_[selected_view_]
+                         )) {
+                    const f32 scale = projection->height
+                                      / static_cast<f32>(std::max(1U, pixel_viewports_[selected_view_].height));
+                    orbit.target += camera_poses_[selected_view_].Right()
+                                        * (-value.delta_x * window_->GetContentScaleX() * scale)
+                                    + camera_poses_[selected_view_].Up()
+                                          * (value.delta_y * window_->GetContentScaleY() * scale);
+                } else
+                    orbit.Pan(value.delta_x, value.delta_y, camera_poses_[selected_view_]);
+                event.handled = true;
+            }
+            break;
+        }
+        case events::EventType::kScrolled: {
+            const auto& value = static_cast<const events::ScrollEvent&>(event);
+            if (auto* projection = std::get_if<gfx::OrthographicCamera>(&camera_projections_[selected_view_]))
+                projection->height = std::clamp(projection->height * std::exp(-value.delta_y * 0.12F), 0.05F, 10000.0F);
+            else
+                orbits_[selected_view_].Dolly(value.delta_y);
             event.handled = true;
             break;
         }
-        case events::EventType::kMouseMoved: {
-            const auto& value = static_cast<const events::MouseMovedEvent&>(event);
-            if (selected_view_ == 0) {
-                if (left_drag_)
-                    orbit_.Rotate(value.delta_x, value.delta_y);
-                if (middle_drag_)
-                    orbit_.Pan(value.delta_x, value.delta_y, camera_poses_[0]);
-                if (right_drag_) {
-                    fly_input_.look_x += value.delta_x;
-                    fly_input_.look_y += value.delta_y;
-                }
-            } else if (left_drag_ || middle_drag_) {
-                auto& projection = std::get<gfx::OrthographicCamera>(camera_projections_[selected_view_]);
-                const f32 scale = projection.height / static_cast<f32>(std::max(1u, pass_state_->viewports[selected_view_].height));
-                const f32 framebuffer_delta_x = value.delta_x * window_->GetContentScaleX();
-                const f32 framebuffer_delta_y = value.delta_y * window_->GetContentScaleY();
-                camera_poses_[selected_view_].position += camera_poses_[selected_view_].Right() * (-framebuffer_delta_x * scale) + camera_poses_[selected_view_].Up() * (framebuffer_delta_y * scale);
-            }
-            event.handled = left_drag_ || middle_drag_ || right_drag_;
+        case events::EventType::kPinch: {
+            const auto& value = static_cast<const events::PinchEvent&>(event);
+            if (value.scale_delta <= 0.0F)
+                break;
+            SelectViewport(value.gesture.center_x, value.gesture.center_y);
+            if (auto* projection = std::get_if<gfx::OrthographicCamera>(&camera_projections_[selected_view_]))
+                projection->height = std::clamp(projection->height / value.scale_delta, 0.05F, 10000.0F);
+            else
+                orbits_[selected_view_].Dolly(std::log(value.scale_delta) * 8.0F);
+            event.handled = true;
             break;
         }
-        case events::EventType::kMouseScrolled: {
-            const auto& value = static_cast<const events::MouseScrolledEvent&>(event);
-            if (selected_view_ == 0)
-                orbit_.Dolly(value.offset_y);
-            else {
-                auto& projection = std::get<gfx::OrthographicCamera>(camera_projections_[selected_view_]);
-                projection.height = std::clamp(projection.height * std::exp(-value.offset_y * 0.12f), 0.05f, 10000.0f);
+        case events::EventType::kPan: {
+            const auto& value = static_cast<const events::PanEvent&>(event).gesture;
+            if (value.phase == events::GesturePhase::kBegin)
+                SelectViewport(value.center_x, value.center_y);
+            if (value.phase == events::GesturePhase::kBegin || value.phase == events::GesturePhase::kUpdate) {
+                auto& orbit = orbits_[selected_view_];
+                if (const auto* projection = std::get_if<gfx::OrthographicCamera>(
+                        &camera_projections_[selected_view_]
+                    )) {
+                    const f32 scale = projection->height
+                                      / static_cast<f32>(std::max(1U, pixel_viewports_[selected_view_].height));
+                    orbit.target += camera_poses_[selected_view_].Right() * (-value.delta_x * scale)
+                                    + camera_poses_[selected_view_].Up() * (value.delta_y * scale);
+                } else
+                    orbit.Pan(value.delta_x, value.delta_y, camera_poses_[selected_view_]);
             }
             event.handled = true;
             break;
@@ -235,27 +468,36 @@ void RenderLayer::OnEvent(Context&, events::Event& event) {
         case events::EventType::kKeyPressed:
         case events::EventType::kKeyReleased: {
             const bool down = event.GetEventType() == events::EventType::kKeyPressed;
-            const auto key = down ? static_cast<const events::KeyPressedEvent&>(event).key : static_cast<const events::KeyReleasedEvent&>(event).key;
-            if (key == events::KeyCode::kW)
-                forward_key_ = down;
-            if (key == events::KeyCode::kS)
-                backward_key_ = down;
-            if (key == events::KeyCode::kD)
-                right_key_ = down;
-            if (key == events::KeyCode::kA)
-                left_key_ = down;
-            if (key == events::KeyCode::kE)
-                up_key_ = down;
-            if (key == events::KeyCode::kQ)
-                down_key_ = down;
-            if (key == events::KeyCode::kLeftShift)
-                left_boost_key_ = down;
-            if (key == events::KeyCode::kRightShift)
-                right_boost_key_ = down;
-            fly_input_.forward = static_cast<f32>(forward_key_) - static_cast<f32>(backward_key_);
-            fly_input_.right = static_cast<f32>(right_key_) - static_cast<f32>(left_key_);
-            fly_input_.up = static_cast<f32>(up_key_) - static_cast<f32>(down_key_);
-            fly_input_.boost = left_boost_key_ || right_boost_key_;
+            const auto key = down ? static_cast<const events::KeyPressedEvent&>(event).key
+                                  : static_cast<const events::KeyReleasedEvent&>(event).key;
+            if (key == events::KeyCode::kLeftShift) {
+                left_shift_down_ = down;
+                event.handled = middle_drag_;
+            }
+            if (key == events::KeyCode::kRightShift) {
+                right_shift_down_ = down;
+                event.handled = middle_drag_;
+            }
+            if (down && key == events::KeyCode::kF) {
+                FitSelectedView();
+                event.handled = true;
+            }
+            if (down && key == events::KeyCode::kSpace) {
+                demo_->TogglePause();
+                event.handled = true;
+            }
+            if (down && key == events::KeyCode::kR) {
+                demo_->Restart();
+                event.handled = true;
+            }
+            if (down && key == events::KeyCode::kMinus) {
+                demo_->ChangeSpeed(-0.25F);
+                event.handled = true;
+            }
+            if (down && key == events::KeyCode::kEqual) {
+                demo_->ChangeSpeed(0.25F);
+                event.handled = true;
+            }
             break;
         }
         default:
@@ -272,262 +514,202 @@ Result<void> RenderLayer::Initialize(Window& window) {
         minimized_ = true;
         return Ok();
     }
-    TRY_ASSIGN(instance_, rhi::Instance::Create({}));
-    TRY_ASSIGN(surface_, instance_->CreateSurface(window));
-    rhi::RequestAdapterDesc adapter_desc{.compatible_surface = surface_.get()};
-    TRY_ASSIGN(adapter_, instance_->RequestAdapter(adapter_desc));
-    rhi::DeviceDesc device_desc{};
-    device_desc.label = "StudioDevice";
-    device_desc.uncaptured_error_callback = [](rhi::ErrorType type, std::string_view message) { slog::Error("RHI device error ({}): {}", static_cast<u32>(type), message); };
-    TRY_ASSIGN(device_, adapter_->CreateDevice(device_desc));
-    rhi::SurfaceCapabilities capabilities{};
-    TRY_VOID(surface_->GetCapabilities(*adapter_, capabilities));
-    if (capabilities.formats.empty())
-        return Err(ErrorCode::InvalidState, "RHI surface has no supported color formats");
-    const auto preferred = std::ranges::find(capabilities.formats, rhi::TextureFormat::BGRA8Unorm);
-    color_format_ = preferred == capabilities.formats.end() ? capabilities.formats.front() : *preferred;
-    TRY_ASSIGN(swapchain_, rhi::Swapchain::Builder(device_, surface_).Size(width_, height_).ColorFormat(color_format_).Label("StudioSwapchain").Build());
-    TRY_VOID(CreateResources());
+    TRY_VOID(CreateDemo());
     TRY_VOID(InitializeCameras());
-    TRY_VOID(BuildRenderGraph());
-    TRY_VOID(UpdateCameras(0.0f));
+    TRY_VOID(UpdateCameras(0.0F));
     ready_ = true;
-    slog::Info("Four-view camera demo initialized ({}x{})", width_, height_);
+    slog::Info(
+        "Animated climbing demo initialized; middle pan, Shift+middle orbit, wheel zoom, F fit, space pause, R "
+        "restart, +/- speed"
+    );
     return Ok();
 }
 
-Result<void> RenderLayer::CreateResources() {
-    rhi::BufferDesc vertex_desc{.size = sizeof(kCubeVertices), .usage = rhi::BufferUsage::Vertex | rhi::BufferUsage::CopyDst, .label = "CubeVertices"};
-    TRY_ASSIGN(vertex_buffer_, device_->CreateBuffer(vertex_desc));
-    TRY_VOID(device_->GetQueue().WriteBuffer(*vertex_buffer_, 0, kCubeVertices.data(), sizeof(kCubeVertices)));
-    rhi::BufferDesc index_desc{.size = sizeof(kCubeIndices), .usage = rhi::BufferUsage::Index | rhi::BufferUsage::CopyDst, .label = "CubeIndices"};
-    TRY_ASSIGN(index_buffer_, device_->CreateBuffer(index_desc));
-    TRY_VOID(device_->GetQueue().WriteBuffer(*index_buffer_, 0, kCubeIndices.data(), sizeof(kCubeIndices)));
-
-    const u32 alignment = std::max(1u, device_->GetLimits().min_uniform_buffer_offset_alignment);
-    view_uniform_stride_ = AlignUp(sizeof(ViewUniforms), alignment);
-    rhi::BufferDesc view_desc{.size = static_cast<u64>(view_uniform_stride_) * 4, .usage = rhi::BufferUsage::Uniform | rhi::BufferUsage::CopyDst, .label = "CameraViews"};
-    TRY_ASSIGN(view_buffer_, device_->CreateBuffer(view_desc));
-    rhi::BufferDesc object_desc{.size = sizeof(ObjectUniforms), .usage = rhi::BufferUsage::Uniform | rhi::BufferUsage::CopyDst, .label = "CubeObject"};
-    TRY_ASSIGN(object_buffer_, device_->CreateBuffer(object_desc));
-    rhi::BufferDesc joints_desc{.size = sizeof(math::mat4f), .usage = rhi::BufferUsage::Storage | rhi::BufferUsage::CopyDst, .label = "IdentityJoint"};
-    TRY_ASSIGN(joints_buffer_, device_->CreateBuffer(joints_desc));
-    const ObjectUniforms object{math::mat4f::identity(), math::mat4f::identity()};
-    const math::mat4f identity = math::mat4f::identity();
-    TRY_VOID(device_->GetQueue().WriteBuffer(*object_buffer_, 0, &object, sizeof(object)));
-    TRY_VOID(device_->GetQueue().WriteBuffer(*joints_buffer_, 0, &identity, sizeof(identity)));
-
-    asset::Vfs vfs;
-    ref<asset::DirectoryMount> mount;
-    std::filesystem::path asset_root;
-    TRY_ASSIGN(asset_root, StudioAssetRoot());
-    TRY_ASSIGN(mount, asset::DirectoryMount::Create(asset_root));
-    vfs.AddMount(mount);
-    const auto descriptor_path = asset::AssetPath::Parse("shaders/descriptors/cube.woki-shader");
-    if (!descriptor_path)
-        return Err(descriptor_path.error());
-    TRY_ASSIGN(shader_, gfx::CreateShaderModuleFromAsset(*device_, vfs, *descriptor_path));
-
-    const rhi::BindGroupLayoutEntryDesc view_entry{.binding = 0,
-        .visibility = static_cast<u32>(rhi::ShaderStage::Vertex),
-        .buffer = {.type = rhi::BufferBindingType::Uniform, .has_dynamic_offset = true, .min_binding_size = sizeof(ViewUniforms)}};
-    const std::array object_entries{
-        rhi::BindGroupLayoutEntryDesc{.binding = 0, .visibility = static_cast<u32>(rhi::ShaderStage::Vertex), .buffer = {.type = rhi::BufferBindingType::Uniform, .min_binding_size = sizeof(ObjectUniforms)}},
-        rhi::BindGroupLayoutEntryDesc{.binding = 1, .visibility = static_cast<u32>(rhi::ShaderStage::Vertex), .buffer = {.type = rhi::BufferBindingType::ReadOnlyStorage, .min_binding_size = sizeof(math::mat4f)}},
-    };
-    TRY_ASSIGN(bind_group_layouts_[0], device_->CreateBindGroupLayout({.label = "EmptyGroup0"}));
-    TRY_ASSIGN(bind_group_layouts_[1], device_->CreateBindGroupLayout({.entries = std::span(&view_entry, 1), .label = "ViewGroup1"}));
-    TRY_ASSIGN(bind_group_layouts_[2], device_->CreateBindGroupLayout({.label = "EmptyGroup2"}));
-    TRY_ASSIGN(bind_group_layouts_[3], device_->CreateBindGroupLayout({.entries = object_entries, .label = "ObjectGroup3"}));
-    const rhi::BindGroupEntryDesc view_binding{.binding = 0, .buffer = view_buffer_.get(), .size = sizeof(ViewUniforms)};
-    TRY_ASSIGN(view_bind_group_, device_->CreateBindGroup({.layout = bind_group_layouts_[1].get(), .entries = std::span(&view_binding, 1), .label = "CameraViews"}));
-    const std::array object_bindings{
-        rhi::BindGroupEntryDesc{.binding = 0, .buffer = object_buffer_.get(), .size = sizeof(ObjectUniforms)},
-        rhi::BindGroupEntryDesc{.binding = 1, .buffer = joints_buffer_.get(), .size = sizeof(math::mat4f)},
-    };
-    TRY_ASSIGN(object_bind_group_, device_->CreateBindGroup({.layout = bind_group_layouts_[3].get(), .entries = object_bindings, .label = "CubeObject"}));
-    std::array<rhi::BindGroupLayout*, 4> layouts{};
-    std::ranges::transform(bind_group_layouts_, layouts.begin(), [](const auto& layout) { return layout.get(); });
-    TRY_ASSIGN(pipeline_layout_, device_->CreatePipelineLayout({.bind_group_layouts = layouts, .label = "CubePipelineLayout"}));
-
-    const std::array attributes{
-        rhi::VertexAttributeDesc{.format = rhi::VertexFormat::Float32x3, .offset = offsetof(CubeVertex, position), .shader_location = 0},
-        rhi::VertexAttributeDesc{.format = rhi::VertexFormat::Float32x3, .offset = offsetof(CubeVertex, normal), .shader_location = 1},
-        rhi::VertexAttributeDesc{.format = rhi::VertexFormat::Float32x4, .offset = offsetof(CubeVertex, tangent), .shader_location = 2},
-        rhi::VertexAttributeDesc{.format = rhi::VertexFormat::Float32x2, .offset = offsetof(CubeVertex, uv), .shader_location = 3},
-        rhi::VertexAttributeDesc{.format = rhi::VertexFormat::Float32x4, .offset = offsetof(CubeVertex, color), .shader_location = 4},
-    };
-    const rhi::VertexBufferLayoutDesc vertex_layout{.array_stride = sizeof(CubeVertex), .attributes = attributes};
-    const rhi::VertexStateDesc vertex_state{.module = shader_.get(), .entry_point = "cube_vs", .buffers = std::span(&vertex_layout, 1)};
-    const rhi::ColorTargetStateDesc color_target{.format = color_format_};
-    const rhi::FragmentStateDesc fragment_state{.module = shader_.get(), .entry_point = "cube_fs", .targets = std::span(&color_target, 1)};
-    const rhi::PrimitiveStateDesc primitive_state{.topology = rhi::PrimitiveTopology::TriangleList, .front_face = rhi::FrontFace::CCW, .cull_mode = rhi::CullMode::Back};
-    const rhi::DepthStencilStateDesc depth_state{.format = rhi::TextureFormat::Depth24PlusStencil8, .depth_write_enabled = true, .depth_compare = rhi::CompareFunction::Less};
-    rhi::RenderPipelineDescTyped pipeline_desc{.layout = pipeline_layout_.get(),
-        .vertex = &vertex_state,
-        .primitive = &primitive_state,
-        .depth_stencil = &depth_state,
-        .fragment = &fragment_state,
-        .label = "StandardColoredCube"};
-    TRY_ASSIGN(pipeline_, device_->CreateRenderPipeline(pipeline_desc));
-    return Ok();
+Result<void> RenderLayer::CreateDemo() {
+    std::filesystem::path root;
+    TRY_ASSIGN(root, StudioAssetRoot());
+    ref<const gfx::SurfaceSource> source = createRef<StudioSurfaceSource>(*window_);
+    return StudioRenderDemo::Create(std::move(source), root, width_, height_, offscreen_)
+        .transform([this](scope<StudioRenderDemo> value) { demo_ = std::move(value); });
 }
 
 Result<void> RenderLayer::InitializeCameras() {
-    camera_viewports_ = {{{0.0f, 0.0f, 0.5f, 0.5f}, {0.5f, 0.0f, 0.5f, 0.5f}, {0.0f, 0.5f, 0.5f, 0.5f}, {0.5f, 0.5f, 0.5f, 0.5f}}};
-    camera_projections_[0] = gfx::PerspectiveCamera{.vertical_fov = math::radians(55.0f), .near_plane = 0.1f, .far_plane = 100.0f};
+    camera_viewports_ = {{{0.0F, 0.0F, 1.0F, 1.0F}, {0, 0, 1, 1}, {0, 0, 1, 1}, {0, 0, 1, 1}}};
+    camera_projections_[0] = gfx::PerspectiveCamera{.vertical_fov = math::radians(55.0F),
+        .near_plane = 0.1F,
+        .far_plane = 1000.0F};
     for (u32 index = 1; index < 4; ++index)
-        camera_projections_[index] = gfx::OrthographicCamera{.height = 5.0f, .near_plane = 0.1f, .far_plane = 100.0f};
-    orbit_.yaw = 0.7f;
-    orbit_.pitch = 0.45f;
-    orbit_.distance = 6.0f;
-    TRY_VOID(orbit_.Update(camera_poses_[0]));
-    camera_poses_[1].position = {0.0f, 0.0f, 6.0f};
-    camera_poses_[2].position = {6.0f, 0.0f, 0.0f};
-    camera_poses_[3].position = {0.0f, 6.0f, 0.001f};
-    TRY_VOID(camera_poses_[1].LookAt({}));
-    TRY_VOID(camera_poses_[2].LookAt({}));
-    TRY_VOID(camera_poses_[3].LookAt({}, {0.0f, 0.0f, -1.0f}));
+        camera_projections_[index] = gfx::OrthographicCamera{.height = 5.0F, .near_plane = 0.1F, .far_plane = 1000.0F};
+    orbits_[0].yaw = 0.7F;
+    orbits_[0].pitch = 0.45F;
+    orbits_[2].yaw = math::pi<f32> * 0.5F;
+    orbits_[3].pitch = orbits_[3].max_pitch;
+    for (u32 index = 0; index < 4; ++index) {
+        orbits_[index].distance = 6.0F;
+        TRY_VOID(orbits_[index].Update(camera_poses_[index]));
+    }
     return Ok();
 }
 
-Result<void> RenderLayer::BuildRenderGraph() {
-    rhi::RenderGraphBuilder builder(device_);
-    backbuffer_ = builder.PerFrame();
-    depth_ = builder.Transient({.label = "FourViewDepth", .format = rhi::TextureFormat::Depth24PlusStencil8, .usage = rhi::TextureUsage::RenderAttachment, .extent = rhi::ExtentMode::Swapchain()});
-    pass_state_ = createRef<CubePassState>();
-    pass_state_->pipeline = pipeline_;
-    pass_state_->view_bind_group = view_bind_group_;
-    pass_state_->object_bind_group = object_bind_group_;
-    pass_state_->vertex_buffer = vertex_buffer_;
-    pass_state_->index_buffer = index_buffer_;
-    pass_state_->uniform_stride = view_uniform_stride_;
-    builder.AddPass("FourViewCube").Color(0, backbuffer_, {.load = rhi::LoadOp::Clear, .clear = kBackgroundColor}).Depth(depth_, {.load = rhi::LoadOp::Clear, .clear = 1.0f}).Execute([](rhi::RenderPassContext& ctx) {
-        const auto& state = *ctx.data<ref<CubePassState>>();
-        auto& pass = ctx.encoder();
-        pass.SetPipeline(*state.pipeline);
-        pass.SetVertexBuffer(0, state.vertex_buffer.get());
-        pass.SetIndexBuffer(*state.index_buffer, rhi::IndexFormat::Uint16);
-        pass.SetBindGroup(3, state.object_bind_group.get());
-        for (u32 index = 0; index < state.viewports.size(); ++index) {
-            const auto& viewport = state.viewports[index];
-            if (viewport.width == 0 || viewport.height == 0)
-                continue;
-            pass.SetViewport(static_cast<f32>(viewport.x), static_cast<f32>(viewport.y), static_cast<f32>(viewport.width), static_cast<f32>(viewport.height), 0.0f, 1.0f);
-            pass.SetScissorRect(viewport.x, viewport.y, viewport.width, viewport.height);
-            const u32 offset = index * state.uniform_stride;
-            pass.SetBindGroup(1, state.view_bind_group.get(), std::span(&offset, 1));
-            pass.DrawIndexed(static_cast<u32>(kCubeIndices.size()), 1);
-        }
-    });
-    builder.SetPassData("FourViewCube", pass_state_);
-    TRY_ASSIGN(render_graph_, builder.Compile(width_, height_));
+Result<void> RenderLayer::UpdateCameras(f32) {
+    for (u32 index = 0; index < 4; ++index) {
+        TRY_VOID(orbits_[index].Update(camera_poses_[index]));
+        gfx::CameraView camera;
+        TRY_ASSIGN(
+            camera,
+            gfx::CameraView::Build(
+                camera_poses_[index],
+                camera_projections_[index],
+                camera_viewports_[index],
+                width_,
+                height_
+            )
+        );
+        pixel_viewports_[index] = camera.pixel_rect;
+        auto& view = demo_->views[index];
+        view.camera = gfx::CameraState::FromCameraView(camera);
+        view.viewport = camera.pixel_rect;
+        TRY_VOID(demo_->runtime->UpdateView(demo_->view_ids[index], view));
+    }
     return Ok();
 }
 
-Result<void> RenderLayer::UpdateCameras(f32 delta_seconds) {
-    if (right_drag_ && selected_view_ == 0) {
-        TRY_VOID(fly_.Update(camera_poses_[0], fly_input_, delta_seconds));
-        orbit_.yaw = fly_.yaw;
-        orbit_.pitch = -fly_.pitch;
-        orbit_.target = camera_poses_[0].position + camera_poses_[0].Forward() * orbit_.distance;
+void RenderLayer::FitSelectedView() noexcept {
+    const auto center = demo_ ? demo_->bounds.center : math::vec3f{};
+    const f32 radius = demo_ ? std::max(demo_->bounds.radius, 0.01F) : 1.0F;
+    const auto viewport = camera_viewports_[selected_view_];
+    const f32 aspect = height_ == 0 ? 1.0F
+                                    : (static_cast<f32>(width_) * viewport.width)
+                                          / (static_cast<f32>(height_) * viewport.height);
+    if (const auto* perspective = std::get_if<gfx::PerspectiveCamera>(&camera_projections_[selected_view_])) {
+        const f32 horizontal = 2.0F * std::atan(std::tan(perspective->vertical_fov * 0.5F) * aspect);
+        static_cast<void>(orbits_[selected_view_]
+                .Focus(center, radius, std::min(perspective->vertical_fov, horizontal)));
     } else {
-        TRY_VOID(orbit_.Update(camera_poses_[0]));
+        orbits_[selected_view_].target = center;
+        std::get<gfx::OrthographicCamera>(camera_projections_[selected_view_])
+            .height = radius * 2.5F / std::min(1.0F, aspect);
     }
-    fly_input_.look_x = 0.0f;
-    fly_input_.look_y = 0.0f;
-    for (u32 index = 0; index < camera_poses_.size(); ++index) {
-        auto view = gfx::CameraView::Build(camera_poses_[index], camera_projections_[index], camera_viewports_[index], width_, height_);
-        if (!view)
-            return Err(view.error());
-        pass_state_->viewports[index] = view->pixel_rect;
-        const f32 near_plane = std::visit([](const auto& projection) { return projection.near_plane; }, camera_projections_[index]);
-        const f32 far_plane = std::visit([](const auto& projection) { return projection.far_plane; }, camera_projections_[index]);
-        const ViewUniforms uniform{view->view_projection, view->inverse_view_projection, camera_poses_[index].position, near_plane, {static_cast<f32>(view->pixel_rect.width), static_cast<f32>(view->pixel_rect.height)},
-            far_plane};
-        TRY_VOID(device_->GetQueue().WriteBuffer(*view_buffer_, static_cast<u64>(index) * view_uniform_stride_, &uniform, sizeof(uniform)));
-    }
-    return Ok();
 }
 
-Result<void> RenderLayer::Resize(u32 width, u32 height) {
+Result<void> RenderLayer::Resize(const u32 width, const u32 height) {
     if (width == 0 || height == 0) {
         minimized_ = true;
+        if (demo_)
+            TRY_VOID(demo_->runtime->ReconfigureSurface(demo_->surface, 0, 0));
         return Ok();
     }
+    if (demo_)
+        TRY_VOID(demo_->runtime->ReconfigureSurface(demo_->surface, width, height));
     minimized_ = false;
-    if (width == width_ && height == height_)
+    width_ = width;
+    height_ = height;
+    return UpdateCameras(0.0F);
+}
+
+Result<void> RenderLayer::RenderFrame(const f32 delta_seconds) {
+    if (demo_->Advance(delta_seconds))
+        FitSelectedView();
+    TRY_VOID(UpdateCameras(delta_seconds));
+    auto rendered = demo_->runtime->RenderFrame(
+        {
+            .scenes = {},
+            .views = {},
+            .time = 0.0F,
+            .delta_time = delta_seconds,
+            .canvas = canvas_,
+        }
+    );
+    if (!rendered)
+        return Err(rendered.error());
+    if (demo_->animation_initialized
+        && (demo_->last_visible_objects != rendered->stats.visible_objects
+            || demo_->last_draw_packets != rendered->stats.draw_packets
+            || demo_->last_draw_calls != rendered->stats.draw_calls
+            || demo_->last_skipped_resources != rendered->stats.skipped_resources
+            || demo_->last_fallback_textures != rendered->stats.fallback_textures)) {
+        const auto& camera = demo_->views[0].camera;
+        const auto& view = rendered->views[0];
+        slog::Info(
+            "render diagnostic: submitted={} passes={} submissions={} visible={} packets={} draws={} skipped={} "
+            "fallback_textures={} "
+            "camera=({:.3f}, {:.3f}, {:.3f})",
+            view.submitted,
+            view.graph.pass_count,
+            rendered->submissions.size(),
+            rendered->stats.visible_objects,
+            rendered->stats.draw_packets,
+            rendered->stats.draw_calls,
+            rendered->stats.skipped_resources,
+            rendered->stats.fallback_textures,
+            camera.position.x,
+            camera.position.y,
+            camera.position.z
+        );
+        demo_->last_visible_objects = rendered->stats.visible_objects;
+        demo_->last_draw_packets = rendered->stats.draw_packets;
+        demo_->last_draw_calls = rendered->stats.draw_calls;
+        demo_->last_skipped_resources = rendered->stats.skipped_resources;
+        demo_->last_fallback_textures = rendered->stats.fallback_textures;
+    }
+    for (const auto& view : rendered->views)
+        for (const auto& message : view.messages)
+            slog::Warn("Render view {} diagnostic: {}", view.view.Index(), message);
+    return Ok();
+}
+
+gfx::SurfaceHandle RenderLayer::Surface() const noexcept {
+    return demo_ ? demo_->surface : gfx::SurfaceHandle{};
+}
+
+gfx::OffscreenTargetHandle RenderLayer::SceneTarget() const noexcept {
+    return demo_ ? demo_->scene_target : gfx::OffscreenTargetHandle{};
+}
+
+gfx::MeshState RenderLayer::AssetStatus() const noexcept {
+    return demo_ ? demo_->runtime->MeshStatus(demo_->mesh) : gfx::MeshState::Unloaded;
+}
+
+Result<void> RenderLayer::ResizeScene(u32 width, u32 height) {
+    if (!demo_ || width == 0 || height == 0)
         return Ok();
     width_ = width;
     height_ = height;
-    swapchain_->Resize(width_, height_);
-    TRY_VOID(render_graph_->RebuildForResize(width_, height_));
+    if (demo_->scene_target.IsValid())
+        TRY_VOID(demo_->runtime->ResizeOffscreenTarget(demo_->scene_target, width, height));
     return UpdateCameras(0.0f);
 }
 
-Result<void> RenderLayer::RenderFrame(f32 delta_seconds) {
-    TRY_VOID(UpdateCameras(delta_seconds));
-    auto graph_frame = render_graph_->BeginFrame(width_, height_);
-    if (!graph_frame)
-        return Err(graph_frame.error());
-    auto frame = swapchain_->AcquireNextFrame();
-    if (!frame) {
-        instance_->ProcessEvents();
-        return Err(frame.error());
+Result<void> RenderLayer::SetSceneVisible(bool visible) {
+    if (scene_visible_ == visible)
+        return Ok();
+    scene_visible_ = visible;
+    if (!demo_)
+        return Ok();
+    for (u32 index = 0; index < demo_->views.size(); ++index) {
+        demo_->views[index].active = visible && index == 0;
+        TRY_VOID(demo_->runtime->UpdateView(demo_->view_ids[index], demo_->views[index]));
     }
-    graph_frame->Bind(backbuffer_, frame->ColorViewRef());
-    if (auto executed = graph_frame->Execute(); !executed) {
-        swapchain_->Discard();
-        return Err(executed.error());
-    }
-    TRY_VOID(swapchain_->Present());
-    device_->Tick();
-    instance_->ProcessEvents();
+    if (!visible)
+        ClearInput();
     return Ok();
 }
 
 void RenderLayer::ClearInput() noexcept {
-    left_drag_ = false;
     middle_drag_ = false;
-    right_drag_ = false;
-    fly_input_ = {};
-    forward_key_ = false;
-    backward_key_ = false;
-    left_key_ = false;
-    right_key_ = false;
-    up_key_ = false;
-    down_key_ = false;
-    left_boost_key_ = false;
-    right_boost_key_ = false;
-    fly_.Stop();
+    left_shift_down_ = false;
+    right_shift_down_ = false;
 }
 
 void RenderLayer::Shutdown() noexcept {
     ready_ = false;
     ClearInput();
-    pass_state_.reset();
-    render_graph_.reset();
-    pipeline_.reset();
-    pipeline_layout_.reset();
-    object_bind_group_.reset();
-    view_bind_group_.reset();
-    for (auto& layout : bind_group_layouts_)
-        layout.reset();
-    joints_buffer_.reset();
-    object_buffer_.reset();
-    view_buffer_.reset();
-    index_buffer_.reset();
-    vertex_buffer_.reset();
-    shader_.reset();
-    swapchain_.reset();
-    surface_.reset();
-    device_.reset();
-    adapter_.reset();
-    instance_.reset();
+    demo_.reset();
     window_ = nullptr;
     width_ = 0;
     height_ = 0;
     minimized_ = false;
+    canvas_.reset();
 }
 
 } // namespace woki

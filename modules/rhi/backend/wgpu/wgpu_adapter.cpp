@@ -32,12 +32,28 @@ void RequestDeviceThunk(WGPURequestDeviceStatus status, WGPUDevice device, WGPUS
     state->callback(status, device, detail::StringFromView(message));
 }
 
-[[nodiscard]] ref<Device> CreateDeviceFromNative(WGPUInstance instance, WGPUAdapter adapter, WGPUDevice device, ref<DeviceLostCallback> device_lost_callback, ref<UncapturedErrorCallback> uncaptured_error_callback) {
+[[nodiscard]] ref<Device> CreateDeviceFromNative(WGPUInstance instance,
+    WGPUAdapter adapter,
+    WGPUDevice device,
+    ref<DeviceLostCallback> device_lost_callback,
+    ref<UncapturedErrorCallback> uncaptured_error_callback,
+    ref<WgpuDeviceLossState> loss_state) {
     if (device == nullptr) {
         return nullptr;
     }
 
-    return createRef<WgpuDeviceImpl>(instance, adapter, device, std::move(device_lost_callback), std::move(uncaptured_error_callback));
+    return createRef<WgpuDeviceImpl>(instance, adapter, device, std::move(device_lost_callback), std::move(uncaptured_error_callback), std::move(loss_state));
+}
+
+DeviceDesc WithLossTracking(const DeviceDesc& desc, const ref<WgpuDeviceLossState>& state) {
+    DeviceDesc tracked = desc;
+    tracked.device_lost_callback = [state, callback = desc.device_lost_callback](const DeviceLostReason reason, const std::string_view message) {
+        state->reason.store(reason, std::memory_order_release);
+        state->lost.store(true, std::memory_order_release);
+        if (callback)
+            callback(reason, message);
+    };
+    return tracked;
 }
 
 } // namespace
@@ -59,13 +75,14 @@ Result<ref<Device>> WgpuAdapterImpl::CreateDevice(const DeviceDesc& desc) {
 #ifdef __EMSCRIPTEN__
     return RequestDevice(desc);
 #else
-    detail::DeviceDescriptorStorage storage(desc);
+    auto loss_state = createRef<WgpuDeviceLossState>();
+    detail::DeviceDescriptorStorage storage(WithLossTracking(desc, loss_state));
     WGPUDevice device = wgpuAdapterCreateDevice(adapter_.get(), &storage.native_desc);
     if (device == nullptr) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Failed to create device '" + desc.label + "'");
     }
 
-    auto device_scope = CreateDeviceFromNative(instance_handle_.get(), adapter_.get(), device, std::move(storage.device_lost_callback), std::move(storage.uncaptured_error_callback));
+    auto device_scope = CreateDeviceFromNative(instance_handle_.get(), adapter_.get(), device, std::move(storage.device_lost_callback), std::move(storage.uncaptured_error_callback), std::move(loss_state));
     if (!device_scope) {
         wgpuDeviceRelease(device);
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Failed to wrap created device");
@@ -86,7 +103,8 @@ Result<ref<Device>> WgpuAdapterImpl::RequestDevice(const DeviceDesc& desc) {
         std::string message{};
     } state;
 
-    detail::DeviceDescriptorStorage storage(desc);
+    auto loss_state = createRef<WgpuDeviceLossState>();
+    detail::DeviceDescriptorStorage storage(WithLossTracking(desc, loss_state));
 
     WGPURequestDeviceCallbackInfo callback_info = WGPU_REQUEST_DEVICE_CALLBACK_INFO_INIT;
 #ifdef __EMSCRIPTEN__
@@ -121,7 +139,7 @@ Result<ref<Device>> WgpuAdapterImpl::RequestDevice(const DeviceDesc& desc) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, state.message.empty() ? "Failed to request WebGPU device" : state.message);
     }
 
-    auto device_scope = CreateDeviceFromNative(instance_handle_.get(), adapter_.get(), state.device, std::move(storage.device_lost_callback), std::move(storage.uncaptured_error_callback));
+    auto device_scope = CreateDeviceFromNative(instance_handle_.get(), adapter_.get(), state.device, std::move(storage.device_lost_callback), std::move(storage.uncaptured_error_callback), std::move(loss_state));
     if (!device_scope) {
         wgpuDeviceRelease(state.device);
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Failed to wrap requested device");
@@ -142,7 +160,8 @@ Future WgpuAdapterImpl::RequestDevice(const DeviceDesc& desc, CallbackMode callb
         return future;
     }
 
-    auto storage = createScope<detail::DeviceDescriptorStorage>(desc);
+    auto loss_state = createRef<WgpuDeviceLossState>();
+    auto storage = createScope<detail::DeviceDescriptorStorage>(WithLossTracking(desc, loss_state));
     auto device_lost_callback = storage->device_lost_callback;
     auto uncaptured_error_callback = storage->uncaptured_error_callback;
     auto retained_instance = instance_handle_;
@@ -150,11 +169,11 @@ Future WgpuAdapterImpl::RequestDevice(const DeviceDesc& desc, CallbackMode callb
 
     auto callback_state = createScope<RequestDeviceCallbackState>(RequestDeviceCallbackState{
         .callback =
-            [callback = std::move(callback), device_lost_callback = std::move(device_lost_callback), uncaptured_error_callback = std::move(uncaptured_error_callback), retained_instance = std::move(retained_instance),
-                retained_adapter = std::move(retained_adapter)](const WGPURequestDeviceStatus status, WGPUDevice device, const std::string_view message) mutable {
+            [callback = std::move(callback), device_lost_callback = std::move(device_lost_callback), uncaptured_error_callback = std::move(uncaptured_error_callback), loss_state = std::move(loss_state),
+                retained_instance = std::move(retained_instance), retained_adapter = std::move(retained_adapter)](const WGPURequestDeviceStatus status, WGPUDevice device, const std::string_view message) mutable {
                 ref<Device> device_scope{};
                 if (status == WGPURequestDeviceStatus_Success && device != nullptr) {
-                    device_scope = CreateDeviceFromNative(retained_instance.get(), retained_adapter.get(), device, std::move(device_lost_callback), std::move(uncaptured_error_callback));
+                    device_scope = CreateDeviceFromNative(retained_instance.get(), retained_adapter.get(), device, std::move(device_lost_callback), std::move(uncaptured_error_callback), std::move(loss_state));
                     if (!device_scope) {
                         wgpuDeviceRelease(device);
                     }
@@ -200,6 +219,11 @@ SupportedFeatures WgpuAdapterImpl::GetFeatures() const {
 }
 
 Result<void> WgpuAdapterImpl::GetFormatCapabilities(const TextureFormat format, DawnFormatCapabilities& capabilities) const {
+#ifdef __EMSCRIPTEN__
+    (void)format;
+    (void)capabilities;
+    return Err(ErrorCode::GraphicsUnsupportedApi, "Format capability queries are unavailable with emdawnwebgpu");
+#else
     if (!adapter_) {
         return Err(ErrorCode::GraphicsResourceCreationFailed, "Adapter is invalid");
     }
@@ -213,6 +237,7 @@ Result<void> WgpuAdapterImpl::GetFormatCapabilities(const TextureFormat format, 
 
     capabilities.next_in_chain = native_capabilities.nextInChain;
     return Ok();
+#endif
 }
 
 Limits WgpuAdapterImpl::GetLimits() const {

@@ -1,0 +1,1 @@
+{"schema":1,"name":"ObjectData","address_space":"uniform","layout_class":"wgsl-host-shareable","fields":[{"name":"model","type":{"type":"matrix","columns":4,"rows":4}},{"name":"previous_model","type":{"type":"matrix","columns":4,"rows":4}},{"name":"normal_matrix","type":{"type":"matrix","columns":4,"rows":4}}]}

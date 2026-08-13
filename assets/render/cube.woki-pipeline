@@ -1,0 +1,35 @@
+{
+  "$schema": "https://schemas.woki.dev/pipeline/v1.schema.json",
+  // Studio consumes this authored pipeline without treating it as an RHI PSO.
+  "schema": 1,
+  "name": "Studio Cube",
+  "renderPath": "forward",
+  "targets": {
+    "color": ["surface"],
+    "depth": "depth24plus-stencil8",
+    "samples": 1
+  },
+  "features": [
+    { "id": "mesh" },
+    { "id": "depth" },
+    {
+      "id": "forward",
+      "settings": { "shader": "shaders/descriptors/cube.woki-shader" }
+    },
+    { "id": "transparent" },
+    { "id": "presentation" }
+  ],
+  "extensionPoints": {
+    "depth-prepass": ["depth"],
+    "opaque": ["mesh", "forward"],
+    "transparent": ["transparent"],
+    "post-process": ["presentation"]
+  },
+  "qualityProfile": "quality/low.woki-quality",
+  "fallbacks": [
+    {
+      "pipeline": "compatibility-forward.woki-pipeline",
+      "missingCapabilities": ["depth-texture"]
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://woki.local/schemas/woki-shader-v2.schema.json",
+  "title": "Woki shader descriptor v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "name", "language", "sources", "entry_points"],
+  "properties": {
+    "schema": { "const": 2 },
+    "name": { "type": "string", "minLength": 1 },
+    "language": { "const": "wgsl" },
+    "sources": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+    "entry_points": { "type": "array", "minItems": 1, "items": { "type": "object", "additionalProperties": false, "required": ["stage", "name"], "properties": { "stage": { "enum": ["vertex", "fragment", "compute"] }, "name": { "type": "string", "minLength": 1 }, "semantic": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" } } } },
+    "bindings": { "type": "object", "propertyNames": { "pattern": "^(0|[1-9][0-9]*):(0|[1-9][0-9]*)$" }, "additionalProperties": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" } },
+    "groups": { "type": "object", "propertyNames": { "pattern": "^(0|[1-9][0-9]*)$" }, "additionalProperties": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" } },
+    "permutations": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["name", "values"], "properties": { "name": { "type": "string", "minLength": 1 }, "values": { "type": "array", "minItems": 1, "items": { "type": ["boolean", "integer", "number", "string"] } } } } },
+    "capabilities": { "type": "array", "items": { "type": "string" } },
+    "compile_options": { "type": "object", "additionalProperties": false, "properties": { "warnings_as_errors": { "type": "boolean" }, "emit_source_map": { "type": "boolean" } } }
+  }
+}

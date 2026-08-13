@@ -15,6 +15,9 @@ include("${WOKI_CMAKE_DIR}/ExtensionWasm.cmake")
 add_wokiext(extension
     LANGUAGE CXX
     MANIFEST manifest.yaml
+    WASM extension.wasm
+    LIBRARIES math ecs
+    PERMISSIONS log paths storage config events
     SOURCES src/extension.cpp
     ASSETS assets/field-guide.txt
 )

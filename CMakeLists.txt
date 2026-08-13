@@ -35,13 +35,10 @@ message(STATUS "Install prefix: ${CMAKE_INSTALL_PREFIX}")
 add_subdirectory(3rdparty)
 
 set(modules_dir "${CMAKE_SOURCE_DIR}/modules")
-file(GLOB module_entries RELATIVE "${modules_dir}" "${modules_dir}/*")
-
+set(module_entries core math config ecs platform asset extension rhi gfx ui)
 foreach(module_entry IN LISTS module_entries)
-    if(IS_DIRECTORY "${modules_dir}/${module_entry}")
-        message(STATUS "Module: ${module_entry}")
-        add_subdirectory("${modules_dir}/${module_entry}")
-    endif()
+    message(STATUS "Module: ${module_entry}")
+    add_subdirectory("${modules_dir}/${module_entry}")
 endforeach()
 
 if(NOT EMSCRIPTEN)
@@ -55,3 +52,30 @@ if(TARGET extension_tests AND TARGET woki_extensions)
 endif()
 
 add_subdirectory(studio)
+
+install(EXPORT ${namespace}Targets
+    FILE ${namespace}Targets.cmake
+    NAMESPACE ${namespace}::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/${namespace})
+
+include(CMakePackageConfigHelpers)
+set(WOKI_PACKAGE_NATIVE TRUE)
+if(EMSCRIPTEN)
+    set(WOKI_PACKAGE_NATIVE FALSE)
+endif()
+set(WOKI_CONFIG_FIND_WASMTIME "")
+if(NOT EMSCRIPTEN AND WOKI_EXTENSION_WITH_WASMTIME)
+    set(WOKI_CONFIG_FIND_WASMTIME "    find_dependency(wasmtime CONFIG)")
+endif()
+configure_package_config_file(
+    "${CMAKE_SOURCE_DIR}/cmake/wokiConfig.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/wokiConfig.cmake"
+    INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${namespace}")
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/wokiConfigVersion.cmake"
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion)
+install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/wokiConfig.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/wokiConfigVersion.cmake"
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/${namespace}")

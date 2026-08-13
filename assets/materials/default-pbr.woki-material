@@ -1,0 +1,10 @@
+{
+  "$schema": "https://schemas.woki.dev/material/v1.schema.json",
+  "schema": 1,
+  "id": "19cf6eb8-b656-5af1-808f-e42ed23100e8",
+  "type": "df1258a0-824a-54ec-b058-a77e0b52c017",
+  "overrides": {
+    "roughness_factor": 0.8,
+    "metallic_factor": 0.0
+  }
+}

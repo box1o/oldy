@@ -17,12 +17,16 @@ namespace woki::rhi::wgpu {
 [[nodiscard]] scope<QuerySet> CreateQuerySetObject(WGPUQuerySet handle);
 [[nodiscard]] scope<RenderBundleEncoder> CreateRenderBundleEncoderObject(WGPURenderBundleEncoder handle);
 [[nodiscard]] scope<RenderPipeline> CreateRenderPipelineObject(WGPURenderPipeline handle);
+#ifndef __EMSCRIPTEN__
 [[nodiscard]] scope<ResourceTable> CreateResourceTableObject(WGPUResourceTable handle);
+#endif
 [[nodiscard]] scope<Sampler> CreateSamplerObject(WGPUSampler handle);
 [[nodiscard]] scope<ShaderModule> CreateShaderModuleObject(WGPUShaderModule handle);
+#ifndef __EMSCRIPTEN__
 [[nodiscard]] scope<SharedBufferMemory> CreateSharedBufferMemoryObject(WGPUSharedBufferMemory handle);
 [[nodiscard]] scope<SharedFence> CreateSharedFenceObject(WGPUSharedFence handle);
 [[nodiscard]] scope<SharedTextureMemory> CreateSharedTextureMemoryObject(WGPUSharedTextureMemory handle);
+#endif
 [[nodiscard]] scope<Texture> CreateTextureObject(WGPUTexture handle);
 [[nodiscard]] scope<TextureView> CreateTextureViewObject(WGPUTextureView handle);
 

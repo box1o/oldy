@@ -94,9 +94,11 @@ void WgpuRenderPassEncoderImpl::MultiDrawIndirect(const Buffer& indirect_buffer,
 }
 
 void WgpuRenderPassEncoderImpl::PixelLocalStorageBarrier() {
+#ifndef __EMSCRIPTEN__
     if (encoder_) {
         wgpuRenderPassEncoderPixelLocalStorageBarrier(encoder_.get());
     }
+#endif
 }
 
 void WgpuRenderPassEncoderImpl::PopDebugGroup() {
@@ -127,9 +129,15 @@ void WgpuRenderPassEncoderImpl::SetBlendConstant(const Color& color) {
 }
 
 void WgpuRenderPassEncoderImpl::SetImmediates(const u32 offset, const void* data, const size_t size) {
+#ifdef __EMSCRIPTEN__
+    (void)offset;
+    (void)data;
+    (void)size;
+#else
     if (encoder_) {
         wgpuRenderPassEncoderSetImmediates(encoder_.get(), offset, data, size);
     }
+#endif
 }
 
 void WgpuRenderPassEncoderImpl::SetIndexBuffer(const Buffer& buffer, const IndexFormat format, const u64 offset, const u64 size) {
@@ -151,9 +159,13 @@ void WgpuRenderPassEncoderImpl::SetPipeline(const RenderPipeline& pipeline) {
 }
 
 void WgpuRenderPassEncoderImpl::SetResourceTable(const ResourceTable* table) {
+#ifdef __EMSCRIPTEN__
+    (void)table;
+#else
     if (encoder_) {
         wgpuRenderPassEncoderSetResourceTable(encoder_.get(), detail::NativeResourceTable(table));
     }
+#endif
 }
 
 void WgpuRenderPassEncoderImpl::SetScissorRect(const u32 x, const u32 y, const u32 width, const u32 height) {

@@ -1,534 +1,151 @@
 #pragma once
 
+#include <array>
 #include <string>
 #include <string_view>
 
 #include <woki/core.hpp>
-#include "woki/events/base.hpp"
-#include "woki/events/type.hpp"
-#include "woki/events/category.hpp"
-#include "woki/events/input/events.hpp"
 #include "woki/events/window/events.hpp"
+#include "woki/events/gamepad/events.hpp"
+#include "woki/events/gesture/events.hpp"
 #include "woki/events/renderer/events.hpp"
 #include "woki/events/application/events.hpp"
 
 namespace woki::events {
 
-namespace detail {
-
-[[nodiscard]] inline bool ShouldLogAsDebug(EventType type) noexcept {
-    switch (type) {
-        case EventType::kFrameBegin:
-        case EventType::kFrameEnd:
-        case EventType::kRenderBegin:
-        case EventType::kRenderEnd:
-        case EventType::kSwapBuffers:
-        case EventType::kAppTick:
-        case EventType::kAppUpdate:
-        case EventType::kAppRender:
-        case EventType::kMouseMoved:
-        case EventType::kMouseScrolled:
-        case EventType::kMouseButtonPressed:
-        case EventType::kMouseButtonReleased:
-        case EventType::kMouseButtonClicked:
-        case EventType::kMouseEntered:
-        case EventType::kMouseLeft:
-        case EventType::kKeyPressed:
-        case EventType::kKeyReleased:
-        case EventType::kKeyTyped:
-            return true;
-        default:
-            return false;
-    }
-}
-
-inline void AppendEventPayload(std::string& output, const Event& event) {
-    switch (event.GetEventType()) {
-        case EventType::kWindowResized: {
-            const auto* typed_event = dynamic_cast<const WindowResizeEvent*>(&event);
-            if (typed_event != nullptr) {
-                output += " (" + std::to_string(typed_event->width) + "x" + std::to_string(typed_event->height) + ")";
-            }
-            return;
-        }
-        case EventType::kWindowMoved: {
-            const auto* typed_event = dynamic_cast<const WindowMovedEvent*>(&event);
-            if (typed_event != nullptr) {
-                output += " (x=" + std::to_string(typed_event->x) + ", y=" + std::to_string(typed_event->y) + ")";
-            }
-            return;
-        }
-        case EventType::kWindowScaleChanged: {
-            const auto* typed_event = dynamic_cast<const WindowScaleChangedEvent*>(&event);
-            if (typed_event != nullptr) {
-                output += " (x=" + std::to_string(typed_event->x) + ", y=" + std::to_string(typed_event->y) + ")";
-            }
-            return;
-        }
-        case EventType::kKeyPressed: {
-            const auto* typed_event = dynamic_cast<const KeyPressedEvent*>(&event);
-            if (typed_event != nullptr) {
-                output += " (key=" + std::to_string(static_cast<u16>(typed_event->key)) + ", repeat=" + std::to_string(typed_event->repeat_count) + ")";
-            }
-            return;
-        }
-        case EventType::kKeyReleased: {
-            const auto* typed_event = dynamic_cast<const KeyReleasedEvent*>(&event);
-            if (typed_event != nullptr) {
-                output += " (key=" + std::to_string(static_cast<u16>(typed_event->key)) + ")";
-            }
-            return;
-        }
-        case EventType::kKeyTyped: {
-            const auto* typed_event = dynamic_cast<const KeyTypedEvent*>(&event);
-            if (typed_event != nullptr) {
-                output += " (character=" + std::to_string(typed_event->character) + ")";
-            }
-            return;
-        }
-        case EventType::kMouseMoved: {
-            const auto* typed_event = dynamic_cast<const MouseMovedEvent*>(&event);
-            if (typed_event != nullptr) {
-                output += " (x=" + std::to_string(typed_event->x) + ", y=" + std::to_string(typed_event->y) + ", dx=" + std::to_string(typed_event->delta_x) + ", dy=" + std::to_string(typed_event->delta_y) + ")";
-            }
-            return;
-        }
-        case EventType::kMouseScrolled: {
-            const auto* typed_event = dynamic_cast<const MouseScrolledEvent*>(&event);
-            if (typed_event != nullptr) {
-                output += " (x=" + std::to_string(typed_event->offset_x) + ", y=" + std::to_string(typed_event->offset_y) + ")";
-            }
-            return;
-        }
-        case EventType::kMouseButtonPressed: {
-            const auto* typed_event = dynamic_cast<const MouseButtonPressedEvent*>(&event);
-            if (typed_event != nullptr) {
-                output += " (button=" + std::to_string(static_cast<u8>(typed_event->button)) + ", x=" + std::to_string(typed_event->x) + ", y=" + std::to_string(typed_event->y) + ")";
-            }
-            return;
-        }
-        case EventType::kMouseButtonReleased: {
-            const auto* typed_event = dynamic_cast<const MouseButtonReleasedEvent*>(&event);
-            if (typed_event != nullptr) {
-                output += " (button=" + std::to_string(static_cast<u8>(typed_event->button)) + ", x=" + std::to_string(typed_event->x) + ", y=" + std::to_string(typed_event->y) + ")";
-            }
-            return;
-        }
-        case EventType::kMouseButtonClicked: {
-            const auto* typed_event = dynamic_cast<const MouseButtonClickedEvent*>(&event);
-            if (typed_event != nullptr) {
-                output += " (button=" + std::to_string(static_cast<u8>(typed_event->button)) + ", x=" + std::to_string(typed_event->x) + ", y=" + std::to_string(typed_event->y) + ")";
-            }
-            return;
-        }
-        case EventType::kFrameBegin: {
-            const auto* typed_event = dynamic_cast<const FrameBeginEvent*>(&event);
-            if (typed_event != nullptr) {
-                output += " (dt=" + std::to_string(typed_event->delta_time) + ")";
-            }
-            return;
-        }
-        case EventType::kViewportResized: {
-            const auto* typed_event = dynamic_cast<const ViewportResizeEvent*>(&event);
-            if (typed_event != nullptr) {
-                output += " (" + std::to_string(typed_event->width) + "x" + std::to_string(typed_event->height) + ")";
-            }
-            return;
-        }
-        case EventType::kAppTick: {
-            const auto* typed_event = dynamic_cast<const AppTickEvent*>(&event);
-            if (typed_event != nullptr) {
-                output += " (dt=" + std::to_string(typed_event->delta_time) + ")";
-            }
-            return;
-        }
-        case EventType::kAppUpdate: {
-            const auto* typed_event = dynamic_cast<const AppUpdateEvent*>(&event);
-            if (typed_event != nullptr) {
-                output += " (dt=" + std::to_string(typed_event->delta_time) + ")";
-            }
-            return;
-        }
-        default:
-            return;
-    }
-}
-
-} // namespace detail
-
 [[nodiscard]] constexpr std::string_view ToString(EventType type) noexcept {
     switch (type) {
-        case EventType::kNone:
-            return "None";
-        case EventType::kWindowClosed:
-            return "WindowClosed";
-        case EventType::kWindowResized:
-            return "WindowResized";
-        case EventType::kWindowFocused:
-            return "WindowFocused";
-        case EventType::kWindowLostFocus:
-            return "WindowLostFocus";
-        case EventType::kWindowMoved:
-            return "WindowMoved";
-        case EventType::kWindowMinimized:
-            return "WindowMinimized";
-        case EventType::kWindowMaximized:
-            return "WindowMaximized";
-        case EventType::kWindowRestored:
-            return "WindowRestored";
-        case EventType::kKeyPressed:
-            return "KeyPressed";
-        case EventType::kKeyReleased:
-            return "KeyReleased";
-        case EventType::kKeyTyped:
-            return "KeyTyped";
-        case EventType::kMouseMoved:
-            return "MouseMoved";
-        case EventType::kMouseScrolled:
-            return "MouseScrolled";
-        case EventType::kMouseButtonPressed:
-            return "MouseButtonPressed";
-        case EventType::kMouseButtonReleased:
-            return "MouseButtonReleased";
-        case EventType::kMouseButtonClicked:
-            return "MouseButtonClicked";
-        case EventType::kMouseEntered:
-            return "MouseEntered";
-        case EventType::kMouseLeft:
-            return "MouseLeft";
-        case EventType::kWindowScaleChanged:
-            return "WindowScaleChanged";
-        case EventType::kFrameBegin:
-            return "FrameBegin";
-        case EventType::kFrameEnd:
-            return "FrameEnd";
-        case EventType::kRenderBegin:
-            return "RenderBegin";
-        case EventType::kRenderEnd:
-            return "RenderEnd";
-        case EventType::kViewportResized:
-            return "ViewportResized";
-        case EventType::kSwapBuffers:
-            return "SwapBuffers";
-        case EventType::kAppTick:
-            return "AppTick";
-        case EventType::kAppUpdate:
-            return "AppUpdate";
-        case EventType::kAppRender:
-            return "AppRender";
-        case EventType::kAppShutdown:
-            return "AppShutdown";
-        case EventType::kAppSuspend:
-            return "AppSuspend";
-        case EventType::kAppResume:
-            return "AppResume";
-        case EventType::kCustom:
-            return "Custom";
+#define WOKI_EVENT_NAME(value, name)                                                                                                                                                                                       \
+    case EventType::value:                                                                                                                                                                                                 \
+        return name
+        WOKI_EVENT_NAME(kNone, "None");
+        WOKI_EVENT_NAME(kWindowClosed, "WindowClosed");
+        WOKI_EVENT_NAME(kWindowResized, "WindowResized");
+        WOKI_EVENT_NAME(kWindowFocused, "WindowFocused");
+        WOKI_EVENT_NAME(kWindowLostFocus, "WindowLostFocus");
+        WOKI_EVENT_NAME(kWindowMoved, "WindowMoved");
+        WOKI_EVENT_NAME(kWindowMinimized, "WindowMinimized");
+        WOKI_EVENT_NAME(kWindowMaximized, "WindowMaximized");
+        WOKI_EVENT_NAME(kWindowRestored, "WindowRestored");
+        WOKI_EVENT_NAME(kFramebufferResized, "FramebufferResized");
+        WOKI_EVENT_NAME(kKeyPressed, "KeyPressed");
+        WOKI_EVENT_NAME(kKeyReleased, "KeyReleased");
+        WOKI_EVENT_NAME(kPointerMoved, "PointerMoved");
+        WOKI_EVENT_NAME(kScrolled, "Scrolled");
+        WOKI_EVENT_NAME(kPointerDown, "PointerDown");
+        WOKI_EVENT_NAME(kPointerUp, "PointerUp");
+        WOKI_EVENT_NAME(kPointerCancel, "PointerCancel");
+        WOKI_EVENT_NAME(kPointerEntered, "PointerEntered");
+        WOKI_EVENT_NAME(kPointerLeft, "PointerLeft");
+        WOKI_EVENT_NAME(kWindowScaleChanged, "WindowScaleChanged");
+        WOKI_EVENT_NAME(kTextInput, "TextInput");
+        WOKI_EVENT_NAME(kTextCompositionStarted, "TextCompositionStarted");
+        WOKI_EVENT_NAME(kTextCompositionUpdated, "TextCompositionUpdated");
+        WOKI_EVENT_NAME(kTextCompositionCommitted, "TextCompositionCommitted");
+        WOKI_EVENT_NAME(kTextCompositionCanceled, "TextCompositionCanceled");
+        WOKI_EVENT_NAME(kTap, "Tap");
+        WOKI_EVENT_NAME(kDoubleTap, "DoubleTap");
+        WOKI_EVENT_NAME(kLongPress, "LongPress");
+        WOKI_EVENT_NAME(kPan, "Pan");
+        WOKI_EVENT_NAME(kPinch, "Pinch");
+        WOKI_EVENT_NAME(kRotate, "Rotate");
+        WOKI_EVENT_NAME(kFrameBegin, "FrameBegin");
+        WOKI_EVENT_NAME(kFrameEnd, "FrameEnd");
+        WOKI_EVENT_NAME(kRenderBegin, "RenderBegin");
+        WOKI_EVENT_NAME(kRenderEnd, "RenderEnd");
+        WOKI_EVENT_NAME(kViewportResized, "ViewportResized");
+        WOKI_EVENT_NAME(kSwapBuffers, "SwapBuffers");
+        WOKI_EVENT_NAME(kAppTick, "AppTick");
+        WOKI_EVENT_NAME(kAppUpdate, "AppUpdate");
+        WOKI_EVENT_NAME(kAppRender, "AppRender");
+        WOKI_EVENT_NAME(kAppShutdown, "AppShutdown");
+        WOKI_EVENT_NAME(kAppSuspend, "AppSuspend");
+        WOKI_EVENT_NAME(kAppResume, "AppResume");
+        WOKI_EVENT_NAME(kGamepadConnected, "GamepadConnected");
+        WOKI_EVENT_NAME(kGamepadDisconnected, "GamepadDisconnected");
+        WOKI_EVENT_NAME(kGamepadButtonChanged, "GamepadButtonChanged");
+        WOKI_EVENT_NAME(kGamepadAxisChanged, "GamepadAxisChanged");
+        WOKI_EVENT_NAME(kJoystickButtonChanged, "JoystickButtonChanged");
+        WOKI_EVENT_NAME(kJoystickAxisChanged, "JoystickAxisChanged");
+        WOKI_EVENT_NAME(kJoystickHatChanged, "JoystickHatChanged");
+        WOKI_EVENT_NAME(kMonitorConnected, "MonitorConnected");
+        WOKI_EVENT_NAME(kMonitorDisconnected, "MonitorDisconnected");
+        WOKI_EVENT_NAME(kFilesDropped, "FilesDropped");
+        WOKI_EVENT_NAME(kWindowRefreshRequested, "WindowRefreshRequested");
+        WOKI_EVENT_NAME(kPlatformError, "PlatformError");
+        WOKI_EVENT_NAME(kCustom, "Custom");
+#undef WOKI_EVENT_NAME
     }
-
     return "Unknown";
 }
 
 [[nodiscard]] inline std::string CategoryFlagsToString(u16 flags) {
-    if (flags == static_cast<u16>(EventCategory::kNone)) {
-        return "None";
-    }
-
     struct Entry {
         EventCategory category;
         std::string_view name;
     };
 
-    constexpr Entry entries[] = {
-        {EventCategory::kWindow, "Window"},
-        {EventCategory::kInput, "Input"},
-        {EventCategory::kKeyboard, "Keyboard"},
-        {EventCategory::kMouse, "Mouse"},
-        {EventCategory::kMouseButton, "MouseButton"},
-        {EventCategory::kRender, "Render"},
-        {EventCategory::kApplication, "Application"},
-        {EventCategory::kScene, "Scene"},
-        {EventCategory::kPhysics, "Physics"},
-        {EventCategory::kAudio, "Audio"},
-        {EventCategory::kCustom, "Custom"},
+    constexpr std::array entries{
+        Entry{EventCategory::kWindow, "Window"},
+        Entry{EventCategory::kInput, "Input"},
+        Entry{EventCategory::kKeyboard, "Keyboard"},
+        Entry{EventCategory::kPointer, "Pointer"},
+        Entry{EventCategory::kGesture, "Gesture"},
+        Entry{EventCategory::kRender, "Render"},
+        Entry{EventCategory::kApplication, "Application"},
+        Entry{EventCategory::kGamepad, "Gamepad"},
+        Entry{EventCategory::kText, "Text"},
+        Entry{EventCategory::kDevice, "Device"},
     };
-
-    std::string output;
-    bool first = true;
+    std::string result;
     for (const auto& entry : entries) {
-        if ((flags & entry.category) == 0) {
+        if ((flags & entry.category) == 0)
             continue;
-        }
-
-        if (!first) {
-            output += '|';
-        }
-
-        output += entry.name;
-        first = false;
+        if (!result.empty())
+            result += '|';
+        result += entry.name;
     }
-
-    return output.empty() ? std::string{"None"} : output;
+    return result.empty() ? "None" : result;
 }
 
 [[nodiscard]] constexpr bool ShouldForwardToExtensions(EventType type) noexcept {
     switch (type) {
-        case EventType::kWindowClosed:
-        case EventType::kWindowResized:
-        case EventType::kWindowFocused:
-        case EventType::kWindowLostFocus:
-        case EventType::kWindowMoved:
-        case EventType::kWindowMinimized:
-        case EventType::kWindowMaximized:
-        case EventType::kWindowRestored:
-        case EventType::kKeyPressed:
-        case EventType::kKeyReleased:
-        case EventType::kKeyTyped:
-        case EventType::kMouseScrolled:
-        case EventType::kMouseButtonPressed:
-        case EventType::kMouseButtonReleased:
-        case EventType::kMouseButtonClicked:
-        case EventType::kMouseEntered:
-        case EventType::kMouseLeft:
-        case EventType::kWindowScaleChanged:
-        case EventType::kViewportResized:
-        case EventType::kAppShutdown:
-        case EventType::kAppSuspend:
-        case EventType::kAppResume:
-            return true;
-        default:
+        case EventType::kAppTick:
+        case EventType::kAppUpdate:
+        case EventType::kAppRender:
+        case EventType::kPointerMoved:
+        case EventType::kFrameBegin:
+        case EventType::kFrameEnd:
+        case EventType::kRenderBegin:
+        case EventType::kRenderEnd:
+        case EventType::kSwapBuffers:
             return false;
+        default:
+            return type != EventType::kNone;
     }
 }
-
-namespace detail {
-
-inline void AppendJsonString(std::string& output, std::string_view value) {
-    output.push_back('"');
-    for (const char ch : value) {
-        switch (ch) {
-            case '"':
-                output += "\\\"";
-                break;
-            case '\\':
-                output += "\\\\";
-                break;
-            case '\n':
-                output += "\\n";
-                break;
-            case '\r':
-                output += "\\r";
-                break;
-            case '\t':
-                output += "\\t";
-                break;
-            default:
-                output.push_back(ch);
-                break;
-        }
-    }
-    output.push_back('"');
-}
-
-inline void AppendJsonKey(std::string& output, std::string_view key) {
-    if (!output.empty() && output.back() != '{') {
-        output.push_back(',');
-    }
-    AppendJsonString(output, key);
-    output.push_back(':');
-}
-
-template <typename T>
-void AppendMouseButtonJson(std::string& output, const Event& event) {
-    const auto* typed_event = dynamic_cast<const T*>(&event);
-    if (typed_event == nullptr) {
-        return;
-    }
-
-    AppendJsonKey(output, "button");
-    output += std::to_string(static_cast<u8>(typed_event->button));
-    AppendJsonKey(output, "x");
-    output += std::to_string(typed_event->x);
-    AppendJsonKey(output, "y");
-    output += std::to_string(typed_event->y);
-}
-
-} // namespace detail
 
 [[nodiscard]] inline std::string ToJson(const Event& event) {
-    std::string output{"{"};
-    detail::AppendJsonKey(output, "type");
-    detail::AppendJsonString(output, ToString(event.GetEventType()));
-
-    switch (event.GetEventType()) {
-        case EventType::kKeyPressed: {
-            const auto* typed_event = dynamic_cast<const KeyPressedEvent*>(&event);
-            if (typed_event == nullptr) {
-                break;
-            }
-            detail::AppendJsonKey(output, "key");
-            output += std::to_string(static_cast<u16>(typed_event->key));
-            detail::AppendJsonKey(output, "repeat");
-            output += std::to_string(typed_event->repeat_count);
-            break;
-        }
-        case EventType::kKeyReleased: {
-            const auto* typed_event = dynamic_cast<const KeyReleasedEvent*>(&event);
-            if (typed_event == nullptr) {
-                break;
-            }
-            detail::AppendJsonKey(output, "key");
-            output += std::to_string(static_cast<u16>(typed_event->key));
-            break;
-        }
-        case EventType::kKeyTyped: {
-            const auto* typed_event = dynamic_cast<const KeyTypedEvent*>(&event);
-            if (typed_event == nullptr) {
-                break;
-            }
-            detail::AppendJsonKey(output, "character");
-            output += std::to_string(typed_event->character);
-            break;
-        }
-        case EventType::kWindowResized: {
-            const auto* typed_event = dynamic_cast<const WindowResizeEvent*>(&event);
-            if (typed_event == nullptr) {
-                break;
-            }
-            detail::AppendJsonKey(output, "width");
-            output += std::to_string(typed_event->width);
-            detail::AppendJsonKey(output, "height");
-            output += std::to_string(typed_event->height);
-            break;
-        }
-        case EventType::kWindowMoved: {
-            const auto* typed_event = dynamic_cast<const WindowMovedEvent*>(&event);
-            if (typed_event == nullptr) {
-                break;
-            }
-            detail::AppendJsonKey(output, "x");
-            output += std::to_string(typed_event->x);
-            detail::AppendJsonKey(output, "y");
-            output += std::to_string(typed_event->y);
-            break;
-        }
-        case EventType::kWindowScaleChanged: {
-            const auto* typed_event = dynamic_cast<const WindowScaleChangedEvent*>(&event);
-            if (typed_event == nullptr) {
-                break;
-            }
-            detail::AppendJsonKey(output, "x");
-            output += std::to_string(typed_event->x);
-            detail::AppendJsonKey(output, "y");
-            output += std::to_string(typed_event->y);
-            break;
-        }
-        case EventType::kMouseMoved: {
-            const auto* typed_event = dynamic_cast<const MouseMovedEvent*>(&event);
-            if (typed_event == nullptr) {
-                break;
-            }
-            detail::AppendJsonKey(output, "x");
-            output += std::to_string(typed_event->x);
-            detail::AppendJsonKey(output, "y");
-            output += std::to_string(typed_event->y);
-            detail::AppendJsonKey(output, "deltaX");
-            output += std::to_string(typed_event->delta_x);
-            detail::AppendJsonKey(output, "deltaY");
-            output += std::to_string(typed_event->delta_y);
-            break;
-        }
-        case EventType::kMouseScrolled: {
-            const auto* typed_event = dynamic_cast<const MouseScrolledEvent*>(&event);
-            if (typed_event == nullptr) {
-                break;
-            }
-            detail::AppendJsonKey(output, "offsetX");
-            output += std::to_string(typed_event->offset_x);
-            detail::AppendJsonKey(output, "offsetY");
-            output += std::to_string(typed_event->offset_y);
-            break;
-        }
-        case EventType::kMouseButtonPressed: {
-            detail::AppendMouseButtonJson<MouseButtonPressedEvent>(output, event);
-            break;
-        }
-        case EventType::kMouseButtonReleased: {
-            detail::AppendMouseButtonJson<MouseButtonReleasedEvent>(output, event);
-            break;
-        }
-        case EventType::kMouseButtonClicked: {
-            detail::AppendMouseButtonJson<MouseButtonClickedEvent>(output, event);
-            break;
-        }
-        case EventType::kFrameBegin: {
-            const auto* typed_event = dynamic_cast<const FrameBeginEvent*>(&event);
-            if (typed_event == nullptr) {
-                break;
-            }
-            detail::AppendJsonKey(output, "deltaTime");
-            output += std::to_string(typed_event->delta_time);
-            break;
-        }
-        case EventType::kViewportResized: {
-            const auto* typed_event = dynamic_cast<const ViewportResizeEvent*>(&event);
-            if (typed_event == nullptr) {
-                break;
-            }
-            detail::AppendJsonKey(output, "width");
-            output += std::to_string(typed_event->width);
-            detail::AppendJsonKey(output, "height");
-            output += std::to_string(typed_event->height);
-            break;
-        }
-        case EventType::kAppTick: {
-            const auto* typed_event = dynamic_cast<const AppTickEvent*>(&event);
-            if (typed_event == nullptr) {
-                break;
-            }
-            detail::AppendJsonKey(output, "deltaTime");
-            output += std::to_string(typed_event->delta_time);
-            break;
-        }
-        case EventType::kAppUpdate: {
-            const auto* typed_event = dynamic_cast<const AppUpdateEvent*>(&event);
-            if (typed_event == nullptr) {
-                break;
-            }
-            detail::AppendJsonKey(output, "deltaTime");
-            output += std::to_string(typed_event->delta_time);
-            break;
-        }
-        default:
-            break;
-    }
-
-    output.push_back('}');
+    std::string output = "{\"type\":\"" + std::string(ToString(event.GetEventType())) + "\",\"sequence\":" + std::to_string(event.metadata.sequence);
+    output += ",\"timestamp\":" + std::to_string(event.metadata.timestamp);
+    output += ",\"window\":" + std::to_string(event.metadata.window) + ",\"device\":" + std::to_string(event.metadata.device);
+    output += ",\"handled\":";
+    output += event.handled ? "true" : "false";
+    output += '}';
     return output;
 }
 
 [[nodiscard]] inline std::string ToString(const Event& event) {
     std::string output(event.GetName());
-    output += " [category=";
-    output += CategoryFlagsToString(event.GetCategoryFlags());
+    output += " [category=" + CategoryFlagsToString(event.GetCategoryFlags());
     output += ", handled=";
     output += event.handled ? "true" : "false";
-    output += "]";
-
-    detail::AppendEventPayload(output, event);
-
+    output += ", sequence=" + std::to_string(event.metadata.sequence) + ']';
     return output;
 }
 
 inline void LogEvent(const Event& event) {
-    const auto message = ToString(event);
-
-    if (detail::ShouldLogAsDebug(event.GetEventType())) {
-        slog::Debug("Event: {}", message);
-        return;
-    }
-
-    slog::Info("Event: {}", message);
+    slog::Debug("Event: {}", ToString(event));
 }
 
 } // namespace woki::events

@@ -23,6 +23,9 @@ enum class ErrorCode : u16 {
     Success = 0,
     InvalidState,
     OutOfRange,
+    Cancelled,
+    QueueFull,
+    ExecutorStopped,
 
     FileNotFound = 100,
     FileAccessDenied,

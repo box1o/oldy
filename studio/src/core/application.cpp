@@ -3,8 +3,8 @@
 #include "woki/core.hpp"
 
 #include "application.hpp"
-#include "layers/render.hpp"
 #include "layers/extension.hpp"
+#include "layers/render.hpp"
 
 namespace woki {
 
@@ -173,7 +173,10 @@ void Application::RemoveEventCallback(CallbackId id) {
 }
 
 void Application::EmitEvent(events::Event& event) {
-    event.timestamp = Clock::Seconds();
+    event.metadata.timestamp = Clock::Seconds();
+    event.metadata.sequence = next_event_sequence_++;
+    event.metadata.window = 1;
+    event.metadata.source = events::EventSource::kSynthetic;
 
     if (layers_ != nullptr && layers_->IsAttached()) {
         auto ctx = BuildContext();

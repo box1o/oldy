@@ -1,0 +1,10 @@
+{
+  "$schema": "https://schemas.woki.dev/feature/v1.schema.json",
+  "schema": 1,
+  "feature": "bloom",
+  "settings": {
+    "threshold": 1.0,
+    "intensity": 0.8,
+    "levels": 5
+  }
+}

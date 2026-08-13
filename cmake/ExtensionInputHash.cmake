@@ -16,7 +16,7 @@ function(woki_extension_input_hash source_dir sdk_dir output)
     )
     set(_guest_root "${sdk_dir}/../../")
     file(GLOB_RECURSE _guest_inputs LIST_DIRECTORIES FALSE
-        "${_guest_root}/core/include/woki/math/*"
+        "${_guest_root}/math/include/woki/math/*"
         "${_guest_root}/ecs/include/woki/ecs/guest.hpp"
     )
     set(_records)

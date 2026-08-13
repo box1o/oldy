@@ -1,83 +1,29 @@
-#include <woki/gfx/product.hpp>
-
 #include <array>
 #include <limits>
+#include <functional>
+
+#include <woki/gfx/advanced/product.hpp>
+#include "binary_codec.hpp"
 
 namespace woki::gfx {
 namespace {
 
 constexpr std::array<std::byte, 4> kMagic{std::byte{'W'}, std::byte{'S'}, std::byte{'H'}, std::byte{'D'}};
 
-class Writer {
-public:
-    template <typename T>
-    void Int(T value) {
-        using U = std::make_unsigned_t<T>;
-        U bits = static_cast<U>(value);
-        for (std::size_t i = 0; i < sizeof(T); ++i)
-            bytes.push_back(static_cast<std::byte>((bits >> (i * 8U)) & 0xffU));
-    }
+using Writer = detail::BinaryWriter;
 
-    void Hash(const ContentHash& hash) {
-        for (const u8 byte : hash.Bytes())
-            bytes.push_back(static_cast<std::byte>(byte));
-    }
-
-    void String(const std::string_view value) {
-        Int(static_cast<u32>(value.size()));
-        for (const char character : value)
-            bytes.push_back(static_cast<std::byte>(static_cast<u8>(character)));
-    }
-
-    std::vector<std::byte> bytes;
-};
-
-class Reader {
+class Reader : public detail::BinaryReader {
 public:
     Reader(const std::span<const std::byte> bytes, const ShaderPayloadLimits limits)
-        : bytes_(bytes),
+        : BinaryReader(bytes),
           limits_(limits) {}
 
-    template <typename T>
-    bool Int(T& value) {
-        if (bytes_.size() - offset_ < sizeof(T))
-            return false;
-        u64 bits = 0;
-        for (std::size_t i = 0; i < sizeof(T); ++i)
-            bits |= static_cast<u64>(std::to_integer<u8>(bytes_[offset_ + i])) << (i * 8U);
-        value = static_cast<T>(bits);
-        offset_ += sizeof(T);
-        return true;
-    }
-
-    bool Hash(ContentHash& hash) {
-        if (bytes_.size() - offset_ < ContentHash::kSize)
-            return false;
-        std::array<u8, ContentHash::kSize> value{};
-        for (std::size_t i = 0; i < value.size(); ++i)
-            value[i] = std::to_integer<u8>(bytes_[offset_ + i]);
-        hash = ContentHash(value);
-        offset_ += value.size();
-        return true;
-    }
-
     bool String(std::string& value) {
-        u32 size = 0;
-        if (!Int(size) || size > limits_.max_string_bytes || bytes_.size() - offset_ < size)
-            return false;
-        value.assign(reinterpret_cast<const char*>(bytes_.data() + offset_), size);
-        offset_ += size;
-        return true;
-    }
-
-    bool End() const {
-        return offset_ == bytes_.size();
+        return BinaryReader::String(value, limits_.max_string_bytes);
     }
 
 private:
-    std::span<const std::byte> bytes_;
     ShaderPayloadLimits limits_;
-    std::size_t offset_{0};
 };
 
 template <typename T, typename F>
@@ -93,9 +39,23 @@ bool Vector(Reader& reader, std::vector<T>& values, const u32 maximum, F read) {
 }
 
 void WriteInterface(Writer& writer, const ShaderInterface& interface) {
+    std::function<void(const BufferMemberLayout&)> write_member;
+    write_member = [&](const BufferMemberLayout& member) {
+        writer.String(member.name);
+        writer.String(member.type);
+        writer.Int(member.offset);
+        writer.Int(member.size);
+        writer.Int(member.alignment);
+        writer.Int(member.array_stride);
+        writer.Int(member.matrix_stride);
+        writer.Int(static_cast<u32>(member.members.size()));
+        for (const auto& nested : member.members)
+            write_member(nested);
+    };
     writer.Int(static_cast<u32>(interface.entry_points.size()));
     for (const auto& entry : interface.entry_points) {
         writer.String(entry.name);
+        writer.String(entry.semantic);
         writer.Int(static_cast<u8>(entry.stage));
         writer.Int(static_cast<u32>(entry.inputs.size()));
         for (const auto& io : entry.inputs) {
@@ -122,6 +82,15 @@ void WriteInterface(Writer& writer, const ShaderInterface& interface) {
         writer.Int(static_cast<u8>(binding.storage_format));
         writer.Int(binding.min_binding_size);
         writer.Int(binding.array_size);
+        writer.String(binding.semantic);
+        writer.String(binding.group_semantic);
+        writer.Int(static_cast<u32>(binding.visible_entries.size()));
+        for (const auto& entry : binding.visible_entries)
+            writer.String(entry);
+        writer.String(binding.buffer_type);
+        writer.Int(static_cast<u32>(binding.buffer_members.size()));
+        for (const auto& member : binding.buffer_members)
+            write_member(member);
     }
     writer.Int(static_cast<u32>(interface.overrides.size()));
     for (const auto& value : interface.overrides) {
@@ -136,9 +105,14 @@ void WriteInterface(Writer& writer, const ShaderInterface& interface) {
 }
 
 bool ReadInterface(Reader& reader, ShaderInterface& interface, const u32 maximum) {
+    std::function<bool(BufferMemberLayout&)> read_member;
+    read_member = [&](BufferMemberLayout& member) {
+        return reader.String(member.name) && reader.String(member.type) && reader.Int(member.offset) && reader.Int(member.size) && reader.Int(member.alignment) && reader.Int(member.array_stride)
+               && reader.Int(member.matrix_stride) && Vector(reader, member.members, maximum, [&](BufferMemberLayout& nested) { return read_member(nested); });
+    };
     if (!Vector(reader, interface.entry_points, maximum, [&](EntryPointInfo& entry) {
             u8 stage = 0;
-            if (!reader.String(entry.name) || !reader.Int(stage) || stage > static_cast<u8>(ShaderStage::Compute))
+            if (!reader.String(entry.name) || !reader.String(entry.semantic) || !reader.Int(stage) || stage > static_cast<u8>(ShaderStage::Compute))
                 return false;
             entry.stage = static_cast<ShaderStage>(stage);
             auto io = [&](StageIo& value) {
@@ -156,7 +130,9 @@ bool ReadInterface(Reader& reader, ShaderInterface& interface, const u32 maximum
     if (!Vector(reader, interface.bindings, maximum, [&](BindingInfo& binding) {
             u8 kind = 0, dimension = 0, sample = 0, access = 0, format = 0;
             if (!reader.Int(binding.group) || !reader.Int(binding.binding) || !reader.Int(binding.stages) || !reader.Int(kind) || !reader.Int(dimension) || !reader.Int(sample) || !reader.Int(access)
-                || !reader.Int(format) || !reader.Int(binding.min_binding_size) || !reader.Int(binding.array_size))
+                || !reader.Int(format) || !reader.Int(binding.min_binding_size) || !reader.Int(binding.array_size) || !reader.String(binding.semantic) || !reader.String(binding.group_semantic)
+                || !Vector(reader, binding.visible_entries, maximum, [&](std::string& entry) { return reader.String(entry); }) || !reader.String(binding.buffer_type)
+                || !Vector(reader, binding.buffer_members, maximum, [&](BufferMemberLayout& member) { return read_member(member); }))
                 return false;
             if (kind > static_cast<u8>(ResourceKind::ExternalTexture) || dimension > static_cast<u8>(TextureDimension::CubeArray) || sample > static_cast<u8>(SampleType::Depth)
                 || access > static_cast<u8>(StorageAccess::ReadWrite) || format > static_cast<u8>(StorageFormat::RGBA32Float))
@@ -188,7 +164,16 @@ bool Fits(const ShaderPayload& payload, const ShaderPayloadLimits limits) {
         || payload.interface.capabilities.size() > limits.max_records)
         return false;
     for (const auto& entry : payload.interface.entry_points)
-        if (!valid_string(entry.name) || entry.inputs.size() > limits.max_records || entry.outputs.size() > limits.max_records)
+        if (!valid_string(entry.name) || !valid_string(entry.semantic) || entry.inputs.size() > limits.max_records || entry.outputs.size() > limits.max_records)
+            return false;
+    std::function<bool(const BufferMemberLayout&)> valid_member;
+    valid_member = [&](const BufferMemberLayout& member) {
+        return valid_string(member.name) && valid_string(member.type) && member.members.size() <= limits.max_records && std::ranges::all_of(member.members, valid_member);
+    };
+    for (const auto& binding : payload.interface.bindings)
+        if (!valid_string(binding.semantic) || !valid_string(binding.group_semantic) || !valid_string(binding.buffer_type) || binding.visible_entries.size() > limits.max_records
+            || binding.buffer_members.size() > limits.max_records || std::ranges::any_of(binding.visible_entries, [&](const std::string& entry) { return !valid_string(entry); })
+            || !std::ranges::all_of(binding.buffer_members, valid_member))
             return false;
     for (const auto& value : payload.interface.overrides)
         if (!valid_string(value.name))
@@ -289,11 +274,12 @@ Result<ShaderPayload> ParseShaderPayload(const std::span<const std::byte> bytes,
     return Ok(std::move(payload));
 }
 
-Result<asset::Product> MakeShaderProduct(const ShaderPayload& payload, ContentHash source_hash, std::vector<ContentHash> dependency_hashes) {
+Result<asset::Product> MakeShaderProduct(const asset::AssetId asset_id, const ShaderPayload& payload, ContentHash source_hash, std::vector<asset::ProductDependency> dependencies) {
     auto bytes = SerializeShaderPayload(payload);
     if (!bytes)
         return Err(std::move(bytes).error());
-    return Ok(asset::MakeProduct(kShaderProductType, kShaderPayloadVersion, std::move(source_hash), std::move(dependency_hashes), std::move(*bytes)));
+    std::ranges::sort(dependencies);
+    return Ok(asset::MakeProduct(asset_id, kShaderProductType, kShaderPayloadVersion, 1, std::move(source_hash), std::move(dependencies), Sha256("woki.gfx.generic-target"), std::move(*bytes)));
 }
 
 } // namespace woki::gfx

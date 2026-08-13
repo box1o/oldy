@@ -1,8 +1,8 @@
-#include <filesystem>
-#include <exception>
 #include <mutex>
-#include <system_error>
 #include <utility>
+#include <exception>
+#include <filesystem>
+#include <system_error>
 
 #include <woki/platform/file_watcher.hpp>
 

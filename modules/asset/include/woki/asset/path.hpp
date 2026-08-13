@@ -2,18 +2,17 @@
 
 // IWYU pragma: private, include "woki/asset.hpp"
 
-#include <compare>
 #include <string>
+#include <compare>
 #include <string_view>
 
 #include <woki/core.hpp>
 
 namespace woki::asset {
 
-using AssetId = ContentHash;
-
 class AssetPath {
 public:
+    AssetPath() = default;
     [[nodiscard]] static Result<AssetPath> Parse(std::string_view path);
 
     [[nodiscard]] const std::string& String() const noexcept {

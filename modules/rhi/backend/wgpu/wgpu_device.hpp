@@ -1,4 +1,5 @@
 #pragma once
+#include <atomic>
 
 #include <woki/rhi/device.hpp>
 
@@ -7,9 +8,19 @@
 
 namespace woki::rhi::wgpu {
 
+struct WgpuDeviceLossState final {
+    std::atomic_bool lost{false};
+    std::atomic<DeviceLostReason> reason{DeviceLostReason::Unknown};
+};
+
 class WgpuDeviceImpl final : public Device, public ref_from_this<WgpuDeviceImpl> {
 public:
-    WgpuDeviceImpl(WGPUInstance instance, WGPUAdapter adapter, WGPUDevice device, ref<DeviceLostCallback> device_lost_callback, ref<UncapturedErrorCallback> uncaptured_error_callback);
+    WgpuDeviceImpl(WGPUInstance instance,
+        WGPUAdapter adapter,
+        WGPUDevice device,
+        ref<DeviceLostCallback> device_lost_callback,
+        ref<UncapturedErrorCallback> uncaptured_error_callback,
+        ref<WgpuDeviceLossState> loss_state);
     ~WgpuDeviceImpl() override;
 
     [[nodiscard]] Result<scope<BindGroup>> CreateBindGroup(const BindGroupDesc& desc = {}) override;
@@ -48,6 +59,9 @@ public:
     [[nodiscard]] Future GetLostFuture() const override;
     [[nodiscard]] Queue& GetQueue() const noexcept override;
     [[nodiscard]] bool HasFeature(FeatureName feature) const noexcept override;
+    [[nodiscard]] const DeviceCapabilities& Capabilities() const noexcept override;
+    [[nodiscard]] bool IsLost() const noexcept override;
+    [[nodiscard]] DeviceLostReason LossReason() const noexcept override;
 
     [[nodiscard]] Result<scope<SharedBufferMemory>> ImportSharedBufferMemory(const SharedBufferMemoryDesc& desc = {}) override;
     [[nodiscard]] Result<scope<SharedFence>> ImportSharedFence(const SharedFenceDesc& desc = {}) override;
@@ -73,6 +87,8 @@ private:
     ref<LoggingCallback> logging_callback_;
     detail::DeviceHandle device_;
     mutable WgpuQueueImpl queue_;
+    DeviceCapabilities capabilities_{};
+    ref<WgpuDeviceLossState> loss_state_;
 };
 
 } // namespace woki::rhi::wgpu

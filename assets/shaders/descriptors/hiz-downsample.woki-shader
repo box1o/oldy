@@ -1,0 +1,1 @@
+{"schema":1,"name":"hiz-downsample","language":"wgsl","sources":["shaders/compute/hiz_downsample.wgsl"],"entry_points":[{"stage":"compute","name":"hiz_downsample"}]}

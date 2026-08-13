@@ -52,9 +52,15 @@ void WgpuComputePassEncoderImpl::SetBindGroup(const u32 group_index, const BindG
 }
 
 void WgpuComputePassEncoderImpl::SetImmediates(const u32 offset, const void* data, const size_t size) {
+#ifdef __EMSCRIPTEN__
+    (void)offset;
+    (void)data;
+    (void)size;
+#else
     if (encoder_) {
         wgpuComputePassEncoderSetImmediates(encoder_.get(), offset, data, size);
     }
+#endif
 }
 
 void WgpuComputePassEncoderImpl::SetLabel(const std::string_view label) {
@@ -70,9 +76,13 @@ void WgpuComputePassEncoderImpl::SetPipeline(const ComputePipeline& pipeline) {
 }
 
 void WgpuComputePassEncoderImpl::SetResourceTable(const ResourceTable* table) {
+#ifdef __EMSCRIPTEN__
+    (void)table;
+#else
     if (encoder_) {
         wgpuComputePassEncoderSetResourceTable(encoder_.get(), detail::NativeResourceTable(table));
     }
+#endif
 }
 
 void WgpuComputePassEncoderImpl::WriteTimestamp(const QuerySet& query_set, const u32 query_index) {

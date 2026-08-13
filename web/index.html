@@ -20,6 +20,7 @@
         width: 100%;
         height: 100%;
         display: block;
+        touch-action: none;
       }
 
       #status {
@@ -107,6 +108,67 @@
         document.getElementById('support-line-3'),
       ];
 
+      function removeWokiInput() {
+        if (Module.wokiInputAbort) {
+          Module.wokiInputAbort.abort();
+          Module.wokiInputAbort = null;
+        }
+      }
+
+      function installWokiInput() {
+        removeWokiInput();
+        const controller = new AbortController();
+        const options = { capture: true, passive: false, signal: controller.signal };
+        const positions = new Map();
+        Module.wokiInputAbort = controller;
+
+        const pointerKind = (value) => value === 'mouse' ? 1 : value === 'touch' ? 2 : value === 'pen' ? 3 : 0;
+        const pointerButton = (value) => value < 0 ? -1 : value === 0 ? 0 : value === 1 ? 2 : value === 2 ? 1 : value;
+        const modifiers = (event) => (event.shiftKey ? 1 : 0) | (event.ctrlKey ? 2 : 0) | (event.altKey ? 4 : 0) | (event.metaKey ? 8 : 0);
+        const point = (event) => {
+          const rect = canvas.getBoundingClientRect();
+          return [event.clientX - rect.left, event.clientY - rect.top];
+        };
+        const sendPointer = (phase, event) => {
+          const position = point(event);
+          const previous = positions.get(event.pointerId) || position;
+          Module._woki_web_pointer_event(
+            phase, pointerKind(event.pointerType), event.pointerId, event.isPrimary ? 1 : 0,
+            pointerButton(event.button), event.buttons, position[0], position[1],
+            position[0] - previous[0], position[1] - previous[1], event.pressure || 0,
+            event.width || 0, event.height || 0, event.tiltX || 0, event.tiltY || 0, event.twist || 0, modifiers(event),
+          );
+          if (phase === 2 || phase === 3 || phase === 5) positions.delete(event.pointerId);
+          else positions.set(event.pointerId, position);
+          event.preventDefault();
+        };
+        canvas.addEventListener('pointerdown', (event) => { canvas.setPointerCapture(event.pointerId); sendPointer(0, event); }, options);
+        canvas.addEventListener('pointermove', (event) => sendPointer(1, event), options);
+        canvas.addEventListener('pointerup', (event) => sendPointer(2, event), options);
+        canvas.addEventListener('pointercancel', (event) => sendPointer(3, event), options);
+        canvas.addEventListener('pointerenter', (event) => sendPointer(4, event), options);
+        canvas.addEventListener('pointerleave', (event) => sendPointer(5, event), options);
+        canvas.addEventListener('lostpointercapture', (event) => { if (positions.has(event.pointerId)) sendPointer(3, event); }, options);
+        canvas.addEventListener('wheel', (event) => {
+          const position = point(event);
+          const unit = event.deltaMode === WheelEvent.DOM_DELTA_PIXEL ? 0 : event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 1 : 2;
+          if (event.ctrlKey && unit === 0) Module._woki_web_magnify_event(Math.exp(-event.deltaY * 0.01), position[0], position[1]);
+          else Module._woki_web_scroll_event(event.deltaX, event.deltaY, unit, unit === 0 ? 1 : 0, position[0], position[1], modifiers(event));
+          event.preventDefault();
+        }, options);
+        const sendComposition = (phase, event) => {
+          const value = event.data || '';
+          const size = lengthBytesUTF8(value) + 1;
+          const pointer = Module._malloc(size);
+          stringToUTF8(value, pointer, size);
+          Module._woki_web_composition_event(phase, pointer);
+          Module._free(pointer);
+        };
+        canvas.addEventListener('compositionstart', (event) => sendComposition(0, event), options);
+        canvas.addEventListener('compositionupdate', (event) => sendComposition(1, event), options);
+        canvas.addEventListener('compositionend', (event) => sendComposition(2, event), options);
+      }
+
       function resizeCanvas() {
         const dpr = window.devicePixelRatio || 1;
         canvas.width = Math.max(1, Math.floor(window.innerWidth * dpr));
@@ -158,6 +220,8 @@
 
       var Module = {
         canvas: canvas,
+        installWokiInput: installWokiInput,
+        removeWokiInput: removeWokiInput,
         onAbort: function () {
           showWebGpuUnavailable();
         },

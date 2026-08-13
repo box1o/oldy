@@ -1,3 +1,5 @@
+$schema: https://schemas.woki.dev/studio.settings/v1.schema.json
+
 app:
   name: studio
 
@@ -9,3 +11,7 @@ window:
   floating: true
   resizable: true
   decorated: true
+
+ui:
+  # Versioned dock JSON is persisted in the user configuration.
+  dock: '{"$schema":"https://schemas.woki.dev/ui.dock/v1.schema.json","schema":1,"name":"ui.dock","root":{"id":1,"type":"leaf","active":0,"tabs":[]}}'

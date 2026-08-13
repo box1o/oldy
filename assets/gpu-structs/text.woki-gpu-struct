@@ -1,0 +1,1 @@
+{"schema":1,"name":"TextData","address_space":"uniform","layout_class":"wgsl-host-shareable","fields":[{"name":"color","type":{"type":"vector","element":"f32","width":4}},{"name":"parameters","type":{"type":"vector","element":"f32","width":4}}]}

@@ -1,11 +1,10 @@
 #include <chrono>
-#include <algorithm>
-#include <filesystem>
-#include <fstream>
-#include <string_view>
 #include <thread>
 #include <vector>
-
+#include <fstream>
+#include <algorithm>
+#include <filesystem>
+#include <string_view>
 #include <catch2/catch_test_macros.hpp>
 
 #include <woki/platform/file_watcher.hpp>
